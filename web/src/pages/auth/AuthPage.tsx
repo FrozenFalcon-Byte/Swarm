@@ -5,13 +5,15 @@ import { agentColor } from '../../components/AgentDots'
 import { Logo } from '../../components/Logo'
 import { friendlyAuthError, useAuth } from '../../lib/auth'
 import { usingEmulators } from '../../lib/firebase'
+import { passkeysSupported, webauthnError } from '../../lib/api'
 import { easeInOut, easeOut } from '../../lib/motion'
 import './auth.css'
+import { Roll } from '../../components/Roll'
 
 type Mode = 'signin' | 'signup'
 
 export default function AuthPage({ mode }: { mode: Mode }) {
-  const { user, signIn, signUp, withGitHub, withGoogle, resetPassword } = useAuth()
+  const { user, signIn, signUp, withGitHub, withGoogle, withPasskey, resetPassword } = useAuth()
   const navigate = useNavigate()
   const location = useLocation()
   const next = (location.state as { from?: string } | null)?.from || '/app'
@@ -54,11 +56,18 @@ export default function AuthPage({ mode }: { mode: Mode }) {
 
           <div className="auth-oauth">
             <button className="btn btn-dark auth-oauth-btn" onClick={() => run('github', withGitHub)} disabled={!!busy}>
-              <GitHubIcon /> {busy === 'github' ? 'Opening GitHub…' : 'Continue with GitHub'}
-            </button>
+              <GitHubIcon /> <Roll>{busy === 'github' ? 'Opening GitHub…' : 'Continue with GitHub'}</Roll></button>
             <button className="btn btn-line auth-oauth-btn" onClick={() => run('google', withGoogle)} disabled={!!busy}>
-              <GoogleIcon /> {busy === 'google' ? 'Opening Google…' : 'Continue with Google'}
-            </button>
+              <GoogleIcon /> <Roll>{busy === 'google' ? 'Opening Google…' : 'Continue with Google'}</Roll></button>
+            {mode === 'signin' && passkeysSupported() && (
+              <button className="btn btn-ghost auth-oauth-btn" disabled={!!busy} onClick={async () => {
+                setBusy('passkey'); setError(''); setNotice('')
+                try { await withPasskey() } catch (e) { setError((e as { code?: string }).code ? friendlyAuthError(e) : webauthnError(e)) } finally { setBusy(null) }
+              }}>
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><circle cx="8" cy="9" r="4" /><path d="M11 12h9M17 12v3M20 12v2M2 20c0-3 3-5 6-5" /></svg>
+                <Roll>{busy === 'passkey' ? 'Waiting for your device…' : 'Sign in with a passkey'}</Roll>
+              </button>
+            )}
             <p className="auth-hint">GitHub lets Swarm read issues on private repos and open pull requests when you merge.</p>
           </div>
 
@@ -88,9 +97,7 @@ export default function AuthPage({ mode }: { mode: Mode }) {
                   initial={{ opacity: 0, y: -6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}>{error || notice}</motion.p>
               )}
             </AnimatePresence>
-            <button className="btn btn-green auth-submit" type="submit" disabled={!!busy || !email || password.length < 6}>
-              {busy === 'email' ? 'One moment…' : mode === 'signup' ? 'Create account' : 'Sign in'}
-            </button>
+            <button className="btn btn-green auth-submit" type="submit" disabled={!!busy || !email || password.length < 6}><Roll>{busy === 'email' ? 'One moment…' : mode === 'signup' ? 'Create account' : 'Sign in'}</Roll></button>
           </form>
 
           <p className="auth-switch">
@@ -106,7 +113,7 @@ export default function AuthPage({ mode }: { mode: Mode }) {
 }
 
 const LOG = [
-  { agent: 'triager', text: '#214 flaky-test · priority high · confidence 0.91' },
+  { agent: 'triager', text: '#214 random failure · priority high · confidence 0.91' },
   { agent: 'coder', text: 'task-031 patch v1 · sort-set-result · +1 −1' },
   { agent: 'tester', text: 'hashseed_sweep_v1 · 9/12 → 0/12 failing' },
   { agent: 'reviewer', text: 'task-031 approved · 5 checks passed' },
@@ -116,19 +123,23 @@ const LOG = [
 ]
 
 function AgentsPanel() {
-  const [n, setN] = useState(3)
-  useEffect(() => { const t = setInterval(() => setN((x) => x + 1), 1900); return () => clearInterval(t) }, [])
-  const visible = Array.from({ length: 4 }, (_, i) => ({ ...LOG[(n - 3 + i) % LOG.length], key: n - 3 + i }))
+  const [n, setN] = useState(4)
+  useEffect(() => { const t = setInterval(() => setN((x) => x + 1), 2200); return () => clearInterval(t) }, [])
+  // four rows on screen; a new one arrives at the bottom as the oldest leaves the top
+  const visible = Array.from({ length: 4 }, (_, i) => ({ ...LOG[(n - 4 + i) % LOG.length], key: n - 4 + i }))
   return (
     <aside className="auth-panel" aria-hidden="true">
       <div className="auth-panel-frame">
         <p className="surtitle"><span style={{ background: 'var(--green)' }} />Live from the swarm</p>
         <p className="auth-panel-kicker">Meanwhile, in your repo</p>
         <div className="auth-log">
-          <AnimatePresence initial={false}>
-            {visible.map((l) => (
-              <motion.div key={l.key} layout className="auth-log-line" initial={{ opacity: 0, y: 30, scale: 0.96 }} animate={{ opacity: 1, y: 0, scale: 1 }}
-                exit={{ opacity: 0, y: -30, scale: 0.96 }} transition={{ duration: 0.7, ease: easeOut }}>
+          <AnimatePresence initial={false} mode="popLayout">
+            {visible.map((l, i) => (
+              <motion.div key={l.key} layout className="auth-log-line"
+                initial={{ opacity: 0, y: 40, scale: 0.94, filter: 'blur(4px)' }}
+                animate={{ opacity: i === 0 ? 0.55 : 1, y: 0, scale: 1, filter: 'blur(0px)' }}
+                exit={{ opacity: 0, y: -24, scale: 0.94, filter: 'blur(4px)', transition: { duration: 0.45, ease: easeInOut } }}
+                transition={{ layout: { duration: 0.7, ease: easeInOut }, duration: 0.7, ease: easeOut }}>
                 <span className="auth-log-dot" style={{ background: agentColor(l.agent) }} />
                 <span className="auth-log-agent">{l.agent}</span>
                 <span className="mono auth-log-text">{l.text}</span>

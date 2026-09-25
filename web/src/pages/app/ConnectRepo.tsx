@@ -6,6 +6,7 @@ import { connectRepo, useGithubLink } from '../../lib/data'
 import { cleanRepoName, listRepos, lookupRepo, type GhRepo } from '../../lib/github'
 import { easeOut } from '../../lib/motion'
 import { timeAgo } from './ui'
+import { Roll } from '../../components/Roll'
 
 const FULL_NAME = /^[\w.-]+\/[\w.-]+$/
 
@@ -95,18 +96,18 @@ export default function ConnectRepo() {
         {error && <p className="form-error" role="alert">{error}</p>}
         <div className="connect-actions">
           {(!link || (FULL_NAME.test(typed) && !exact)) && (
-            <button className="btn btn-dark" type="submit" disabled={!!busy || !typed}>{busy === typed ? 'Checking…' : link ? `Add ${typed}` : 'Connect repository'}</button>
+            <button className="btn btn-dark" type="submit" disabled={!!busy || !typed}><Roll>{busy === typed ? 'Checking…' : link ? `Add ${typed}` : 'Connect repository'}</Roll></button>
           )}
           {!link && link !== undefined && (
-            <button type="button" className="btn btn-line" onClick={connect} disabled={!!busy}>{busy === 'github-link' ? 'Opening GitHub…' : 'Connect GitHub'}</button>
+            <button type="button" className="btn btn-line" onClick={connect} disabled={!!busy}><Roll>{busy === 'github-link' ? 'Opening GitHub…' : 'Connect GitHub'}</Roll></button>
           )}
         </div>
       </form>
       <div className="connect-card connect-demo">
         <h4>The demo repository</h4>
-        <p>A small library with seven real issues: three flaky tests, a duplicate, a question, a bug and a vague report.</p>
+        <p>A small library with seven real issues: three tests that fail at random, a duplicate, a question, a bug and a vague report.</p>
         <div style={{ flex: 1 }} />
-        <button className="btn btn-green" onClick={demo} disabled={!!busy}>{busy === 'demo' ? 'Setting it up…' : 'Try the demo repo'}</button>
+        <button className="btn btn-green" onClick={demo} disabled={!!busy}><Roll>{busy === 'demo' ? 'Setting it up…' : 'Try the demo repo'}</Roll></button>
       </div>
     </div>
   )

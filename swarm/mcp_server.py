@@ -5,6 +5,11 @@ Two backends:
 * cloud (`--cloud`): repositories in Firestore, using the worker's Firebase credentials. Runs are
   queued for the worker exactly as the dashboard queues them.
 
+Two transports:
+* stdio (`swarm mcp`): one client on this machine, acting as the operator.
+* HTTP (`swarm server`): any number of clients over the network, each with a personal access
+  token made in the dashboard. A token acts as the user who made it and sees only their repos.
+
 What a client can do is deliberately narrow: read the board, tasks and harnesses; start a run; and
 send a patch back to the coder with feedback. There is no approve or merge tool. Merging stays a
 human click in the dashboard.
@@ -35,7 +40,7 @@ def explained(fn):
     def wrapper(*args, **kwargs):
         try:
             return fn(*args, **kwargs)
-        except (KeyError, ValueError, InvalidTransition) as e:
+        except (KeyError, ValueError, InvalidTransition, PermissionError) as e:
             raise ToolError(str(e).strip("'\"")) from e
     return wrapper
 
@@ -103,19 +108,40 @@ class LocalBackend:
         return Path(rec.code_path).read_text()
 
 
+def current_user() -> tuple[str | None, str]:
+    """The Swarm user behind this request's access token, and the token's name. (None, "") over stdio."""
+    from mcp.server.auth.middleware.auth_context import get_access_token
+
+    tok = get_access_token()
+    return (tok.subject, tok.client_id) if tok else (None, "")
+
+
 class CloudBackend:
     kind = "cloud"
 
-    def __init__(self, settings: Settings):
+    def __init__(self, settings: Settings, per_user: bool = False):
         from .cloud import firebase
 
         self.settings = settings
         self.db = firebase.db()
         self.bucket = firebase.bucket()
+        self.per_user = per_user  # over HTTP every call must come from a token's user
+
+    def _uid(self) -> str | None:
+        uid, _ = current_user()
+        if self.per_user and not uid:
+            raise PermissionError("this server needs an access token")
+        return uid
 
     def repos(self) -> list[dict]:
+        from google.cloud.firestore_v1.base_query import FieldFilter
+
+        uid = self._uid()
+        query = self.db.collection("repos")
+        if uid:
+            query = query.where(filter=FieldFilter("members", "array_contains", uid))
         out = []
-        for snap in self.db.collection("repos").stream():
+        for snap in query.stream():
             d = snap.to_dict() or {}
             if d.get("fullName"):
                 out.append({"id": snap.id, "name": d["fullName"], "status": d.get("status"), "needsYou": (d.get("stats") or {}).get("needsYou", 0)})
@@ -130,6 +156,8 @@ class CloudBackend:
             return match["id"]
         if len(repos) == 1:
             return repos[0]["id"]
+        if not repos:
+            raise ValueError("no repositories are connected yet; connect one in the Swarm dashboard")
         raise ValueError("several repositories are connected; pass repo (see list_repos)")
 
     def board(self, repo: str | None):
@@ -148,18 +176,19 @@ class CloudBackend:
 
         rid = self._repo_id(repo)
         self.db.collection("repos").document(rid).collection("runs").add(
-            {"status": "queued", "trigger": "mcp", "requestedBy": "mcp", "createdAt": gfs.SERVER_TIMESTAMP})
+            {"status": "queued", "trigger": "mcp", "requestedBy": self._uid() or "mcp", "createdAt": gfs.SERVER_TIMESTAMP})
         return "queued; the worker picks it up within seconds. Check back with board_summary."
 
     def request_changes(self, repo: str | None, task_id: str, comment: str) -> str:
         from google.cloud import firestore as gfs
 
         rid = self._repo_id(repo)
-        owner = self.db.collection("repos").document(rid).get().get("ownerUid")
-        # recorded as the repo owner's request, with the channel noted, and validated by the worker
+        uid, client = current_user()
+        # over stdio the operator speaks for the repo owner; over HTTP the token's user speaks for themselves
+        uid = uid or self.db.collection("repos").document(rid).get().get("ownerUid")
         self.db.collection("repos").document(rid).collection("actions").add(
-            {"status": "pending", "type": "reject", "taskId": task_id, "comment": comment, "uid": owner,
-             "userName": "via MCP", "createdAt": gfs.SERVER_TIMESTAMP})
+            {"status": "pending", "type": "reject", "taskId": task_id, "comment": comment, "uid": uid,
+             "userName": f"via MCP ({client})" if client else "via MCP", "createdAt": gfs.SERVER_TIMESTAMP})
         return f"sent {task_id} back to the coder; the worker applies it and starts a new run."
 
     def read_tool(self, repo: str | None, tool_id: str) -> str:
@@ -171,12 +200,14 @@ class CloudBackend:
         return Path(rec.code_path).read_text()
 
 
-def build(settings: Settings, cloud: bool = False) -> MCPServer:
-    backend = CloudBackend(settings) if cloud else LocalBackend(settings)
+def build(settings: Settings, cloud: bool = False, **http: Any) -> MCPServer:
+    """`http` carries token_verifier and auth when serving over HTTP (see swarm.server)."""
+    backend = CloudBackend(settings, per_user=bool(http)) if cloud else LocalBackend(settings)
     server = MCPServer(
         "swarm",
         title="Swarm",
-        description="Four agents that fix flaky tests through a shared task board.",
+        description="Four agents that fix tests that fail at random, working through a shared task board.",
+        **http,
         instructions=(
             "Swarm's agents (triager, coder, tester, reviewer) move issues across a task board. Use board_summary "
             "first. Tasks in 'Approved' or 'Needs Human' are waiting for the maintainer. You can start a run and "
@@ -214,7 +245,7 @@ def build(settings: Settings, cloud: bool = False) -> MCPServer:
     def get_task(task_id: str, repo: str | None = None) -> dict:
         return task_detail(backend.board(repo).get(task_id))
 
-    @server.tool(annotations=READ, description="Search the harnesses the tester has written (tools that prove a flaky test is fixed)." + repo_hint)
+    @server.tool(annotations=READ, description="Search the harnesses the tester has written (small programs that prove a randomly failing test is fixed)." + repo_hint)
 
     @explained
     def search_harnesses(query: str, repo: str | None = None) -> list[dict]:
@@ -250,7 +281,10 @@ def build(settings: Settings, cloud: bool = False) -> MCPServer:
 
     @server.resource("swarm://board", name="board", description="The whole board as JSON", mime_type="application/json")
     def board_resource() -> str:
-        repo = None if backend.kind == "local" or len(backend.repos()) == 1 else backend.repos()[0]["id"]
+        repos = backend.repos()
+        if backend.kind == "cloud" and not repos:
+            return "[]"
+        repo = None if backend.kind == "local" or len(repos) == 1 else repos[0]["id"]
         return json.dumps([task_summary(t) for t in backend.board(repo).list()], indent=2)
 
     @server.prompt(title="Swarm standup", description="Summarise what the agents did and what needs a decision.")

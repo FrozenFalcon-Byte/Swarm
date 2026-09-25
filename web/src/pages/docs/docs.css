@@ -1,0 +1,67 @@
+/* MCP docs: the landing page's language, arranged for reading. */
+.docs-hero { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(0, 0.9fr); gap: clamp(32px, 5vw, 80px); align-items: center; padding: 150px var(--gutter) clamp(60px, 7vw, 110px); max-width: 1440px; margin: 0 auto; }
+.docs-hero-copy { display: flex; flex-direction: column; gap: 24px; align-items: flex-start; }
+.docs-title { font-size: clamp(48px, 6.6vw, 112px); line-height: 0.92; font-weight: 600; letter-spacing: -0.055em; }
+.docs-lede { font-size: clamp(18px, 1.5vw, 22px); line-height: 1.45; font-weight: 500; color: var(--ink-2); max-width: 54ch; }
+.docs-hero-cta { display: flex; gap: 12px; flex-wrap: wrap; }
+.docs-hero-cta .btn { height: 54px; padding: 0 26px; }
+
+.docs-chat { padding: 0; overflow: hidden; min-height: 380px; display: flex; flex-direction: column; box-shadow: 10px 10px 0 var(--ink); }
+.docs-chat-top { display: flex; align-items: center; gap: 7px; padding: 14px 18px; border-bottom: 2px solid var(--ink); background: var(--white); }
+.docs-chat-top span { width: 11px; height: 11px; border-radius: 50%; border: 1.5px solid var(--ink); }
+.docs-chat-top span:nth-child(1) { background: var(--tester); } .docs-chat-top span:nth-child(2) { background: var(--triager); } .docs-chat-top span:nth-child(3) { background: var(--reviewer); }
+.docs-chat-top b { margin-left: 8px; font-size: 14px; }
+.docs-chat-body { flex: 1; display: flex; flex-direction: column; gap: 12px; padding: 22px; }
+.bubble { max-width: 86%; border-radius: 20px; padding: 12px 16px; font-size: 15px; line-height: 1.4; }
+.bubble.me { align-self: flex-end; background: var(--ink); color: var(--white); border-bottom-right-radius: 6px; }
+.bubble.ai { background: var(--white); border: 1.5px solid var(--line-soft); border-bottom-left-radius: 6px; }
+.bubble.tool { display: inline-flex; align-items: center; gap: 10px; align-self: flex-start; background: var(--sky-soft); border: 1.5px dashed var(--ink); font-size: 13px; padding: 8px 14px; }
+.bubble.tool i { width: 14px; height: 14px; border-radius: 50%; border: 2px solid var(--ink); }
+.bubble.tool i.spin { border-right-color: transparent; animation: spin 0.8s linear infinite; }
+.bubble.tool i.done { background: var(--reviewer); }
+@keyframes spin { to { transform: rotate(360deg); } }
+.bubble.card { background: var(--white); border: 2px solid var(--ink); display: flex; flex-direction: column; gap: 8px; font-size: 14px; }
+.bubble.card span { display: flex; align-items: center; gap: 8px; }
+.bubble.card i { width: 12px; height: 12px; border-radius: 50%; border: 1.5px solid var(--ink); flex: none; }
+.bubble.card em { font-style: normal; font-family: var(--font-mono); font-size: 12.5px; color: var(--ok); }
+
+.docs-body { display: grid; grid-template-columns: 240px minmax(0, 1fr); gap: clamp(32px, 5vw, 80px); padding: 0 var(--gutter) clamp(80px, 10vw, 160px); max-width: 1440px; margin: 0 auto; align-items: start; }
+.docs-toc { position: sticky; top: 120px; display: flex; flex-direction: column; gap: 2px; background: var(--grey-8); border-radius: 24px; padding: 10px; }
+.docs-toc a { position: relative; padding: 10px 14px; border-radius: 14px; font-size: 15px; font-weight: 500; color: var(--ink-2); transition: color var(--t) var(--ease-out); }
+.docs-toc a span { position: relative; z-index: 1; }
+.docs-toc a:hover, .docs-toc a.on { color: var(--ink); }
+.docs-toc-on { position: absolute; inset: 0; background: var(--white); border-radius: 14px; box-shadow: 0 1px 0 rgba(15, 15, 15, 0.05), 0 6px 14px -8px rgba(15, 15, 15, 0.3); }
+.docs-main { display: flex; flex-direction: column; gap: clamp(56px, 6vw, 96px); min-width: 0; }
+.doc { display: flex; flex-direction: column; gap: 18px; scroll-margin-top: 110px; }
+.doc h2 { font-size: clamp(34px, 3.6vw, 56px); font-weight: 600; letter-spacing: -0.045em; line-height: 1; }
+.doc > p, .docs-list li, .docs-steps li { font-size: 17px; line-height: 1.55; color: var(--ink-2); max-width: 70ch; }
+.doc code { font-family: var(--font-mono); font-size: 0.88em; background: var(--grey-6); padding: 2px 7px; border-radius: 7px; color: var(--ink); }
+.docs-asks { display: flex; flex-wrap: wrap; gap: 10px; }
+.docs-ask { background: var(--sky-soft); border-radius: var(--pill); padding: 10px 18px; font-size: 15px; font-weight: 500; }
+.docs-cols { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+.docs-note { background: var(--grey-8); border-radius: 26px; padding: 22px 24px; display: flex; flex-direction: column; gap: 8px; }
+.docs-note b { font-size: 18px; font-weight: 600; }
+.docs-note p { color: var(--ink-2); font-size: 15px; line-height: 1.5; }
+.docs-note--ok { background: var(--mint); } .docs-note--no { background: var(--coral-soft); }
+.docs-steps, .docs-list { margin: 0; padding-left: 22px; display: flex; flex-direction: column; gap: 8px; }
+.docs-steps b { color: var(--ink); }
+.docs-clients { display: flex; flex-direction: column; gap: 14px; }
+.docs-code { max-width: 820px; }
+.docs-tools { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.docs-tool { background: var(--grey-8); border-radius: 24px; padding: 20px 22px; display: flex; flex-direction: column; gap: 8px; border: 2px solid transparent; transition: border-color var(--t) var(--ease-out), transform 0.5s var(--spring); }
+.docs-tool:hover { border-color: var(--ink); transform: translateY(-3px); }
+.docs-tool-head { display: flex; justify-content: space-between; align-items: center; gap: 10px; }
+.docs-tool-head code { font-size: 15px; background: var(--white); }
+.docs-tool p { color: var(--ink-2); font-size: 15px; }
+.docs-args { font-size: 12.5px; color: var(--ink-3); }
+.docs-table { border-collapse: collapse; width: 100%; max-width: 820px; font-size: 15px; }
+.docs-table td { padding: 14px 12px; border-top: 1.5px solid var(--line-soft); vertical-align: top; color: var(--ink-2); }
+.docs-table td:first-child { white-space: nowrap; width: 1%; }
+.docs-faq { display: flex; flex-direction: column; gap: 12px; }
+@media (max-width: 1000px) {
+  .docs-hero { grid-template-columns: 1fr; padding-top: 120px; }
+  .docs-body { grid-template-columns: 1fr; }
+  .docs-toc { position: static; flex-direction: row; overflow-x: auto; }
+  .docs-toc a { white-space: nowrap; }
+}
+@media (max-width: 700px) { .docs-cols, .docs-tools { grid-template-columns: 1fr; } }

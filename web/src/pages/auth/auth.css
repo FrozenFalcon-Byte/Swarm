@@ -27,10 +27,28 @@
 .auth-panel { padding: 16px; display: grid; }
 .auth-panel-frame { border-radius: var(--radius-xl); display: flex; flex-direction: column; justify-content: center; gap: 28px; padding: clamp(32px, 5vw, 72px); background: var(--sky-card); overflow: hidden; }
 .auth-panel-kicker { font-size: clamp(36px, 4vw, 64px); font-weight: 500; letter-spacing: -0.045em; line-height: 1; }
-.auth-log { display: flex; flex-direction: column; gap: 12px; min-height: 300px; }
-.auth-log-line { display: grid; grid-template-columns: 18px 84px minmax(0, 1fr); align-items: center; gap: 12px; background: var(--white); border-radius: 22px; padding: 18px 20px; }
+.auth-log { position: relative; display: flex; flex-direction: column; gap: 12px; height: 312px; overflow: hidden; padding: 4px 2px;
+  -webkit-mask-image: linear-gradient(transparent, #000 14%, #000 88%, transparent); mask-image: linear-gradient(transparent, #000 14%, #000 88%, transparent); }
+.auth-log-line { flex: none; will-change: transform; display: grid; grid-template-columns: 18px 84px minmax(0, 1fr); align-items: center; gap: 12px; background: var(--white); border-radius: 22px; padding: 18px 20px; }
 .auth-log-dot { width: 18px; height: 18px; border-radius: 50%; border: 1.5px solid var(--ink); }
 .auth-log-agent { font-weight: 600; font-size: 14px; text-transform: capitalize; }
 .auth-log-text { font-size: 12.5px; color: var(--ink-2); overflow-wrap: anywhere; }
 .auth-panel-foot { font-size: 15px; color: var(--ink-2); }
 @media (max-width: 900px) { .auth { grid-template-columns: 1fr; } .auth-panel { display: none; } }
+
+/* Fit the window exactly: no page scroll. Spacing and type scale with the window's height. */
+.auth { height: 100svh; min-height: 0; overflow: hidden; }
+.auth-form-side { padding: clamp(14px, 3vh, 28px) var(--gutter); gap: 0; min-height: 0; }
+.auth-form-wrap { gap: clamp(10px, 2.1vh, 22px); padding-block: clamp(8px, 2vh, 24px); margin: auto; }
+.auth-title { font-size: clamp(32px, min(4.6vw, 6.2vh), 60px); }
+.auth-sub { margin-top: clamp(6px, 1.3vh, 14px); font-size: clamp(14px, 1.9vh, 16px); }
+.auth-oauth { gap: clamp(6px, 1.1vh, 10px); }
+.auth-oauth-btn, .auth-submit, .field input { height: clamp(42px, 5.9vh, 56px); }
+.auth-fields { gap: clamp(8px, 1.5vh, 14px); }
+.auth-panel { padding: clamp(10px, 1.8vh, 16px); min-height: 0; }
+.auth-panel-frame { gap: clamp(12px, 3vh, 28px); padding: clamp(24px, 5vh, 72px) clamp(24px, 4vw, 72px); min-height: 0; }
+.auth-panel-kicker { font-size: clamp(30px, min(4vw, 6.4vh), 64px); }
+.auth-log { height: clamp(170px, 34vh, 312px); }
+@media (max-height: 780px) { .auth-hint { display: none; } }
+@media (max-height: 680px) { .auth-sub, .auth-divider { display: none; } }
+@media (max-width: 900px) { .auth { height: auto; min-height: 100svh; overflow: visible; } }

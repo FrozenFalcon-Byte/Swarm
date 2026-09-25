@@ -46,6 +46,7 @@ class Worker:
         self.worker_id = f"{socket.gethostname()}-{os.getpid()}"
         self._last_beat = 0.0
         self._last_sync = 0.0
+        self.mode = "always-on"  # "scheduled" for one pass at a time (cron, GitHub Actions)
         # how often to look for new GitHub issues on connected repos; 0 turns it off
         self.sync_minutes = float(os.environ.get("SWARM_SYNC_MINUTES", "10"))
 
@@ -239,7 +240,7 @@ class Worker:
                 def deliver(task):
                     url = open_pull_request(repo["fullName"], swarm.settings.repo_path, token,
                                             repo.get("defaultBranch") or "main", task.task_id,
-                                            f"Fix flaky test: {task.title}", _pr_body(task), task.artifacts["diff_text"])
+                                            f"Fix intermittent test failure: {task.title}", _pr_body(task), task.artifacts["diff_text"])
                     return f"opened {url}"
             task = swarm.merge(task_id, deliver=deliver)
             result = task.artifacts.get("delivery", "merged")
@@ -277,7 +278,18 @@ class Worker:
             "lastSeen": gfs.SERVER_TIMESTAMP, "llm": LLM(self.settings).describe(),
             "sandbox": Sandbox(self.settings).backend, "host": socket.gethostname(),
             "syncMinutes": self.sync_minutes, "githubFallbackToken": bool(os.environ.get("GITHUB_TOKEN")),
+            "mode": self.mode,
         })
+
+    def run_once(self) -> None:
+        """One pass for scheduled hosts (cron, CI): sync issues, then work until nothing is waiting."""
+        log.info("worker %s: one pass (emulators=%s)", self.worker_id, firebase.using_emulators())
+        self._last_beat = 0.0
+        self.mode = "scheduled"
+        self.heartbeat()
+        self.sync_due_repos(force=self.sync_minutes > 0)  # a scheduled pass is itself the interval
+        while self.process_actions() + self.process_runs():
+            pass
 
     def run_forever(self) -> None:
         log.info("worker %s polling (emulators=%s)", self.worker_id, firebase.using_emulators())

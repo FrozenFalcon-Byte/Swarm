@@ -6,6 +6,7 @@ import { easeOut } from '../../lib/motion'
 import type { Tool } from '../../lib/types'
 import { PageHead } from './Overview'
 import { Section, timeAgo } from './ui'
+import { Roll } from '../../components/Roll'
 
 export default function ToolsPage() {
   const { user } = useAuth()
@@ -43,7 +44,7 @@ export function ToolCards({ repoId }: { repoId: string }) {
             <div className="tool-uses"><b>{t.usage_count}</b><span className="muted">{t.usage_count === 1 ? 'use' : 'uses'} · written for {t.created_by_task} · {timeAgo(t.created_at)}</span></div>
             <div className="tool-card-foot">
               {t.used_by_tasks.map((u) => <span key={u} className="chip">{u}</span>)}
-              <button className="btn btn-line btn-sm" style={{ marginLeft: 'auto' }} onClick={() => show(t)}>View code</button>
+              <button className="btn btn-line btn-sm" style={{ marginLeft: 'auto' }} onClick={() => show(t)}><Roll>View code</Roll></button>
             </div>
           </motion.article>
         ))}

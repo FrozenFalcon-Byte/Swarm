@@ -132,6 +132,9 @@ export function routeLabel(path: string, repoName?: (id: string) => string | und
   if (path.startsWith('/app/repos')) return 'Repositories'
   if (path.startsWith('/app/tools')) return 'Tools'
   if (path.startsWith('/app/settings')) return 'Settings'
+  if (path.startsWith('/app/profile')) return 'Your profile'
+  if (path.startsWith('/app/help')) return 'Help'
+  if (path.startsWith('/docs')) return 'MCP docs'
   if (path.startsWith('/app')) return 'Overview'
   return 'Swarm'
 }

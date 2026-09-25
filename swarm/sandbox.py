@@ -4,8 +4,11 @@ Every run happens in a throwaway copy of the repository, never the live
 checkout. Two backends:
 
 * docker  — one ephemeral container per run: `--network none`, memory/CPU/pid
-            limits, repo copy mounted at /work. Used when docker is installed
-            (or forced with SWARM_SANDBOX=docker).
+            limits, every Linux capability dropped, no privilege escalation, a
+            read-only root filesystem and an unprivileged user; the repo copy is
+            mounted at /work. Used when docker is installed (or forced with
+            SWARM_SANDBOX=docker). SWARM_DOCKER_RUNTIME=runsc adds gVisor, which
+            puts a user-space kernel between the test and the host.
 * local   — a subprocess in a temp copy with CPU-time, file-size and wall-clock
             limits, a scrubbed environment and proxies pointed at a dead port.
             Weaker isolation (no kernel-level network block); the fallback when
@@ -104,6 +107,22 @@ def parse_pytest(result: RunResult) -> TestReport:
     return rep
 
 
+SANDBOX_IMAGE = "swarm-sandbox:1"
+SANDBOX_DOCKERFILE = Path(__file__).resolve().parents[1] / "docker" / "sandbox.Dockerfile"
+_image_ready: set[str] = set()
+
+
+def ensure_image(image: str) -> None:
+    """Build Swarm's sandbox image the first time it's needed; other images must exist or be pullable."""
+    if image in _image_ready:
+        return
+    have = subprocess.run(["docker", "image", "inspect", image], capture_output=True).returncode == 0
+    if not have and image == SANDBOX_IMAGE:
+        subprocess.run(["docker", "build", "-q", "-t", image, "-f", str(SANDBOX_DOCKERFILE), str(SANDBOX_DOCKERFILE.parent)],
+                       check=True, capture_output=True, timeout=600)
+    _image_ready.add(image)
+
+
 def docker_available() -> bool:
     if not shutil.which("docker"):
         return False
@@ -121,7 +140,8 @@ class Sandbox:
         if backend == "auto":
             backend = "docker" if docker_available() else "local"
         self.backend = backend
-        self.docker_image = os.environ.get("SWARM_DOCKER_IMAGE", "python:3.12-slim")
+        self.docker_image = os.environ.get("SWARM_DOCKER_IMAGE", SANDBOX_IMAGE)
+        self.docker_runtime = os.environ.get("SWARM_DOCKER_RUNTIME", "")
 
     @contextmanager
     def workspace(self, diff: str | None = None) -> Iterator[Path]:
@@ -191,11 +211,19 @@ class Sandbox:
             )
 
     def _run_docker(self, work: Path, argv: list[str], env: dict[str, str], timeout: int) -> RunResult:
+        ensure_image(self.docker_image)
         cmd = [
             "docker", "run", "--rm", "--network", "none",
             "--memory", "1g", "--cpus", "1", "--pids-limit", "256",
+            "--cap-drop", "ALL", "--security-opt", "no-new-privileges", "--read-only",
+            "--tmpfs", "/tmp:rw,size=256m",
+            # the worker's own uid, so tests can write inside the mounted copy; never root
+            "--user", f"{os.getuid() or 1000}:{os.getgid() or 1000}" if hasattr(os, "getuid") else "1000:1000",
             "-v", f"{work}:/work", "-w", "/work", "-e", "PYTHONPATH=/work", "-e", "PYTHONDONTWRITEBYTECODE=1",
+            "-e", "HOME=/tmp",
         ]
+        if self.docker_runtime:
+            cmd += ["--runtime", self.docker_runtime]
         for k, v in env.items():
             cmd += ["-e", f"{k}={v}"]
         cmd += [self.docker_image, *argv]

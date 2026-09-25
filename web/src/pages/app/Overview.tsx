@@ -25,7 +25,7 @@ export default function Overview() {
     return (
       <div className="page">
         <PageHead title={`Hi ${first}.`} sub="Connect a repository and the agents start on its open issues." />
-        <Section><EmptyState title="No repositories yet" text="Point Swarm at a GitHub repository, or try the demo repo. It has real flaky tests for the agents to fix."><ConnectRepo /></EmptyState></Section>
+        <Section><EmptyState title="No repositories yet" text="Point Swarm at a GitHub repository, or try the demo repo. It has real tests that fail at random for the agents to fix."><ConnectRepo /></EmptyState></Section>
       </div>
     )
   }
@@ -37,7 +37,7 @@ export default function Overview() {
         sub={waiting.length ? `${waiting.length} ${waiting.length === 1 ? 'task is' : 'tasks are'} waiting for you.` : running ? 'The agents are working. Updates appear here live.' : 'Nothing needs you right now.'} />
 
       <div className="tiles">
-        <Tile label="Flake rate" tone="coral" pair big={m.before === null ? '—' : <><CountUp value={m.before} suffix="%" /><span className="tile-arrow">→</span><CountUp value={m.after ?? 0} suffix="%" /></>}
+        <Tile label="Failing runs" tone="coral" pair big={m.before === null ? '—' : <><CountUp value={m.before} suffix="%" /><span className="tile-arrow">→</span><CountUp value={m.after ?? 0} suffix="%" /></>}
           note={m.before === null ? 'Appears once a fix has been proven' : `before → after on proven fixes, ${m.runs} sandboxed runs`} />
         <Tile label="Fixes merged" tone="green" big={<CountUp value={m.merged} />} note={`${m.approved} more approved and ready`} />
         <Tile label="Waiting for you" tone="yellow" big={<CountUp value={waiting.length} />} note={waiting.length ? 'Merge, approve or decide' : 'All clear'} />
@@ -66,7 +66,7 @@ export default function Overview() {
       </div>
 
       <div className="grid-2">
-        <Section title="Flakiness, before and after" action={<span className="muted">% of runs failing</span>}>
+        <Section title="Failing runs, before and after" action={<span className="muted">% of runs failing</span>}>
           {m.evidence.length === 0 ? <p className="muted pad">The tester fills this in after it proves a fix.</p> : (
             <div className="chart">
               <ResponsiveContainer width="100%" height={260}>

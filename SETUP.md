@@ -122,9 +122,18 @@ The dashboard's sidebar shows **Agents online** once the worker checks in.
 
 ---
 
-## 5. Use Swarm from Claude (MCP)
+## 5. The server: MCP for Claude, and passkeys
 
-`swarm mcp` is an MCP server, so Claude Desktop, Claude Code or any MCP client can read your board, look up tasks and harnesses, start a run and send a patch back with feedback. Merging stays in the dashboard. See Settings → *Use from Claude* for copy-paste config.
+```bash
+.venv/bin/pip install -e ".[server]"
+.venv/bin/swarm server        # http://localhost:8787
+```
+
+- **MCP:** Claude, Cursor, VS Code or any MCP client connects to `http://localhost:8787/mcp` with a personal access token. Create tokens in Settings → *Use from Claude*; the page also has the setup for each client. Any number of clients can connect at once, and each token sees only its owner's repositories. The full guide is at `/docs/mcp` on the website.
+- **Passkeys:** your profile page adds them, and the sign-in page uses them. Both talk to this server.
+- For just yourself, `swarm mcp --cloud` serves the same tools over stdio, with no token and no server.
+
+To run it somewhere other than your own computer, see [DEPLOY.md](DEPLOY.md).
 
 ---
 

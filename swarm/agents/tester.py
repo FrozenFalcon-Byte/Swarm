@@ -84,7 +84,7 @@ class TesterAgent(Agent):
         if still_flaky:
             detail = "; ".join(f"{t}: {e.get('failures')}/{e.get('runs')} runs failed ({', '.join(e.get('failing', [])[:4])})"
                                for t, e in still_flaky.items())
-            return self._reject(task, results, f"Still flaky under {tool.tool_id}: {detail}",
+            return self._reject(task, results, f"Still fails at random under {tool.tool_id}: {detail}",
                                 results_path=results_path, tools_used=tools_used)
 
         summary = ", ".join(f"{e['before'].get('failures')}/{e['before'].get('runs')} → {e['after'].get('failures')}/{e['after'].get('runs')} failing"
@@ -131,7 +131,7 @@ class TesterAgent(Agent):
             return tool, True
 
         tool_id = self.registry.next_id(spec.stem)
-        self.say(f"no existing tool fits '{source}' flakiness — writing {tool_id}", task)
+        self.say(f"no saved harness fits '{source}' random failures — writing {tool_id}", task)
         code = write_tool(source, tool_id, task.task_id, self.settings.flaky_repeat_runs, self.llm)
         # Test the test: it must catch the bug on old code and pass on the fixed code.
         tmp = ToolRecord(tool_id=tool_id, description=spec.description, code_path="", created_by_task=task.task_id)
@@ -145,7 +145,7 @@ class TesterAgent(Agent):
         rec = self.registry.register(tool_id, spec.description, code, task.task_id, spec.tags, validated, validation)
         self.board.update(task.task_id, self.name,
                           f"wrote tool {tool_id}; validation {'passed' if validated else 'FAILED'} "
-                          f"(detects flakiness on old code: {validated})")
+                          f"(catches the failures on the old code: {validated})")
         self.say(f"registered {tool_id} (validated={validated})", task)
         return rec, False
 

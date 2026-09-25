@@ -99,7 +99,7 @@ class CoderAgent(Agent):
         if proposal is None or not any(o != n for o, n in proposal.changes.values()):
             self.board.transition(task.task_id, TaskState.HUMAN_REVIEW, self.name,
                                   "no applicable fix strategy left",
-                                  note=f"No fix found for {ctx.flakiness_source} flakiness "
+                                  note=f"No fix found for {ctx.flakiness_source} random failures "
                                        f"(already rejected: {', '.join(rejected) or 'none'})", assigned_agent=None)
             self.say("no fix strategy applies, handing to a human", task)
             return

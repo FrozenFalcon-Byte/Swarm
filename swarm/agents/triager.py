@@ -162,8 +162,8 @@ class TriagerAgent(Agent):
             self.say("question, closed for a maintainer to answer", task)
         elif tri.kind not in IN_SCOPE:
             self.board.transition(task.task_id, TaskState.HUMAN_REVIEW, self.name,
-                                  f"labeled {tri.kind}, priority={tri.priority} — outside flaky-test scope",
-                                  note=f"{tri.kind.capitalize()} outside this bot's scope (flaky tests)", **fields)
+                                  f"labeled {tri.kind}, priority={tri.priority} — outside scope (tests that fail at random)",
+                                  note=f"{tri.kind.capitalize()} outside Swarm's scope (tests that fail at random)", **fields)
             self.say(f"{tri.kind} is out of scope, sent to a human", task)
         else:
             self.board.transition(task.task_id, TaskState.TRIAGED, self.name,

@@ -7,6 +7,7 @@ import { easeOut } from '../../lib/motion'
 import ConnectRepo from './ConnectRepo'
 import { PageHead } from './Overview'
 import { EmptyState, Section, timeAgo } from './ui'
+import { Roll } from '../../components/Roll'
 
 export default function Repos() {
   const { user } = useAuth()
@@ -15,7 +16,7 @@ export default function Repos() {
   return (
     <div className="page">
       <PageHead title="Repositories" sub="Each repository gets its own board, sandbox and tool registry.">
-        {repos.length > 0 && <button className="btn btn-dark" onClick={() => setAdding(!adding)}>{adding ? 'Close' : 'Connect a repository'}</button>}
+        {repos.length > 0 && <button className="btn btn-dark" onClick={() => setAdding(!adding)}><Roll>{adding ? 'Close' : 'Connect a repository'}</Roll></button>}
       </PageHead>
       {(adding || (!loading && repos.length === 0)) && (
         <Section>

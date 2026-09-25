@@ -23,6 +23,11 @@ export function stateTone(s: TaskState): string {
   return 'work'
 }
 
+/** Plain words for the triager's labels. */
+export function kindLabel(kind: string) {
+  return ({ 'flaky-test': 'random failure', bug: 'bug', feature: 'feature', question: 'question', unknown: 'unclear' } as Record<string, string>)[kind] || kind
+}
+
 export function StatePill({ state }: { state: TaskState }) {
   return <span className={`pill tone-${stateTone(state)}`}>{state === 'Needs Human' ? 'Needs you' : state}</span>
 }

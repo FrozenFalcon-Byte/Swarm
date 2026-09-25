@@ -69,20 +69,20 @@ KINDS = {
     "hash-order": dict(
         stem="hashseed_sweep",
         description="Runs one pytest test repeatedly under different PYTHONHASHSEED values to expose "
-                    "ordering flakiness from set/dict iteration order (hash randomization).",
+                    "random failures caused by set/dict iteration order (hash randomization).",
         tags=["flaky", "hash", "ordering", "set", "pythonhashseed", "repeat", "harness"],
         loop_body='        results.append(run_once(test, "PYTHONHASHSEED=%d" % i, {"PYTHONHASHSEED": str(i)}))',
     ),
     "rng": dict(
         stem="repeat_run",
         description="Runs one pytest test many times in fresh processes with unseeded randomness to measure "
-                    "the failure rate of randomness-driven (RNG / jitter) flakiness.",
+                    "the failure rate of failures driven by randomness (RNG / jitter).",
         tags=["flaky", "random", "rng", "jitter", "repeat", "harness", "failure rate"],
         loop_body='        results.append(run_once(test, "run %d" % i, {"PYTHONHASHSEED": "random"}))',
     ),
     "time": dict(
         stem="timing_stress",
-        description="Runs one pytest test repeatedly in fresh processes to measure timing-dependent flakiness "
+        description="Runs one pytest test repeatedly in fresh processes to measure timing-dependent random failures "
                     "(sleeps, clocks, timeouts).",
         tags=["flaky", "timing", "time", "sleep", "clock", "repeat", "harness"],
         loop_body='        results.append(run_once(test, "run %d" % i, {}))',

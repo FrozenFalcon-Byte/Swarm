@@ -10,7 +10,12 @@ service cloud.firestore {
     }
 
     match /users/{uid} {
-      allow read, write: if signedIn() && request.auth.uid == uid;
+      allow read, delete: if signedIn() && request.auth.uid == uid;
+      // the profile picture is a small cropped WebP kept inline (no Cloud Storage on the free plan)
+      allow create, update: if signedIn() && request.auth.uid == uid
+        && (!('avatar' in request.resource.data) || request.resource.data.avatar == null
+            || (request.resource.data.avatar is string && request.resource.data.avatar.size() < 300000
+                && request.resource.data.avatar.matches('^data:image/(webp|jpeg|png);base64,.*')));
       // GitHub access token for cloning private repos and opening PRs: owner-only.
       match /private/{doc} {
         allow read, delete: if signedIn() && request.auth.uid == uid;
@@ -52,6 +57,25 @@ service cloud.firestore {
           && request.resource.data.uid == request.auth.uid
           && request.resource.data.type in ['merge', 'approve', 'reject', 'reopen', 'close'];
       }
+    }
+
+    // MCP access tokens, keyed by the SHA-256 of the token. The browser that makes one writes the hash;
+    // the plain token is shown once and never stored. Deleting the document revokes the token.
+    match /mcpTokens/{hash} {
+      allow read, delete: if signedIn() && resource.data.uid == request.auth.uid;
+      allow create: if signedIn() && request.resource.data.uid == request.auth.uid
+        && hash.matches('^[0-9a-f]{64}$')
+        && request.resource.data.keys().hasOnly(['uid', 'name', 'prefix', 'createdAt', 'lastUsedAt'])
+        && request.resource.data.name is string && request.resource.data.name.size() > 0 && request.resource.data.name.size() <= 60
+        && request.resource.data.prefix is string && request.resource.data.prefix.size() <= 16;
+    }
+
+    // Passkeys: created only by the server after it verifies them; the owner can rename or remove them.
+    match /passkeys/{id} {
+      allow read, delete: if signedIn() && resource.data.uid == request.auth.uid;
+      allow update: if signedIn() && resource.data.uid == request.auth.uid
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['name'])
+        && request.resource.data.name is string && request.resource.data.name.size() > 0 && request.resource.data.name.size() <= 60;
     }
 
     // Worker heartbeats: any signed-in user may see whether a worker is online.

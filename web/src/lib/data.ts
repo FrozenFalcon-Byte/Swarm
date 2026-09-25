@@ -1,12 +1,12 @@
 import { useEffect, useState } from 'react'
 import {
-  addDoc, collection, deleteDoc, doc, getDoc, limit, onSnapshot, orderBy, query, serverTimestamp, updateDoc, where,
+  addDoc, collection, deleteDoc, doc, getDoc, limit, onSnapshot, orderBy, query, serverTimestamp, setDoc, updateDoc, where,
   type DocumentData, type Query,
 } from 'firebase/firestore'
 import { getBytes, ref } from 'firebase/storage'
 import { db, storage } from './firebase'
 import type { GhRepo } from './github'
-import type { Activity, GithubLink, Repo, Run, Task, Tool, WorkerInfo } from './types'
+import type { Activity, GithubLink, McpToken, Passkey, Profile, Repo, Run, Task, Tool, WorkerInfo } from './types'
 
 type Live<T> = { data: T; loading: boolean; error: string | null }
 
@@ -76,10 +76,12 @@ export function useWorkers() {
   return useLiveQuery<WorkerInfo>(() => collection(db, 'workers'), (id, d) => ({ id, ...d }) as WorkerInfo, [])
 }
 
-/** A worker counts as online if it checked in within the last minute. */
+/** A worker counts as online if it checked in within the last minute, or, for one that runs on a
+ *  schedule (GitHub Actions, cron), within the last 30 minutes. */
 export function onlineWorker(workers: WorkerInfo[]): WorkerInfo | undefined {
   const now = Date.now()
-  return workers.find((w) => w.lastSeen && now - w.lastSeen.toDate().getTime() < 60_000)
+  const age = (w: WorkerInfo) => (w.lastSeen ? now - w.lastSeen.toDate().getTime() : Infinity)
+  return workers.find((w) => age(w) < 60_000) || workers.find((w) => w.mode === 'scheduled' && age(w) < 30 * 60_000)
 }
 
 export function useActionStatus(repoId: string | undefined) {
@@ -140,3 +142,46 @@ export function removeRepo(repoId: string) {
   return deleteDoc(doc(db, 'repos', repoId))
 }
 
+
+// -- profile, passkeys and MCP tokens ------------------------------------------
+
+/** users/{uid}: name and profile picture as the app shows them. `undefined` while loading. */
+export function useProfile(uid: string | undefined) {
+  const [profile, setProfile] = useState<Profile | null | undefined>(undefined)
+  useEffect(() => {
+    if (!uid) { setProfile(null); return }
+    return onSnapshot(doc(db, 'users', uid), (s) => setProfile(s.exists() ? (s.data() as Profile) : null), () => setProfile(null))
+  }, [uid])
+  return profile
+}
+
+/** A cropped picture as a data URL (a small WebP), or null to remove it. */
+export function setAvatar(uid: string, dataUrl: string | null) {
+  return setDoc(doc(db, 'users', uid), { avatar: dataUrl, avatarUpdatedAt: serverTimestamp() }, { merge: true })
+}
+
+export function usePasskeys(uid: string | undefined) {
+  return useLiveQuery<Passkey>(() => uid ? query(collection(db, 'passkeys'), where('uid', '==', uid)) : null,
+    (id, d) => ({ id, ...d }) as Passkey, [uid])
+}
+export const renamePasskey = (id: string, name: string) => updateDoc(doc(db, 'passkeys', id), { name })
+export const removePasskey = (id: string) => deleteDoc(doc(db, 'passkeys', id))
+
+export function useMcpTokens(uid: string | undefined) {
+  return useLiveQuery<McpToken>(() => uid ? query(collection(db, 'mcpTokens'), where('uid', '==', uid)) : null,
+    (id, d) => ({ id, ...d }) as McpToken, [uid])
+}
+
+async function sha256Hex(text: string) {
+  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text))
+  return Array.from(new Uint8Array(digest), (b) => b.toString(16).padStart(2, '0')).join('')
+}
+
+/** Make a personal access token. Only its hash is stored; the token itself is returned once, for the user to copy. */
+export async function createMcpToken(uid: string, name: string) {
+  const bytes = crypto.getRandomValues(new Uint8Array(32))
+  const token = 'swm_' + btoa(String.fromCharCode(...bytes)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
+  await setDoc(doc(db, 'mcpTokens', await sha256Hex(token)), { uid, name: name.trim().slice(0, 60) || 'Token', prefix: token.slice(0, 10), createdAt: serverTimestamp() })
+  return token
+}
+export const revokeMcpToken = (id: string) => deleteDoc(doc(db, 'mcpTokens', id))

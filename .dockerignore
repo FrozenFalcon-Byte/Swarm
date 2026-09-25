@@ -6,3 +6,5 @@ secrets
 tests
 **/__pycache__
 *.egg-info
+.github
+docker-compose.yml

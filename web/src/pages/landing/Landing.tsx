@@ -1,6 +1,6 @@
-import { AnimatePresence, animate, motion, useInView, useMotionValueEvent, useScroll, useTransform } from 'motion/react'
-import { useEffect, useRef, useState, type ReactNode } from 'react'
-import { Link } from 'react-router-dom'
+import { AnimatePresence, animate, motion, useInView, useMotionValue, useMotionValueEvent, useScroll, useSpring, useTransform, type MotionValue } from 'motion/react'
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react'
+import { Link, useLocation } from 'react-router-dom'
 import { AgentDots } from '../../components/AgentDots'
 import { Logo, Mark } from '../../components/Logo'
 import { Reveal, SplitWords } from '../../components/Reveal'
@@ -9,13 +9,35 @@ import { useAuth } from '../../lib/auth'
 import { easeInOut, easeOut } from '../../lib/motion'
 import { Glyph, type GlyphName } from './glyphs'
 import './landing.css'
+import { Roll } from '../../components/Roll'
+
+let introPlayed = false // module state: resets on reload, survives in-app navigation
 
 export default function Landing() {
+  const { hash } = useLocation()
+  // intro → lifting (the curtain rises and the logo flies into the headline) → done.
+  // It plays on every fresh page load, not when you come back to this page inside the app.
+  const [phase, setPhase] = useState<'intro' | 'lifting' | 'done'>(() => (introPlayed ? 'done' : 'intro'))
+  const [fromIntro] = useState(phase === 'intro')
+  useEffect(() => {
+    if (phase === 'done') return
+    const html = document.documentElement
+    html.style.overflow = 'hidden'
+    return () => { html.style.overflow = '' }
+  }, [phase])
+  useEffect(() => {
+    if (!hash || phase !== 'done') return
+    const id = window.setTimeout(() => document.querySelector(hash)?.scrollIntoView({ behavior: 'smooth' }), 700)
+    return () => window.clearTimeout(id)
+  }, [hash, phase])
+  const lift = useCallback(() => setPhase('lifting'), [])
+  const landed = useCallback(() => { introPlayed = true; setPhase('done') }, [])
   return (
     <div className="landing">
+      {phase !== 'done' && <Intro lifting={phase === 'lifting'} onLift={lift} onLanded={landed} />}
       <SmoothScroll />
       <Nav />
-      <Hero />
+      <Hero ready={phase !== 'intro'} tileShown={phase === 'done'} fromIntro={fromIntro} />
       <AppScreens />
       <PatternSearch />
       <VerticalList />
@@ -27,6 +49,89 @@ export default function Landing() {
   )
 }
 
+/* ============================================================ intro loader */
+
+/** The mark assembles itself (one agent at a time) while a counter runs to 100. Then the curtain lifts
+ *  and the mark flies, above everything, to the exact place and size of the mark in the headline, which
+ *  only appears once it has landed. Nothing is swapped mid-flight, so the hand-off is seamless. */
+function Intro({ lifting, onLift, onLanded }: { lifting: boolean; onLift: () => void; onLanded: () => void }) {
+  const [pct, setPct] = useState(0)
+  const [started, setStarted] = useState(false) // counts from the mark's first frame, so a slow first load can't outrun it
+  const tile = useRef<HTMLSpanElement>(null)
+  const slot = useRef<HTMLDivElement>(null)
+  // sit exactly over the slot in the centred column, before the first paint and on resize
+  useLayoutEffect(() => {
+    const place = () => {
+      const r = slot.current?.getBoundingClientRect()
+      if (r && tile.current) { tile.current.style.left = `${r.left}px`; tile.current.style.top = `${r.top}px` }
+    }
+    place()
+    window.addEventListener('resize', place)
+    return () => window.removeEventListener('resize', place)
+  }, [])
+  useEffect(() => { const id = window.setTimeout(() => setStarted(true), 600); return () => window.clearTimeout(id) }, []) // never wait on it forever
+  useEffect(() => {
+    if (!started) return
+    let raf = 0, fonts = false, finished = false
+    const start = performance.now(), min = 1900
+    if (document.fonts) document.fonts.ready.then(() => { fonts = true }); else fonts = true
+    const tick = (t: number) => {
+      const p = Math.min(1, (t - start) / min)
+      setPct(Math.round((1 - Math.pow(1 - p, 3)) * 100))
+      if (p < 1 || !fonts) { raf = requestAnimationFrame(tick); return }
+      if (finished) return
+      finished = true
+      const from = tile.current?.getBoundingClientRect()
+      const to = document.querySelector('.hero-tile')?.getBoundingClientRect()
+      onLift()
+      if (!tile.current || !from || !to || !to.width) { onLanded(); return }
+      // transform only (GPU): move the tile's top-left corner onto the target's and scale to its size
+      animate(tile.current, { x: to.left - from.left, y: to.top - from.top, scale: to.width / from.width },
+        { duration: 1.05, ease: [0.76, 0, 0.24, 1] }).then(onLanded)
+    }
+    raf = requestAnimationFrame(tick)
+    return () => cancelAnimationFrame(raf)
+  }, [started, onLift, onLanded])
+  return (
+    <>
+      <motion.div className="intro" initial={false}
+        animate={lifting ? { clipPath: 'inset(0% 0% 100% 0% round 0px 0px 56px 56px)' } : { clipPath: 'inset(0% 0% 0% 0% round 0px 0px 0px 0px)' }}
+        transition={{ duration: 0.95, ease: easeInOut }}>
+        <div className="intro-center">
+          <div className="intro-slot" ref={slot} />
+          <p className="intro-word" aria-label="Swarm">
+            {'Swarm'.split('').map((c, i) => (
+              <span key={i} className="word-mask"><motion.span className="word" initial={{ y: '110%' }} animate={{ y: lifting ? '-110%' : '0%' }}
+                transition={{ duration: 0.7, ease: easeOut, delay: lifting ? i * 0.025 : 0.75 + i * 0.05 }}>{c}</motion.span></span>
+            ))}
+          </p>
+        </div>
+        <div className="intro-foot mono">
+          <span>{pct < 35 ? 'Waking the triager' : pct < 60 ? 'Briefing the coder' : pct < 85 ? 'Warming up the sandbox' : 'Reviewer on duty'}</span>
+          <span className="intro-pct">{String(pct).padStart(3, '0')}</span>
+        </div>
+        <div className="intro-bar"><span style={{ transform: `scaleX(${pct / 100})` }} /></div>
+      </motion.div>
+      {/* outside the curtain, so it stays visible while the curtain lifts */}
+      <span ref={tile} className="intro-tile"><IntroMark onStart={() => setStarted(true)} /></span>
+    </>
+  )
+}
+
+function IntroMark({ onStart }: { onStart: () => void }) {
+  const dots = [[11, 11, 'var(--triager)'], [21, 11, 'var(--coder)'], [11, 21, 'var(--tester)'], [21, 21, 'var(--reviewer)']] as const
+  return (
+    <svg viewBox="0 0 32 32" width="100%" height="100%" aria-hidden="true">
+      <motion.rect width="32" height="32" rx="8" fill="var(--ink)" initial={{ scale: 0.4, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} onAnimationStart={onStart}
+        transition={{ type: 'spring', stiffness: 220, damping: 18 }} style={{ transformOrigin: '16px 16px' }} />
+      {dots.map(([cx, cy, fill], i) => (
+        <motion.circle key={i} cx={cx} cy={cy} r="4" fill={fill} initial={{ y: -26, opacity: 0, scale: 0.4 }} animate={{ y: 0, opacity: 1, scale: 1 }}
+          transition={{ type: 'spring', stiffness: 420, damping: 15, delay: 0.25 + i * 0.16 }} style={{ transformOrigin: `${cx}px ${cy}px` }} />
+      ))}
+    </svg>
+  )
+}
+
 /** Ctrl's section label: a coloured dot and a short word. */
 function Surtitle({ children, dot = 'var(--green)' }: { children: ReactNode; dot?: string }) {
   return <p className="surtitle"><span style={{ background: dot }} />{children}</p>
@@ -34,23 +139,26 @@ function Surtitle({ children, dot = 'var(--green)' }: { children: ReactNode; dot
 
 /* ============================================================ nav */
 
-function Nav() {
+export function Nav() {
   const { user } = useAuth()
+  const home = useLocation().pathname === '/'
   const { scrollY } = useScroll()
   const [hidden, setHidden] = useState(false)
   const [menu, setMenu] = useState(false)
   useMotionValueEvent(scrollY, 'change', (y) => setHidden(y > (scrollY.getPrevious() ?? 0) && y > 300 && !menu))
-  const links = [['#how', 'How it works'], ['#patterns', 'Patterns'], ['#security', 'Security'], ['#faq', 'FAQ']]
+  // on other pages (the docs) the section links lead back to the landing page
+  const links = [['#how', 'How it works'], ['#patterns', 'Patterns'], ['#security', 'Security'], ['/docs/mcp', 'MCP'], ['#faq', 'FAQ']]
+    .map(([href, label]) => [href.startsWith('#') && !home ? `/${href}` : href, label])
   return (
     <motion.header className="nav" animate={{ y: hidden ? -120 : 0 }} transition={{ duration: 0.5, ease: easeOut }}>
       <div className="nav-inner">
         <Logo />
         <nav className="nav-pill" aria-label="Sections">
-          {links.map(([href, label], i) => <span key={href} className="nav-pill-item">{i > 0 && <i />}<a href={href}>{label}</a></span>)}
+          {links.map(([href, label], i) => <span key={href} className="nav-pill-item">{i > 0 && <i />}{href.startsWith('/') ? <Link to={href}>{label}</Link> : <a href={href}>{label}</a>}</span>)}
         </nav>
         <div className="nav-cta">
-          {user ? <Link to="/app" className="btn btn-dark">Dashboard</Link> : (
-            <><Link to="/signin" className="nav-signin">Sign in</Link><Link to="/signup" className="btn btn-dark">Get started</Link></>
+          {user ? <Link to="/app" className="btn btn-dark"><Roll>Dashboard</Roll></Link> : (
+            <><Link to="/signin" className="nav-signin">Sign in</Link><Link to="/signup" className="btn btn-dark"><Roll>Get started</Roll></Link></>
           )}
           <button className="nav-burger" aria-label="Menu" aria-expanded={menu} onClick={() => setMenu(!menu)}>
             <motion.span animate={menu ? { rotate: 45, y: 4 } : { rotate: 0, y: 0 }} /><motion.span animate={menu ? { rotate: -45, y: -4 } : { rotate: 0, y: 0 }} />
@@ -60,7 +168,7 @@ function Nav() {
       <AnimatePresence>
         {menu && (
           <motion.nav className="nav-sheet" initial={{ opacity: 0, y: -16 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -16 }} transition={{ duration: 0.4, ease: easeOut }}>
-            {links.map(([href, label]) => <a key={href} href={href} onClick={() => setMenu(false)}>{label}</a>)}
+            {links.map(([href, label]) => href.startsWith('/') ? <Link key={href} to={href} onClick={() => setMenu(false)}>{label}</Link> : <a key={href} href={href} onClick={() => setMenu(false)}>{label}</a>)}
             {!user && <Link to="/signin">Sign in</Link>}
           </motion.nav>
         )}
@@ -71,39 +179,113 @@ function Nav() {
 
 /* ============================================================ hero */
 
-function Hero() {
+function Hero({ ready, tileShown, fromIntro }: { ready: boolean; tileShown: boolean; fromIntro: boolean }) {
   const ref = useRef<HTMLElement>(null)
   const { scrollYProgress } = useScroll({ target: ref, offset: ['start start', 'end start'] })
   const titleY = useTransform(scrollYProgress, [0, 1], [0, -140])
   const titleOpacity = useTransform(scrollYProgress, [0.2, 0.75], [1, 0])
-  const rise = (d: number) => ({ initial: { y: '105%' }, animate: { y: '0%' }, transition: { duration: 1.1, ease: easeOut, delay: d } })
+  // pointer position across the hero, -0.5..0.5, eased so everything drifts rather than jumps
+  const px = useSpring(useMotionValue(0), { stiffness: 60, damping: 18 })
+  const py = useSpring(useMotionValue(0), { stiffness: 60, damping: 18 })
+  const move = (e: ReactPointerEvent<HTMLElement>) => {
+    const r = e.currentTarget.getBoundingClientRect()
+    px.set((e.clientX - r.left) / r.width - 0.5); py.set((e.clientY - r.top) / r.height - 0.5)
+    e.currentTarget.style.setProperty('--mx', `${e.clientX - r.left}px`)
+    e.currentTarget.style.setProperty('--my', `${e.clientY - r.top}px`)
+  }
+  const show = ready ? 'show' : 'hidden'
+  const rise = (d: number) => ({ variants: { hidden: { y: '105%' }, show: { y: '0%', transition: { duration: 1.1, ease: easeOut, delay: d } } }, initial: 'hidden', animate: show })
   return (
-    <section className="hero" ref={ref}>
+    <section className="hero" ref={ref} onPointerMove={move}>
+      <div className="hero-grid" aria-hidden="true" />
+      <HeroCursors ready={ready} px={px} py={py} />
       <motion.div className="hero-inner" style={{ y: titleY, opacity: titleOpacity }}>
-        <motion.p className="hero-kicker" initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.8, ease: easeOut, delay: 0.1 }}>
-          Four AI agents<br />for every flaky test
+        <motion.p className="hero-kicker" initial="hidden" animate={show} variants={{ hidden: { opacity: 0, y: 12 }, show: { opacity: 1, y: 0, transition: { duration: 0.8, ease: easeOut, delay: 0.15 } } }}>
+          Four AI agents for<br />tests that fail at random
         </motion.p>
         <h1 className="hero-title" aria-label="Green builds.">
           <span className="word-mask"><motion.span className="word" {...rise(0.2)}>Green</motion.span></span>
-          <motion.span className="hero-tile" initial={{ scale: 0, rotate: -90 }} animate={{ scale: 1, rotate: 0 }}
-            transition={{ type: 'spring', stiffness: 160, damping: 16, delay: 0.45 }} aria-hidden="true"><Mark size={120} animated /></motion.span>
+          {fromIntro
+            ? <span className="hero-tile" aria-hidden="true" style={{ visibility: tileShown ? 'visible' : 'hidden' }}><Mark size={120} animated={tileShown} /></span>
+            : <motion.span className="hero-tile" aria-hidden="true" initial={{ scale: 0, rotate: -90 }} animate={{ scale: 1, rotate: 0 }}
+                transition={{ type: 'spring', stiffness: 160, damping: 16, delay: 0.45 }}><Mark size={120} animated /></motion.span>}
           <span className="word-mask"><motion.span className="word" {...rise(0.32)}>builds.</motion.span></span>
         </h1>
-        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.9, ease: easeOut, delay: 0.75 }}>
-          <Link to="/signup" className="btn btn-green btn-xl"><AgentDots size={22} /> Connect a repo</Link>
+        <motion.div initial="hidden" animate={show} variants={{ hidden: { opacity: 0, y: 20 }, show: { opacity: 1, y: 0, transition: { duration: 0.9, ease: easeOut, delay: 0.7 } } }}>
+          <Link to="/signup" className="btn btn-green btn-xl"><AgentDots size={22} /> <Roll>Connect a repo</Roll></Link>
         </motion.div>
       </motion.div>
+      <Ticker ready={ready} />
     </section>
+  )
+}
+
+/* Four "multiplayer" cursors, one per agent, drifting over the hero like teammates in a shared doc.
+   They lean toward your pointer, and now and then each one says what it just did. */
+const CURSORS = [
+  { agent: 'triager', x: '13%', y: '27%', depth: -36, path: { x: [0, 26, -10, 0], y: [0, -14, 12, 0] }, notes: ['labeled #214 · high', 'closed a duplicate', 'asked you about #107'] },
+  { agent: 'coder', x: '79%', y: '24%', depth: 30, path: { x: [0, -22, 8, 0], y: [0, 16, -8, 0] }, notes: ['patch v1 · 1 line', 'sorted a set', 'bounded the jitter'] },
+  { agent: 'tester', x: '80%', y: '68%', depth: -24, path: { x: [0, -18, 14, 0], y: [0, -10, 12, 0] }, notes: ['10/12 → 0/12 failing', 'wrote hashseed_sweep', 'reused a harness'] },
+  { agent: 'reviewer', x: '14%', y: '70%', depth: 40, path: { x: [0, 20, -12, 0], y: [0, 12, -14, 0] }, notes: ['5 checks passed', 'no shortcuts found', 'touches auth · asks you'] },
+] as const
+
+function HeroCursors({ ready, px, py }: { ready: boolean; px: MotionValue<number>; py: MotionValue<number> }) {
+  const [tick, setTick] = useState(0)
+  useEffect(() => { if (!ready) return; const id = window.setInterval(() => setTick((t) => t + 1), 1600); return () => window.clearInterval(id) }, [ready])
+  return (
+    <div className="hero-cursors" aria-hidden="true">
+      {CURSORS.map((c, i) => <Cursor key={c.agent} c={c} i={i} ready={ready} px={px} py={py} note={tick % 4 === i ? c.notes[Math.floor(tick / 4) % c.notes.length] : null} />)}
+    </div>
+  )
+}
+
+function Cursor({ c, i, ready, px, py, note }: { c: (typeof CURSORS)[number]; i: number; ready: boolean; px: MotionValue<number>; py: MotionValue<number>; note: string | null }) {
+  const x = useTransform(px, (v) => v * c.depth)
+  const y = useTransform(py, (v) => v * c.depth)
+  return (
+    <motion.div className="cursor" style={{ left: c.x, top: c.y, x, y }}
+      initial={{ opacity: 0, scale: 0.6 }} animate={ready ? { opacity: 1, scale: 1 } : {}} transition={{ delay: 0.9 + i * 0.12, type: 'spring', stiffness: 260, damping: 18 }}>
+      <motion.div animate={{ x: [...c.path.x], y: [...c.path.y] }} transition={{ duration: 9 + i * 1.7, repeat: Infinity, ease: 'easeInOut' }}>
+        <svg width="22" height="24" viewBox="0 0 22 24" className="cursor-arrow"><path d="M2 2l17 8.5-7.2 2.2L8.5 21z" fill={`var(--${c.agent})`} stroke="var(--ink)" strokeWidth="2" strokeLinejoin="round" /></svg>
+        <span className="cursor-tag" style={{ background: `var(--${c.agent})` }}>{c.agent}</span>
+        <AnimatePresence>
+          {note && (
+            <motion.span key={note} className="cursor-note mono" initial={{ opacity: 0, y: 6, scale: 0.9 }} animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: -4, scale: 0.95 }} transition={{ type: 'spring', stiffness: 380, damping: 26 }}>{note}</motion.span>
+          )}
+        </AnimatePresence>
+      </motion.div>
+    </motion.div>
+  )
+}
+
+const EVENTS = [
+  ['triager', '#101 labeled · random failure · high'], ['coder', 'task-001 · patch v1 · +1 −1'], ['tester', 'hashseed_sweep_v1 · 10/12 → 0/12'],
+  ['reviewer', 'task-001 approved · 6 checks'], ['triager', '#104 duplicate of task-001'], ['coder', 'task-002 · bound the jitter'],
+  ['tester', 'repeat_run_v1 · 3/12 → 0/12'], ['reviewer', 'task-003 touches auth · waiting for you'],
+] as const
+
+/** A slow marquee of what the agents are doing, along the bottom of the hero. */
+function Ticker({ ready }: { ready: boolean }) {
+  const row = EVENTS.map(([a, t], i) => <span key={i} className="tick"><i style={{ background: `var(--${a})` }} /><b>{a}</b><span className="mono">{t}</span></span>)
+  return (
+    <motion.div className="ticker" aria-hidden="true" initial={{ opacity: 0, y: 20 }} animate={ready ? { opacity: 1, y: 0 } : {}} transition={{ delay: 1.1, duration: 0.9, ease: easeOut }}>
+      <div className="ticker-track">{row}{row}</div>
+    </motion.div>
   )
 }
 
 /* ============================================================ sticky app screens */
 
-const SCREENS: { tag: string; glyph: GlyphName; color: string; title: string; text: string }[] = [
-  { tag: 'Triage', glyph: 'sort', color: 'var(--coder)', title: 'Every issue sorted in seconds.', text: 'Flaky tests get a label and a priority. Duplicates get closed. Anything unclear goes to you instead of being guessed at.' },
-  { tag: 'Patch', glyph: 'patch', color: 'var(--triager)', title: 'Fix the cause, not the symptom.', text: 'The coder reads the failing test and the code behind it, then writes the smallest diff that removes the nondeterminism.' },
-  { tag: 'Prove', glyph: 'flask', color: 'var(--pink)', title: 'One green run proves nothing.', text: 'The tester runs the test dozens of times in a sandbox, before and after the patch, until the numbers settle it.' },
-  { tag: 'Review', glyph: 'shield', color: 'var(--mint-strong)', title: 'A second agent says no.', text: 'Seeded RNGs, sleeps, retries and skipped tests get sent back. Anything that touches auth waits for a human.' },
+const SCREENS: { tag: string; glyph: GlyphName; color: string; title: string; text: string; agent: string; role: string; stats: [string, string][] }[] = [
+  { tag: 'Triage', glyph: 'sort', color: 'var(--coder)', title: 'Every issue sorted in seconds.', text: 'Tests that fail at random get a label and a priority. Duplicates get closed. Anything unclear goes to you instead of being guessed at.',
+    agent: 'triager', role: 'Reads every new issue', stats: [['7', 'issues read'], ['1', 'duplicate closed'], ['1', 'asked you']] },
+  { tag: 'Patch', glyph: 'patch', color: 'var(--triager)', title: 'Fix the cause, not the symptom.', text: 'The coder reads the failing test and the code behind it, then writes the smallest diff that removes the cause of the randomness.',
+    agent: 'coder', role: 'Writes the smallest fix', stats: [['1', 'line changed'], ['0', 'tests skipped'], ['1st', 'attempt']] },
+  { tag: 'Prove', glyph: 'flask', color: 'var(--pink)', title: 'One green run proves nothing.', text: 'The tester runs the test dozens of times in a sandbox, before and after the patch, until the numbers settle it.',
+    agent: 'tester', role: 'Proves it, many times over', stats: [['24', 'sandboxed runs'], ['10→0', 'failures'], ['1×', 'harness reused']] },
+  { tag: 'Review', glyph: 'shield', color: 'var(--mint-strong)', title: 'A second agent says no.', text: 'Seeded RNGs, sleeps, retries and skipped tests get sent back. Anything that touches auth waits for a human.',
+    agent: 'reviewer', role: 'Looks for reasons to say no', stats: [['6', 'checks passed'], ['0', 'shortcuts'], ['you', 'click merge']] },
 ]
 
 function AppScreens() {
@@ -117,6 +299,10 @@ function AppScreens() {
     <section className="screens" id="how" ref={ref} style={{ height: `${SCREENS.length * 100 + 40}vh` }}>
       <div className="screens-sticky">
         <div className="screens-box screens-title-box" style={{ background: s.color }}>
+          <div className="screens-steps">
+            <span className="screens-count mono"><AnimatePresence mode="popLayout" initial={false}><motion.span key={i} initial={{ y: 14, opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: -14, opacity: 0 }} transition={{ duration: 0.4, ease: easeOut }}>0{i + 1}</motion.span></AnimatePresence>&nbsp;/ 0{SCREENS.length}</span>
+            <div className="screens-segs">{SCREENS.map((_, k) => <Seg key={k} k={k} n={SCREENS.length} progress={scrollYProgress} />)}</div>
+          </div>
           <AnimatePresence mode="wait">
             <motion.div key={i} className="screens-box-inner" initial={{ y: '100%', opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: '-60%', opacity: 0 }} transition={{ duration: 0.6, ease: easeOut }}>
               <h2 className="screens-title">{s.title}</h2>
@@ -130,16 +316,43 @@ function AppScreens() {
               {[<ScreenTriage key={0} />, <ScreenPatch key={1} />, <ScreenProve key={2} />, <ScreenReview key={3} />][i]}
             </motion.div>
           </AnimatePresence>
-          <div className="screen-dots" aria-hidden="true">{SCREENS.map((_, k) => <span key={k} className={k === i ? 'on' : ''} />)}</div>
+          <div className="screen-status">
+            <motion.span className="screen-status-dot" animate={{ background: `var(--${s.agent})` }} transition={{ duration: 0.5 }} />
+            <AnimatePresence mode="wait" initial={false}>
+              <motion.span key={i} initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -6 }} transition={{ duration: 0.3 }}>
+                <b>{s.agent}</b> is working<span className="typing"><i /><i /><i /></span>
+              </motion.span>
+            </AnimatePresence>
+            <div className="screen-dots" aria-hidden="true">{SCREENS.map((_, k) => <span key={k} className={k === i ? 'on' : ''} />)}</div>
+          </div>
         </motion.div>
         <div className="screens-box screens-text-box">
           <AnimatePresence mode="wait">
             <motion.p key={i} initial={{ opacity: 0, y: 24 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -16 }} transition={{ duration: 0.5, ease: easeOut, delay: 0.08 }}>{s.text}</motion.p>
           </AnimatePresence>
+          <AnimatePresence mode="wait">
+            <motion.div key={i} className="agent-card" initial={{ opacity: 0, y: 30, rotate: -2 }} animate={{ opacity: 1, y: 0, rotate: 0 }} exit={{ opacity: 0, y: -12 }} transition={{ type: 'spring', stiffness: 200, damping: 20, delay: 0.12 }}>
+              <div className="agent-card-head">
+                <span className="agent-card-av" style={{ background: `var(--${s.agent})` }}>{s.agent[0].toUpperCase()}</span>
+                <div><b>{s.agent}</b><span>{s.role}</span></div>
+              </div>
+              <div className="agent-card-stats">
+                {s.stats.map(([v, l], k) => (
+                  <motion.div key={l} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.25 + k * 0.08, duration: 0.5, ease: easeOut }}><b>{v}</b><span>{l}</span></motion.div>
+                ))}
+              </div>
+            </motion.div>
+          </AnimatePresence>
         </div>
       </div>
     </section>
   )
+}
+
+/** One step's progress bar: fills as you scroll through that step. */
+function Seg({ k, n, progress }: { k: number; n: number; progress: MotionValue<number> }) {
+  const scaleX = useTransform(progress, [k / n, (k + 1) / n], [0, 1])
+  return <span className="screens-seg"><motion.i style={{ scaleX }} /></span>
 }
 
 function ScreenRow({ c, a, b, d = 0 }: { c: string; a: ReactNode; b: ReactNode; d?: number }) {
@@ -154,10 +367,12 @@ function ScreenTriage() {
   return (
     <div className="scr">
       <p className="scr-head">Incoming · 7 issues</p>
-      <ScreenRow c="var(--coder)" a={<><b>test_normalize_tags fails in CI</b><span>#101 · flaky-test</span></>} b={<em className="chip hot">high</em>} />
-      <ScreenRow c="var(--coder)" a={<><b>test_backoff_is_increasing flaky</b><span>#102 · flaky-test</span></>} b={<em className="chip">medium</em>} d={0.08} />
-      <ScreenRow c="var(--ink-3)" a={<><b>normalize_tags test flaky again</b><span>#104 · duplicate of #101</span></>} b={<em className="chip">closed</em>} d={0.16} />
+      <ScreenRow c="var(--coder)" a={<><b>test_normalize_tags fails in CI</b><span>#101 · random failure</span></>} b={<em className="chip hot">high</em>} />
+      <ScreenRow c="var(--coder)" a={<><b>test_backoff_is_increasing fails at random</b><span>#102 · random failure</span></>} b={<em className="chip">medium</em>} d={0.08} />
+      <ScreenRow c="var(--ink-3)" a={<><b>normalize_tags failing again</b><span>#104 · duplicate of #101</span></>} b={<em className="chip">closed</em>} d={0.16} />
       <ScreenRow c="var(--triager)" a={<><b>“broken”</b><span>#107 · confidence 0.5</span></>} b={<em className="chip warn">asks you</em>} d={0.24} />
+      <ScreenRow c="var(--coder)" a={<><b>test_admin_scopes fails on CI</b><span>#103 · random failure</span></>} b={<em className="chip hot">high</em>} d={0.32} />
+      <ScreenRow c="var(--ink-3)" a={<><b>How do I use a custom separator?</b><span>#106 · question</span></>} b={<em className="chip">answered</em>} d={0.4} />
     </div>
   )
 }
@@ -256,7 +471,7 @@ function PatternSearch() {
     <section className="patterns" id="patterns" ref={ref}>
       <div className="patterns-side">
         <Surtitle dot="var(--coder)">Pattern library</Surtitle>
-        <SplitWords text="Every kind of flaky. One swarm." className="title-6" />
+        <SplitWords text="Every kind of random failure. One swarm." className="title-6" />
         <Reveal delay={0.1}><p className="text-grey">Type a failing test. Swarm matches it to a known cause and the harness that proves the fix, or writes a new one.</p></Reveal>
         <Reveal delay={0.2} className="psearch">
           <Glyph name="search" size={30} />
@@ -274,7 +489,7 @@ function PatternSearch() {
             ) : unknown ? (
               <motion.div key="new" className="presult-card presult-new" initial={{ opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} transition={{ duration: 0.45, ease: easeOut }}>
                 <div className="presult-head"><span className="presult-icon" style={{ background: 'var(--white)' }}><Glyph name="flask" size={22} /></span><b>Nothing on file</b></div>
-                <p>The tester writes a harness for this one, proves it catches the flake, and adds it to the library.</p>
+                <p>The tester writes a harness for this one, proves it catches the failure, and adds it to the library.</p>
               </motion.div>
             ) : (
               <motion.p key="idle" className="presult-idle" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>Matches appear here.</motion.p>
@@ -333,9 +548,9 @@ function VerticalList() {
       <div className="vlist-head">
         <Surtitle>Level up</Surtitle>
         <h2 className="title-2">
-          <SplitWords as="p" text="Fix the flake," className="inline-split" />
+          <SplitWords as="p" text="Prove the fix," className="inline-split" />
           <span className="title-icon"><Glyph name="flask" size={72} /></span>
-          <SplitWords as="p" text="not the symptom." className="inline-split" delay={0.2} />
+          <SplitWords as="p" text="don’t hope." className="inline-split" delay={0.2} />
         </h2>
       </div>
       <div className="vlist-cards">
@@ -384,7 +599,7 @@ function VisualReview() {
 function VisualDupes() {
   return (
     <div className="app-frame vis vis-stack">
-      {[['#101', 'test_normalize_tags fails intermittently in CI', 'task-001'], ['#104', 'normalize_tags test flaky again', 'duplicate of task-001']].map(([n, t, s], k) => (
+      {[['#101', 'test_normalize_tags fails intermittently in CI', 'task-001'], ['#104', 'normalize_tags failing again', 'duplicate of task-001']].map(([n, t, s], k) => (
         <motion.div key={n} className="vis-issue" initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ delay: k * 0.2, ease: easeOut, duration: 0.6 }}>
           <span className="mono">{n}</span><b>{t}</b><em className={`chip ${k ? '' : 'ok'}`}>{s}</em>
         </motion.div>
@@ -460,10 +675,11 @@ function HorizontalList() {
 /* ============================================================ faq */
 
 const FAQS = [
+  ['What does “a test that fails at random” mean?', 'A test that passes on one run and fails on the next with no code change, because of things like set ordering, unseeded randomness or timing. Engineers call these “flaky tests”. They waste hours: nobody can tell a real bug from noise, so people rerun CI until it goes green. Swarm finds the cause and proves the fix.'],
   ['Does Swarm merge anything on its own?', 'No. The best a task can reach on its own is Approved. A maintainer clicks Merge, which opens a pull request on GitHub. Security-sensitive paths need your approval even before that.'],
   ['Where does the code run?', 'In a disposable copy of your repository. With Docker it runs in a container with no network access and memory, CPU and process limits. Without Docker it falls back to a local sandbox with CPU, file-size and time limits.'],
   ['Which models does it use?', 'Free model APIs by default: Groq first, then Gemini and OpenRouter, with Anthropic or a local Ollama model as options. With no model at all, the agents use built-in fix strategies.'],
-  ['What kind of issues does it handle?', 'Version 1 focuses on flaky tests: ordering, randomness and timing. Everything else is triaged and handed to you with a label, not guessed at.'],
+  ['What kind of issues does it handle?', 'Version 1 focuses on tests that fail at random: ordering, randomness and timing. Everything else is triaged and handed to you with a label, not guessed at.'],
   ['What is a “tool” in Swarm?', 'A small harness the tester writes when existing tests can’t prove a fix, for example running a test under 12 hash seeds. It must catch the bug on the old code before it is trusted and saved for reuse.'],
   ['Can I talk to Swarm from Claude?', 'Yes. Swarm is also an MCP server: add `swarm mcp` to Claude Desktop, Claude Code or any MCP client and ask what the agents did overnight, read a diff or a harness, start a run, or send a patch back with feedback. Merging still happens only in the dashboard.'],
   ['Can I use it on a private repository?', 'Yes. Connect GitHub (or paste a fine-grained token) in Settings. It is stored in your private user record and only the worker reads it, to clone, read issues and open pull requests. New issues are picked up automatically every few minutes.'],
@@ -493,7 +709,7 @@ function Faq() {
             </AnimatePresence>
           </motion.div>
         ))}
-        {!all && <button className="btn btn-line faq-more" onClick={() => setAll(true)}>Show all questions</button>}
+        {!all && <button className="btn btn-line faq-more" onClick={() => setAll(true)}><Roll>Show all questions</Roll></button>}
       </div>
     </section>
   )
@@ -501,7 +717,7 @@ function Faq() {
 
 /* ============================================================ footer */
 
-function Footer() {
+export function Footer() {
   return (
     <footer className="footer">
       <div className="footer-top">
@@ -511,12 +727,12 @@ function Footer() {
           <span className="footer-tile"><Mark size={140} /></span>
           <SplitWords as="p" text="builds." className="inline-split" delay={0.15} />
         </h2>
-        <Link to="/signup" className="btn btn-green btn-xl"><AgentDots size={22} /> Get started free</Link>
+        <Link to="/signup" className="btn btn-green btn-xl"><AgentDots size={22} /> <Roll>Get started free</Roll></Link>
       </div>
       <div className="footer-cols">
-        <div><b>Product</b><a href="#how">How it works</a><a href="#patterns">Patterns</a><Link to="/signup">Get started</Link></div>
-        <div><b>Security</b><a href="#security">Sandbox</a><a href="#faq">Merge policy</a></div>
-        <div><b>Support</b><a href="#faq">FAQ</a><Link to="/signin">Sign in</Link></div>
+        <div><b>Product</b><Link to="/#how">How it works</Link><Link to="/#patterns">Patterns</Link><Link to="/signup">Get started</Link></div>
+        <div><b>Security</b><Link to="/#security">Sandbox</Link><Link to="/#faq">Merge policy</Link></div>
+        <div><b>Support</b><Link to="/#faq">FAQ</Link><Link to="/docs/mcp">MCP docs</Link><Link to="/signin">Sign in</Link></div>
         <div><b>Company</b><span>Swarm</span><span>Made for maintainers</span></div>
       </div>
       <div className="footer-bottom"><Logo /><span>© {new Date().getFullYear()} Swarm</span></div>

@@ -1,28 +1,33 @@
-import { AnimatePresence, motion } from 'motion/react'
+import { AnimatePresence, LayoutGroup, motion } from 'motion/react'
 import { useState, type FormEvent, type ReactNode } from 'react'
+import { Link } from 'react-router-dom'
+import { Roll } from '../../components/Roll'
+import { useToast } from '../../components/Island'
+import { API_URL, MCP_URL } from '../../lib/api'
 import { friendlyAuthError, useAuth } from '../../lib/auth'
-import { onlineWorker, useGithubLink, useWorkers } from '../../lib/data'
+import { createMcpToken, onlineWorker, revokeMcpToken, useGithubLink, useMcpTokens, useWorkers } from '../../lib/data'
 import { firebaseInfo } from '../../lib/firebase'
-import { easeOut } from '../../lib/motion'
+import { MCP_CLIENTS, MCP_TOOLS, TOKEN_PLACEHOLDER } from '../../lib/mcpClients'
+import { easeInOut, easeOut } from '../../lib/motion'
 import { PageHead } from './Overview'
 import { Section, timeAgo } from './ui'
 
 export default function Settings() {
-  const { user, logOut } = useAuth()
   const { data: workers } = useWorkers()
   const worker = onlineWorker(workers)
+  const scheduled = worker?.mode === 'scheduled'
 
   return (
     <div className="page">
-      <PageHead title="Settings" sub="Everything Swarm is connected to, and what each connection is for." />
+      <PageHead title="Settings" sub="What Swarm is connected to, and how other tools reach it. Your name, sign-in and passkeys live in your profile." />
       <div className="settings">
         <Section title="Connections">
           <div className="conn-list">
             <FirebaseRow />
             <GithubRow />
-            <Conn name="Worker" tone={worker ? 'ok' : 'bad'} state={worker ? 'online' : 'offline'}
+            <Conn name="Worker" tone={worker ? 'ok' : 'bad'} state={worker ? (scheduled ? 'scheduled' : 'online') : 'offline'}
               detail={worker
-                ? `${worker.id} · ${worker.sandbox} sandbox · checked in ${timeAgo(worker.lastSeen)}${worker.syncMinutes ? ` · looks for new issues every ${worker.syncMinutes} min` : ''}`
+                ? `${worker.id} · ${worker.sandbox} sandbox · ${scheduled ? `last pass ${timeAgo(worker.lastSeen)}, runs on a schedule` : `checked in ${timeAgo(worker.lastSeen)}`}${worker.syncMinutes && !scheduled ? ` · looks for new issues every ${worker.syncMinutes} min` : ''}`
                 : 'Runs wait in the queue until a worker picks them up. Start one with: swarm worker (check its setup with: swarm doctor)'} />
             <Conn name="Models" tone={worker?.llm?.active ? 'ok' : 'warn'} state={worker?.llm?.active ? 'ready' : worker ? 'heuristics' : 'unknown'}
               detail={!worker ? 'Shown once a worker is online. Models are configured on the worker, never in the browser.'
@@ -30,21 +35,17 @@ export default function Settings() {
                 : 'No model configured, so the agents use built-in heuristics. Add a free Groq or Gemini key to the worker’s .env.'} />
           </div>
         </Section>
-        <Section title="Use from Claude" action={<span className="pill tone-work">MCP</span>}>
+        <Section title="Use from Claude and other AI tools" action={<span className="pill tone-work">MCP</span>}>
           <McpSetup />
         </Section>
-        <Section title="Account">
-          <div className="setting">
-            <div><b>{user?.displayName || 'You'}</b><p>{user?.email} · signs in with {user?.providerData.map((p) => PROVIDERS[p.providerId] || p.providerId).join(', ')}</p></div>
-            <button className="btn btn-line" onClick={logOut}>Sign out</button>
-          </div>
-        </Section>
+        <Link to="/app/profile" className="settings-profile">
+          <div><b>Your profile</b><span>Name, email, profile picture, sign-in methods and passkeys</span></div>
+          <span className="chev" aria-hidden="true">→</span>
+        </Link>
       </div>
     </div>
   )
 }
-
-const PROVIDERS: Record<string, string> = { password: 'email', 'google.com': 'Google', 'github.com': 'GitHub' }
 
 function Conn({ name, state, tone, detail, children }: { name: string; state: string; tone: 'ok' | 'warn' | 'bad'; detail: ReactNode; children?: ReactNode }) {
   return (
@@ -104,7 +105,7 @@ function GithubRow() {
               <b> Contents: read and write</b>, <b>Issues: read</b> and <b>Pull requests: read and write</b> on the repos Swarm should work on.</p>
             <div className="conn-pat-row">
               <input className="connect-input" type="password" autoComplete="off" spellCheck={false} placeholder="github_pat_…" value={pat} onChange={(e) => setPat(e.target.value)} aria-label="GitHub access token" />
-              <button className="btn btn-dark" type="submit" disabled={!pat.trim() || !!busy}>{busy === 'pat' ? 'Checking…' : 'Save token'}</button>
+              <button className="btn btn-dark" type="submit" disabled={!pat.trim() || !!busy}><Roll>{busy === 'pat' ? 'Checking…' : 'Save token'}</Roll></button>
             </div>
           </motion.form>
         )}
@@ -114,49 +115,93 @@ function GithubRow() {
   )
 }
 
-const MCP_CLIENTS = {
-  code: {
-    label: 'Claude Code',
-    note: 'Run once in the Swarm folder on the machine with the worker’s .env:',
-    snippet: 'claude mcp add swarm -- "$PWD/.venv/bin/swarm" mcp --cloud',
-  },
-  desktop: {
-    label: 'Claude Desktop',
-    note: 'Settings → Developer → Edit config, add this, then restart Claude. Use the full path to your Swarm folder:',
-    snippet: JSON.stringify({ mcpServers: { swarm: { command: '/path/to/swarm/.venv/bin/swarm', args: ['mcp', '--cloud'], env: { SWARM_ENV_FILE: '/path/to/swarm/.env' } } } }, null, 2),
-  },
-} as const
-
 function McpSetup() {
-  const [client, setClient] = useState<keyof typeof MCP_CLIENTS>('code')
-  const [copied, setCopied] = useState(false)
-  const c = MCP_CLIENTS[client]
-  const copy = async () => {
-    try { await navigator.clipboard.writeText(c.snippet); setCopied(true); window.setTimeout(() => setCopied(false), 1600) } catch { /* clipboard blocked: the text is selectable */ }
+  const { user } = useAuth()
+  const toast = useToast()
+  const { data: tokens } = useMcpTokens(user?.uid)
+  const [client, setClient] = useState(MCP_CLIENTS[0].id)
+  const [name, setName] = useState('')
+  const [fresh, setFresh] = useState<string | null>(null)
+  const [busy, setBusy] = useState(false)
+  const c = MCP_CLIENTS.find((x) => x.id === client)!
+  const snippet = c.snippet(fresh || TOKEN_PLACEHOLDER)
+
+  const make = async (e: FormEvent) => {
+    e.preventDefault()
+    if (!user) return
+    setBusy(true)
+    try {
+      setFresh(await createMcpToken(user.uid, name || c.label))
+      setName('')
+      toast.ok('Token created', 'Copy it now. It won’t be shown again.')
+    } catch (err) { toast.error('Couldn’t create the token', (err as Error).message) } finally { setBusy(false) }
   }
+  const copy = async (text: string, what: string) => {
+    try { await navigator.clipboard.writeText(text); toast.ok(`${what} copied`) } catch { toast.error('The browser blocked the clipboard', 'Select the text and copy it instead.') }
+  }
+
   return (
     <div className="mcp">
-      <p className="mcp-lede">Ask Claude what the agents did overnight, read a task’s diff or a harness, start a run, or send a patch back with feedback. Approving and merging stay here.</p>
-      <div className="mcp-tabs" role="tablist" aria-label="MCP client">
-        {(Object.keys(MCP_CLIENTS) as (keyof typeof MCP_CLIENTS)[]).map((k) => (
-          <button key={k} role="tab" aria-selected={client === k} className={`mcp-tab ${client === k ? 'on' : ''}`} onClick={() => setClient(k)}>
-            {client === k && <motion.span layoutId="mcp-tab" className="mcp-tab-bg" transition={{ duration: 0.35, ease: easeOut }} />}
-            <span>{MCP_CLIENTS[k].label}</span>
-          </button>
-        ))}
-      </div>
-      <AnimatePresence mode="wait" initial={false}>
-        <motion.div key={client} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -6 }} transition={{ duration: 0.3, ease: easeOut }}>
-          <p className="mcp-note">{c.note}</p>
-          <div className="mcp-code">
-            <pre className="mono">{c.snippet}</pre>
-            <button className="btn btn-line mcp-copy" onClick={copy}>{copied ? 'Copied' : 'Copy'}</button>
+      <p className="mcp-lede">Swarm runs an MCP server, so Claude, Cursor, VS Code or any MCP client can read your board, open a task’s diff, start a run or send a patch back with feedback. Approving and merging stay here. <Link className="link" to="/docs/mcp">Read the docs</Link></p>
+
+      <div className="mcp-step"><span className="mcp-n">1</span><div>
+        <b>Create an access token</b>
+        <p>Each token acts as you and sees only your repositories. Make one per device or tool so you can revoke them separately.</p>
+        <form className="mcp-new" onSubmit={make}>
+          <input className="field-input" value={name} onChange={(e) => setName(e.target.value)} placeholder={`Name, e.g. “${c.label} on my laptop”`} maxLength={60} aria-label="Token name" />
+          <button className="btn btn-dark" type="submit" disabled={busy}><Roll>{busy ? 'Creating…' : 'Create token'}</Roll></button>
+        </form>
+        <AnimatePresence>
+          {fresh && (
+            <motion.div className="mcp-fresh" initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }} transition={{ duration: 0.45, ease: easeInOut }}>
+              <div className="mcp-fresh-in">
+                <span className="mono">{fresh}</span>
+                <button className="btn btn-green btn-sm" onClick={() => copy(fresh, 'Token')}><Roll>Copy</Roll></button>
+                <button className="icon-btn" onClick={() => setFresh(null)} aria-label="Hide token" title="Hide">✕</button>
+              </div>
+              <p>Shown once. It’s already filled into the setup below.</p>
+            </motion.div>
+          )}
+        </AnimatePresence>
+        <ul className="tokens">
+          <AnimatePresence initial={false}>
+            {tokens.map((t) => (
+              <motion.li key={t.id} layout initial={{ opacity: 0, x: -12 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 20 }} transition={{ duration: 0.4, ease: easeOut }}>
+                <span className="token-dot" aria-hidden="true" />
+                <div><b>{t.name}</b><span className="mono">{t.prefix}…</span></div>
+                <span className="muted">{t.lastUsedAt ? `used ${timeAgo(t.lastUsedAt)}` : 'never used'}</span>
+                <button className="btn btn-line btn-sm" onClick={async () => { if (window.confirm(`Revoke “${t.name}”? Clients using it lose access within a minute.`)) { await revokeMcpToken(t.id); toast.info('Token revoked', t.name) } }}><Roll>Revoke</Roll></button>
+              </motion.li>
+            ))}
+          </AnimatePresence>
+        </ul>
+      </div></div>
+
+      <div className="mcp-step"><span className="mcp-n">2</span><div>
+        <b>Add Swarm to your client</b>
+        <LayoutGroup id="mcp-tabs">
+          <div className="mcp-tabs" role="tablist" aria-label="MCP client">
+            {MCP_CLIENTS.map((k) => (
+              <button key={k.id} role="tab" aria-selected={client === k.id} className={`mcp-tab ${client === k.id ? 'on' : ''}`} onClick={() => setClient(k.id)}>
+                {client === k.id && <motion.span layoutId="mcp-tab" className="mcp-tab-bg" transition={{ duration: 0.35, ease: easeOut }} />}
+                <span>{k.label}</span>
+              </button>
+            ))}
           </div>
-        </motion.div>
-      </AnimatePresence>
-      <ul className="mcp-tools">
-        {['board_summary', 'list_tasks', 'get_task', 'search_harnesses', 'read_harness', 'run_swarm', 'request_changes', 'list_repos'].map((t) => <li key={t} className="mono">{t}</li>)}
-      </ul>
+        </LayoutGroup>
+        <AnimatePresence mode="wait" initial={false}>
+          <motion.div key={client} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -6 }} transition={{ duration: 0.3, ease: easeOut }}>
+            <p className="mcp-note">{c.where}</p>
+            <div className="mcp-code">
+              <pre className="mono">{snippet}</pre>
+              <button className="btn btn-line mcp-copy" onClick={() => copy(snippet, 'Setup')}><Roll>Copy</Roll></button>
+            </div>
+          </motion.div>
+        </AnimatePresence>
+        <p className="mcp-server">Server: <span className="mono">{MCP_URL}</span>{API_URL.includes('localhost') && ' · runs on this machine with: swarm server'}</p>
+      </div></div>
+
+      <ul className="mcp-tools">{MCP_TOOLS.map((t) => <li key={t.name} className="mono" title={t.text}>{t.name}</li>)}</ul>
     </div>
   )
 }

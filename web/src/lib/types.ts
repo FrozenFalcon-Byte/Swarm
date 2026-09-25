@@ -94,8 +94,13 @@ export interface Run {
 }
 export interface WorkerInfo {
   id: string; lastSeen?: { toDate(): Date }; llm?: { active: string | null; fallbacks: string[] }; sandbox?: string
-  syncMinutes?: number; githubFallbackToken?: boolean
+  syncMinutes?: number; githubFallbackToken?: boolean; mode?: 'always-on' | 'scheduled'
 }
+
+type Stamp = { toDate(): Date } | null
+export interface Profile { displayName?: string; email?: string; avatar?: string | null; githubLogin?: string | null; createdAt?: Stamp }
+export interface Passkey { id: string; uid: string; name: string; deviceType?: string; backedUp?: boolean; createdAt?: Stamp; lastUsedAt?: Stamp }
+export interface McpToken { id: string; uid: string; name: string; prefix: string; createdAt?: Stamp; lastUsedAt?: Stamp }
 
 /** users/{uid}/private/github: readable and writable only by that user. */
 export interface GithubLink { token: string; login?: string; avatarUrl?: string; source?: 'oauth' | 'pat'; scopes?: string }

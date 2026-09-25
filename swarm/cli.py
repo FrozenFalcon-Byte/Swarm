@@ -1,4 +1,4 @@
-"""Command line: `swarm demo`, `run`, `serve`, `worker`, `doctor`, `mcp`, `board`, `tools`."""
+"""Command line: `swarm demo`, `run`, `serve`, `worker`, `server`, `doctor`, `mcp`, `board`, `tools`."""
 
 from __future__ import annotations
 
@@ -49,7 +49,11 @@ def main(argv: list[str] | None = None) -> int:
     s.add_argument("--host", default="127.0.0.1")
     s.add_argument("--port", type=int, default=8000)
     s.add_argument("--demo", action="store_true", help="reset to a fresh demo workspace first")
-    sub.add_parser("worker", help="service mode: process runs and actions from Firebase")
+    w = sub.add_parser("worker", help="service mode: process runs and actions from Firebase")
+    w.add_argument("--once", action="store_true", help="do everything that's waiting, then exit (for cron or CI schedules)")
+    sv = sub.add_parser("server", help="MCP over HTTP for many clients, plus passkey sign-in for the web app")
+    sv.add_argument("--host", default=os.environ.get("HOST", "127.0.0.1"))
+    sv.add_argument("--port", type=int, default=int(os.environ.get("PORT", "8787")))
     sub.add_parser("doctor", help="check Firebase, GitHub and model connections, and say how to fix gaps")
     m = sub.add_parser("mcp", help="serve the board over MCP (stdio) for Claude and other MCP clients")
     m.add_argument("--cloud", action="store_true", help="use repositories in Firebase instead of the local board")
@@ -89,7 +93,17 @@ def main(argv: list[str] | None = None) -> int:
     if args.cmd == "worker":
         from .cloud.worker import Worker
 
-        Worker(settings).run_forever()
+        worker = Worker(settings)
+        if args.once:
+            worker.run_once()
+        else:
+            worker.run_forever()
+        return 0
+
+    if args.cmd == "server":
+        from .server import serve as serve_http
+
+        serve_http(settings, args.host, args.port)
         return 0
 
     if args.cmd == "serve":

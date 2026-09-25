@@ -1,10 +1,12 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from 'react'
 import {
-  GithubAuthProvider, GoogleAuthProvider, createUserWithEmailAndPassword, linkWithPopup, onAuthStateChanged,
-  reauthenticateWithPopup, sendPasswordResetEmail, signInWithEmailAndPassword, signInWithPopup, signOut, unlink,
-  updateProfile, type User, type UserCredential,
+  EmailAuthProvider, GithubAuthProvider, GoogleAuthProvider, createUserWithEmailAndPassword, deleteUser, linkWithCredential,
+  linkWithPopup, onAuthStateChanged, reauthenticateWithCredential, reauthenticateWithPopup, sendPasswordResetEmail,
+  signInWithCustomToken, signInWithEmailAndPassword, signInWithPopup, signOut, unlink, updatePassword, updateProfile,
+  verifyBeforeUpdateEmail, type User, type UserCredential,
 } from 'firebase/auth'
-import { deleteDoc, doc, serverTimestamp, setDoc } from 'firebase/firestore'
+import { collection, deleteDoc, doc, getDocs, query, serverTimestamp, setDoc, where, writeBatch } from 'firebase/firestore'
+import { api, createPasskey, deviceLabel, getPasskey } from './api'
 import { auth, db } from './firebase'
 import { whoAmI } from './github'
 
@@ -22,6 +24,19 @@ interface AuthCtx {
   disconnectGitHub(): Promise<void>
   resetPassword(email: string): Promise<void>
   logOut(): Promise<void>
+  withPasskey(): Promise<void>
+  addPasskey(name?: string): Promise<void>
+  /** Confirm it's really you before a sensitive change: your password, or your provider's popup. */
+  reauthenticate(password?: string): Promise<void>
+  updateName(name: string): Promise<void>
+  changeEmail(email: string): Promise<void>
+  /** Change the password, or add one to an account that signs in with Google or GitHub only. */
+  setPassword(next: string): Promise<void>
+  linkProvider(id: 'google.com' | 'github.com'): Promise<void>
+  unlinkProvider(id: string): Promise<void>
+  deleteAccount(): Promise<void>
+  /** Bumped after changes Firebase doesn't announce (names, linked providers), so the UI re-reads the user. */
+  version: number
 }
 
 const Ctx = createContext<AuthCtx | null>(null)
@@ -57,6 +72,9 @@ async function fromOAuth(result: UserCredential) {
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null)
   const [loading, setLoading] = useState(true)
+  const [version, setVersion] = useState(0)
+  const bump = async () => { await auth.currentUser?.reload(); setUser(auth.currentUser); setVersion((v) => v + 1) }
+  const need = () => { if (!auth.currentUser) throw new Error('Sign in first.'); return auth.currentUser }
 
   useEffect(() => onAuthStateChanged(auth, (u) => { setUser(u); setLoading(false) }), [])
 
@@ -105,6 +123,75 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     },
     resetPassword: (email) => sendPasswordResetEmail(auth, email),
     logOut: () => signOut(auth),
+    version,
+    async withPasskey() {
+      const { challengeId, options } = await api<{ challengeId: string; options: Record<string, unknown> }>('/api/passkeys/login/options')
+      const credential = await getPasskey(options)
+      const { token } = await api<{ token: string }>('/api/passkeys/login/verify', { challengeId, credential })
+      const { user } = await signInWithCustomToken(auth, token)
+      await saveProfile(user)
+    },
+    async addPasskey(name) {
+      const u = need()
+      const idToken = await u.getIdToken()
+      const { challengeId, options } = await api<{ challengeId: string; options: Record<string, unknown> }>('/api/passkeys/register/options', {}, idToken)
+      const credential = await createPasskey(options)
+      await api('/api/passkeys/register/verify', { challengeId, credential, name: name || deviceLabel() }, idToken)
+    },
+    async reauthenticate(password) {
+      const u = need()
+      if (password && u.email) { await reauthenticateWithCredential(u, EmailAuthProvider.credential(u.email, password)); return }
+      const via = u.providerData.find((p) => p.providerId === 'google.com') ? new GoogleAuthProvider()
+        : u.providerData.find((p) => p.providerId === 'github.com') ? githubProvider() : null
+      if (!via) throw Object.assign(new Error('Enter your password to confirm.'), { code: 'swarm/password-needed' })
+      await reauthenticateWithPopup(u, via)
+    },
+    async updateName(name) {
+      const u = need()
+      await updateProfile(u, { displayName: name })
+      await setDoc(doc(db, 'users', u.uid), { displayName: name }, { merge: true })
+      await bump()
+    },
+    async changeEmail(email) {
+      // Firebase sends a link to the new address; the change applies once it's clicked
+      await verifyBeforeUpdateEmail(need(), email)
+    },
+    async setPassword(next) {
+      const u = need()
+      if (u.providerData.some((p) => p.providerId === 'password')) await updatePassword(u, next)
+      else if (u.email) await linkWithCredential(u, EmailAuthProvider.credential(u.email, next))
+      else throw new Error('Add an email address first.')
+      await bump()
+    },
+    async linkProvider(id) {
+      const u = need()
+      const result = await linkWithPopup(u, id === 'github.com' ? githubProvider() : new GoogleAuthProvider())
+      if (id === 'github.com') await fromOAuth(result)
+      await bump()
+    },
+    async unlinkProvider(id) {
+      const u = need()
+      if (u.providerData.length <= 1) throw new Error('Keep at least one way to sign in.')
+      await unlink(u, id)
+      if (id === 'github.com') {
+        await deleteDoc(doc(db, 'users', u.uid, 'private', 'github')).catch(() => {})
+        await setDoc(doc(db, 'users', u.uid), { githubConnected: false, githubLogin: null }, { merge: true })
+      }
+      await bump()
+    },
+    async deleteAccount() {
+      const u = need()
+      // everything that's yours first; the account last, since deleting it ends access to the rest
+      const batch = writeBatch(db)
+      for (const [col, field] of [['repos', 'ownerUid'], ['mcpTokens', 'uid'], ['passkeys', 'uid']] as const) {
+        const snap = await getDocs(query(collection(db, col), where(field, '==', u.uid)))
+        snap.forEach((d) => batch.delete(d.ref))
+      }
+      batch.delete(doc(db, 'users', u.uid, 'private', 'github'))
+      batch.delete(doc(db, 'users', u.uid))
+      await batch.commit()
+      await deleteUser(u)
+    },
   }
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>
 }
@@ -132,6 +219,15 @@ export function friendlyAuthError(e: unknown): string {
     'auth/popup-blocked': 'The browser blocked the sign-in window. Allow pop-ups for this site and try again.',
     'auth/unauthorized-domain': 'This domain isn’t allowed to sign in yet. Add it under Firebase Authentication → Settings → Authorized domains.',
     'auth/configuration-not-found': 'Authentication isn’t set up for this Firebase project yet.',
+    'auth/requires-recent-login': 'For your security, confirm it’s you first.',
+    'auth/provider-already-linked': 'That sign-in method is already connected.',
+    'auth/no-such-provider': 'That sign-in method isn’t connected.',
+    'auth/email-change-needs-verification': 'Check your inbox to confirm the new address.',
+    'auth/operation-not-allowed-email': 'Email changes aren’t enabled for this project.',
+    'auth/invalid-custom-token': 'The passkey sign-in expired. Try again.',
+    'swarm/password-needed': 'Enter your password to confirm.',
   }
-  return map[code] || 'Something went wrong signing you in. Try again.'
+  if (map[code]) return map[code]
+  const msg = (e as Error)?.message
+  return msg && !code ? msg : 'Something went wrong. Try again.'
 }

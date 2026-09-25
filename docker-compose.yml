@@ -1,0 +1,48 @@
+# Everything on one machine (a free Oracle Cloud or Google Cloud VM, or a spare computer):
+#   docker compose up -d --build
+# Needs .env next to this file and secrets/service-account.json (see SETUP.md).
+services:
+  worker:
+    build: .
+    command: ["swarm", "-v", "worker"]
+    env_file: .env
+    environment:
+      GOOGLE_APPLICATION_CREDENTIALS: /app/secrets/service-account.json
+      SWARM_SANDBOX: docker
+      # sandbox runs share the host's docker daemon, so their temp copies must live at the same path there
+      TMPDIR: /tmp/swarm-sandbox
+    volumes:
+      - ./secrets:/app/secrets:ro
+      - swarm-data:/data
+      - /var/run/docker.sock:/var/run/docker.sock
+      - /tmp/swarm-sandbox:/tmp/swarm-sandbox
+    # talking to the docker socket needs root in this container; each test still runs as an
+    # unprivileged user, with no network and no capabilities, in its own container
+    user: root
+    restart: unless-stopped
+
+  server:
+    build: .
+    command: ["swarm", "server"]
+    env_file: .env
+    environment:
+      GOOGLE_APPLICATION_CREDENTIALS: /app/secrets/service-account.json
+    volumes:
+      - ./secrets:/app/secrets:ro
+    ports:
+      - "8787:8787"
+    restart: unless-stopped
+
+  # Optional free HTTPS without opening ports: a Cloudflare Tunnel. Create one at
+  # one.dash.cloudflare.com → Networks → Tunnels, point it at http://server:8787,
+  # put its token in .env as CLOUDFLARE_TUNNEL_TOKEN, then: docker compose --profile tunnel up -d
+  tunnel:
+    image: cloudflare/cloudflared:latest
+    command: ["tunnel", "--no-autoupdate", "run"]
+    environment:
+      TUNNEL_TOKEN: ${CLOUDFLARE_TUNNEL_TOKEN:-}
+    profiles: ["tunnel"]
+    restart: unless-stopped
+
+volumes:
+  swarm-data:

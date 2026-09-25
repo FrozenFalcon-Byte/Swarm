@@ -3,11 +3,14 @@ import { useMemo, useState } from 'react'
 import { Link, NavLink, useNavigate, useParams } from 'react-router-dom'
 import { agentColor } from '../../components/AgentDots'
 import { useAuth } from '../../lib/auth'
+import { useToast } from '../../components/Island'
 import { queueRun, removeRepo, requestAction, setAutoSync, useActionStatus, useActivity, useRepo, useRuns, useTasks } from '../../lib/data'
 import { easeInOut, easeOut } from '../../lib/motion'
 import type { Task } from '../../lib/types'
+import { Handoffs } from './Handoffs'
 import { ToolCards } from './ToolsPage'
-import { LANES, PIPELINE, Section, StatePill, timeAgo } from './ui'
+import { LANES, PIPELINE, Section, StatePill, kindLabel, timeAgo } from './ui'
+import { Roll } from '../../components/Roll'
 
 export default function RepoView() {
   const params = useParams()
@@ -20,13 +23,20 @@ export default function RepoView() {
   const { data: tasks } = useTasks(repoId)
   const navigate = useNavigate()
   const [queued, setQueued] = useState(false)
+  const toast = useToast()
 
   if (loading) return null
   if (!repo) return <div className="page"><Section title="Repository not found"><p className="muted">It may have been removed, or you aren’t a member. <Link className="link" to="/app/repos">Back to repositories</Link></p></Section></div>
 
   const needsYou = tasks.filter((t) => t.state === 'Approved' || t.state === 'Needs Human').length
   const busy = repo.status === 'running' || repo.status === 'queued' || queued
-  const runNow = async () => { if (!user) return; setQueued(true); await queueRun(user.uid, repoId); setTimeout(() => setQueued(false), 4000) }
+  const runNow = async () => {
+    if (!user) return
+    setQueued(true)
+    try { await queueRun(user.uid, repoId); toast.work('Swarm queued', 'The worker picks it up in a few seconds.'); setTimeout(() => toast.dismiss(), 3200) }
+    catch (e) { toast.error('Couldn’t queue a run', (e as Error).message) }
+    setTimeout(() => setQueued(false), 4000)
+  }
 
   return (
     <div className="page">
@@ -53,10 +63,10 @@ export default function RepoView() {
             <button className="btn btn-line" onClick={async () => {
               if (!window.confirm(`Remove ${repo.displayName || repo.fullName} from Swarm? The agents stop working on it. Nothing changes on GitHub.`)) return
               await removeRepo(repoId); navigate('/app/repos')
-            }}>Remove</button>
+            }}><Roll>Remove</Roll></button>
           )}
           <button className="btn btn-green" onClick={runNow} disabled={busy}>
-            {busy ? <><motion.span animate={{ rotate: 360 }} transition={{ repeat: Infinity, duration: 1.2, ease: 'linear' }} style={{ display: 'inline-block' }}>◐</motion.span> Agents working</> : 'Run the swarm'}
+            {busy ? <><motion.span animate={{ rotate: 360 }} transition={{ repeat: Infinity, duration: 1.2, ease: 'linear' }} style={{ display: 'inline-block' }}>◐</motion.span> Agents working</> : <Roll>Run the swarm</Roll>}
           </button>
         </div>
       </header>
@@ -65,7 +75,7 @@ export default function RepoView() {
 
       <LayoutGroup id="tabs">
         <nav className="tabs" aria-label="Repository sections">
-          {[['board', 'Board', needsYou], ['activity', 'Activity', 0], ['tools', 'Tools', 0], ['runs', 'Runs', 0]].map(([id, label, n]) => (
+          {[['board', 'Board', needsYou], ['handoffs', 'Handoffs', 0], ['activity', 'Activity', 0], ['tools', 'Tools', 0], ['runs', 'Runs', 0]].map(([id, label, n]) => (
             <NavLink key={id as string} to={`/app/repos/${repoId}${id === 'board' ? '' : `/${id}`}`} end className={`tab ${tab === id ? 'on' : ''}`}>
               {tab === id && <motion.span layoutId="tab-bg" className="tab-bg" transition={{ duration: 0.4, ease: easeOut }} />}
               <span>{label}</span>{!!n && <span className="tab-count">{n}</span>}
@@ -77,6 +87,7 @@ export default function RepoView() {
       <AnimatePresence mode="wait">
         <motion.div key={tab} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -6 }} transition={{ duration: 0.35, ease: easeOut }}>
           {tab === 'board' && <Lanes tasks={tasks} onOpen={(id) => navigate(`/app/repos/${repoId}/tasks/${id}`)} />}
+          {tab === 'handoffs' && <Handoffs tasks={tasks} onOpen={(id) => navigate(`/app/repos/${repoId}/tasks/${id}`)} />}
           {tab === 'activity' && <ActivityFeed repoId={repoId} />}
           {tab === 'tools' && <ToolCards repoId={repoId} />}
           {tab === 'runs' && <Runs repoId={repoId} />}
@@ -175,6 +186,7 @@ function Runs({ repoId }: { repoId: string }) {
 
 function TaskDrawer({ repoId, task, onClose }: { repoId: string; task?: Task; onClose: () => void }) {
   const { user } = useAuth()
+  const toast = useToast()
   const [comment, setComment] = useState('')
   const [sent, setSent] = useState<string | null>(null)
   const { data: actions } = useActionStatus(repoId)
@@ -185,6 +197,7 @@ function TaskDrawer({ repoId, task, onClose }: { repoId: string; task?: Task; on
     if (type === 'reject' && !comment.trim()) { setSent('Say what should change so the coder can act on it.'); return }
     await requestAction(user.uid, user.displayName || user.email || 'maintainer', repoId, type, task.task_id, comment)
     setSent(null); setComment('')
+    toast.ok({ merge: 'Merging', approve: 'Approved', reject: 'Sent back to the coder', reopen: 'Back to the swarm', close: 'Closed' }[type], `${task.task_id} · the worker takes it from here`)
   }
 
   return (
@@ -197,7 +210,7 @@ function TaskDrawer({ repoId, task, onClose }: { repoId: string; task?: Task; on
               <div style={{ flex: 1, minWidth: 0 }}>
                 <span className="mono muted">{task.task_id} · issue {task.source_issue}</span>
                 <h2>{task.title}</h2>
-                <div className="task-card-tags"><StatePill state={task.state} /><span className="chip">{task.kind}</span>{task.priority !== 'unset' && <span className="chip">{task.priority}</span>}</div>
+                <div className="task-card-tags"><StatePill state={task.state} /><span className="chip">{kindLabel(task.kind)}</span>{task.priority !== 'unset' && <span className="chip">{task.priority}</span>}</div>
               </div>
               <button className="icon-btn" onClick={onClose} aria-label="Close">✕</button>
             </header>
@@ -245,12 +258,12 @@ function Actions({ task, comment, setComment, act, last, note }: {
     : last?.status === 'done' ? <span className="action-status">{last.type}: {last.result}</span> : null
   const body = (() => {
     switch (task.state) {
-      case 'Approved': return <><button className="btn btn-green" onClick={() => act('merge')} disabled={!!pending}>Merge</button><input id="comment" value={comment} onChange={(e) => setComment(e.target.value)} placeholder="What should change? (to request changes)" /><button className="btn btn-line" onClick={() => act('reject')} disabled={!!pending}>Request changes</button></>
+      case 'Approved': return <><button className="btn btn-green" onClick={() => act('merge')} disabled={!!pending}><Roll>Merge</Roll></button><input id="comment" value={comment} onChange={(e) => setComment(e.target.value)} placeholder="What should change? (to request changes)" /><button className="btn btn-line" onClick={() => act('reject')} disabled={!!pending}><Roll>Request changes</Roll></button></>
       case 'Needs Human': return <><input id="comment" value={comment} onChange={(e) => setComment(e.target.value)} placeholder="Comment (needed to request changes)" />
-        {task.artifacts.diff_text && <><button className="btn btn-green" onClick={() => act('approve')} disabled={!!pending}>Approve patch</button><button className="btn btn-line" onClick={() => act('reject')} disabled={!!pending}>Request changes</button></>}
-        {!task.artifacts.diff_text && <button className="btn btn-dark" onClick={() => act('reopen')} disabled={!!pending}>Send to the swarm</button>}
-        <button className="btn btn-ghost" onClick={() => act('close')} disabled={!!pending}>Close</button></>
-      case 'Closed': return <button className="btn btn-dark" onClick={() => act('reopen')} disabled={!!pending}>Reopen for the swarm</button>
+        {task.artifacts.diff_text && <><button className="btn btn-green" onClick={() => act('approve')} disabled={!!pending}><Roll>Approve patch</Roll></button><button className="btn btn-line" onClick={() => act('reject')} disabled={!!pending}><Roll>Request changes</Roll></button></>}
+        {!task.artifacts.diff_text && <button className="btn btn-dark" onClick={() => act('reopen')} disabled={!!pending}><Roll>Send to the swarm</Roll></button>}
+        <button className="btn btn-ghost" onClick={() => act('close')} disabled={!!pending}><Roll>Close</Roll></button></>
+      case 'Closed': return <button className="btn btn-dark" onClick={() => act('reopen')} disabled={!!pending}><Roll>Reopen for the swarm</Roll></button>
       default: return null
     }
   })()
@@ -285,7 +298,7 @@ function Evidence({ task }: { task: Task }) {
             ))}
           </div>
         ))}
-        {!!task.artifacts.test_summary?.preexisting_failures?.length && <p className="muted">Known flaky tests tracked by other tasks: {task.artifacts.test_summary.preexisting_failures.join(', ')}</p>}
+        {!!task.artifacts.test_summary?.preexisting_failures?.length && <p className="muted">Tests already known to fail at random, tracked by other tasks: {task.artifacts.test_summary.preexisting_failures.join(', ')}</p>}
       </div>
     </div>
   )
