@@ -20,6 +20,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 import httpx
+from google.api_core import exceptions as gexc
 from google.cloud import firestore as gfs
 
 from ..board import InvalidTransition, TaskState
@@ -281,9 +282,15 @@ class Worker:
     def run_forever(self) -> None:
         log.info("worker %s polling (emulators=%s)", self.worker_id, firebase.using_emulators())
         while True:
-            self.heartbeat()
-            self.sync_due_repos()
-            busy = self.process_actions() + self.process_runs()
+            try:
+                self.heartbeat()
+                self.sync_due_repos()
+                busy = self.process_actions() + self.process_runs()
+            except (gexc.FailedPrecondition, gexc.ServiceUnavailable, gexc.DeadlineExceeded) as e:
+                # FailedPrecondition: indexes are still building right after a deploy (a few minutes)
+                log.warning("Firestore not ready, retrying in 30s: %s", str(e).split(" See its status")[0])
+                time.sleep(30)
+                continue
             if not busy:
                 time.sleep(self.poll_s)
 
