@@ -1,0 +1,11 @@
+rules_version = '2';
+// Patches, test results and agent-written tools: readable by repo members, written only by the worker.
+service firebase.storage {
+  match /b/{bucket}/o {
+    match /repos/{repoId}/{allPaths=**} {
+      allow read: if request.auth != null
+        && request.auth.uid in firestore.get(/databases/(default)/documents/repos/$(repoId)).data.members;
+      allow write: if false;
+    }
+  }
+}

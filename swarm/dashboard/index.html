@@ -1,0 +1,283 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Swarm Board</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,700&family=Instrument+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>
+:root{
+  --bg:#EEF1F4; --surface:#fff; --surface-2:#F6F8FA; --line:#D9DFE6; --line-soft:#E7EBF0;
+  --ink:#121A26; --ink-2:#4A5566; --ink-3:#7B8595;
+  --accent:#2A4BE0; --accent-soft:#E3E8FC;
+  --ok:#1C8A57; --ok-soft:#DDF1E6; --warn:#C77A00; --warn-soft:#FBEBD0; --bad:#C8363B; --bad-soft:#F8DEDF;
+  --add-bg:#E6F4EC; --del-bg:#FBE7E8;
+  --display:"Bricolage Grotesque","Instrument Sans",system-ui,sans-serif;
+  --body:"Instrument Sans",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --mono:"JetBrains Mono",ui-monospace,Menlo,monospace;
+  color-scheme:light;
+}
+@media (prefers-color-scheme: dark){:root{
+  color-scheme:dark;
+  --bg:#0D1219; --surface:#151C26; --surface-2:#1A2230; --line:#283344; --line-soft:#212B39;
+  --ink:#E8EDF4; --ink-2:#A6B1C2; --ink-3:#6F7B8E; --accent:#7D95FF; --accent-soft:#1F2A4F;
+  --ok:#4CC98A; --ok-soft:#143426; --warn:#F2B040; --warn-soft:#3A2A0E; --bad:#F07075; --bad-soft:#3C1A1D;
+  --add-bg:#12301F; --del-bg:#3A1A1C;
+}}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%}
+body{background:var(--bg);color:var(--ink);font:14px/1.45 var(--body);display:flex;flex-direction:column}
+button{font:inherit;cursor:pointer}
+button:focus-visible,.card:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.mono{font-family:var(--mono);font-variant-numeric:tabular-nums}
+
+header{display:flex;flex-wrap:wrap;align-items:center;gap:12px 20px;padding:14px 20px;border-bottom:1px solid var(--line);background:var(--surface)}
+header h1{font:700 20px var(--display);margin:0;letter-spacing:-.01em}
+.chips{display:flex;gap:6px;flex-wrap:wrap}
+.chip{font-size:11.5px;font-weight:600;padding:3px 9px;border-radius:999px;background:var(--surface-2);border:1px solid var(--line-soft);color:var(--ink-2);white-space:nowrap}
+.agents{display:flex;gap:12px;flex-wrap:wrap;margin-left:auto}
+.agent{display:flex;align-items:center;gap:6px;font-size:12.5px;font-weight:500;color:var(--ink-2)}
+.agent i{width:9px;height:9px;border-radius:50%;background:var(--line)}
+.agent.busy i{background:var(--warn);box-shadow:0 0 0 3px var(--warn-soft)}
+.agent.idle i{background:var(--ok)}
+.btn{border:1px solid var(--line);background:var(--surface);color:var(--ink);padding:7px 14px;border-radius:8px;font-weight:600}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+.btn.good{background:var(--ok);border-color:var(--ok);color:#fff}
+.btn.bad{color:var(--bad);border-color:color-mix(in srgb,var(--bad) 40%,var(--line))}
+.btn:disabled{opacity:.5;cursor:default}
+
+main{flex:1;display:grid;grid-template-columns:minmax(0,1fr) 320px;min-height:0}
+@media (max-width:1000px){main{grid-template-columns:1fr;align-content:start}aside.side{border-left:0;border-top:1px solid var(--line)}}
+.board{display:flex;gap:12px;padding:16px 20px;overflow-x:auto;align-items:flex-start;min-height:0}
+.col{flex:0 0 232px;background:var(--surface-2);border:1px solid var(--line-soft);border-radius:12px;display:flex;flex-direction:column;max-height:100%}
+.col h2{display:flex;justify-content:space-between;align-items:center;margin:0;padding:10px 12px;font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-2);font-weight:600}
+.col h2 .n{font-family:var(--mono);background:var(--surface);border:1px solid var(--line-soft);border-radius:6px;padding:0 6px;color:var(--ink-3)}
+.col.human h2{color:var(--warn)} .col.approved h2{color:var(--ok)} .col.rejected h2{color:var(--bad)}
+.cards{display:flex;flex-direction:column;gap:8px;padding:0 8px 10px;overflow-y:auto;min-height:40px}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:10px 11px;cursor:pointer;display:flex;flex-direction:column;gap:6px;transition:border-color .15s, transform .15s}
+.card:hover{border-color:var(--accent)}
+.card.flash{animation:flash 1.4s ease-out}
+@keyframes flash{from{box-shadow:0 0 0 3px var(--accent-soft);transform:translateY(-2px)}to{box-shadow:none;transform:none}}
+@media (prefers-reduced-motion: reduce){.card.flash{animation:none}}
+.card .top{display:flex;justify-content:space-between;font-family:var(--mono);font-size:11px;color:var(--ink-3)}
+.card .t{font-weight:600;font-size:13px;line-height:1.3}
+.tags{display:flex;gap:4px;flex-wrap:wrap}
+.tag{font-size:10.5px;font-weight:600;padding:1px 7px;border-radius:5px;background:var(--surface-2);color:var(--ink-2);border:1px solid var(--line-soft)}
+.tag.p-high,.tag.p-critical{background:var(--bad-soft);color:var(--bad);border-color:transparent}
+.tag.p-medium{background:var(--warn-soft);color:var(--warn);border-color:transparent}
+.card .note{font-size:11.5px;color:var(--ink-2);border-left:2px solid var(--line);padding-left:7px}
+.card .who{font-size:11px;color:var(--warn);font-weight:600}
+.empty-col{font-size:12px;color:var(--ink-3);text-align:center;padding:8px 0 4px}
+
+aside.side{border-left:1px solid var(--line);background:var(--surface);display:flex;flex-direction:column;min-height:0}
+.side section{border-bottom:1px solid var(--line-soft);display:flex;flex-direction:column;min-height:0}
+.side h3{margin:0;padding:12px 16px 6px;font:700 14px var(--display)}
+.feed{list-style:none;margin:0;padding:0 0 8px;overflow-y:auto;max-height:46vh}
+.feed li{padding:6px 16px;display:grid;grid-template-columns:auto 1fr;gap:2px 8px;font-size:12.5px}
+.feed .a{font-weight:600;font-size:11px;text-transform:uppercase;letter-spacing:.05em}
+.feed .a.triager{color:#7A5AF8}.feed .a.coder{color:var(--accent)}.feed .a.tester{color:var(--warn)}.feed .a.reviewer{color:var(--ok)}.feed .a.human{color:var(--bad)}
+.feed .ts{font-family:var(--mono);font-size:10.5px;color:var(--ink-3);text-align:right}
+.feed .m{grid-column:1/-1;color:var(--ink-2)}
+.tools{padding:0 12px 12px;display:flex;flex-direction:column;gap:8px;overflow-y:auto}
+.tool{border:1px solid var(--line-soft);border-radius:10px;padding:9px 11px;font-size:12px;background:var(--surface-2)}
+.tool b{font-family:var(--mono);font-size:12px}
+.tool .d{color:var(--ink-2);margin-top:3px}
+.tool .u{display:flex;gap:6px;margin-top:6px;flex-wrap:wrap}
+
+/* drawer */
+.scrim{position:fixed;inset:0;background:rgba(10,14,20,.35)}
+.drawer{position:fixed;top:0;right:0;bottom:0;width:min(720px,100%);background:var(--surface);border-left:1px solid var(--line);display:flex;flex-direction:column;box-shadow:-12px 0 40px rgba(0,0,0,.15)}
+.drawer .hd{padding:16px 20px;border-bottom:1px solid var(--line-soft);display:flex;gap:12px;align-items:flex-start}
+.drawer .hd h2{margin:2px 0 6px;font:700 19px/1.25 var(--display)}
+.drawer .body{padding:6px 20px 24px;overflow-y:auto;display:flex;flex-direction:column;gap:18px}
+.drawer h4{margin:12px 0 6px;font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-3)}
+.actions{display:flex;gap:8px;flex-wrap:wrap;align-items:center;padding:12px 20px;border-top:1px solid var(--line-soft);background:var(--surface-2)}
+.actions input{flex:1 1 200px;min-width:0;padding:7px 10px;border:1px solid var(--line);border-radius:8px;background:var(--surface);color:var(--ink);font:inherit}
+.diff{font:12px/1.5 var(--mono);border:1px solid var(--line-soft);border-radius:8px;overflow-x:auto;background:var(--surface-2)}
+.diff div{padding:0 10px;white-space:pre}
+.diff .add{background:var(--add-bg)} .diff .del{background:var(--del-bg)} .diff .hunk{color:var(--accent)} .diff .file{color:var(--ink-3);font-weight:500}
+.checks{display:flex;flex-direction:column;gap:6px}
+.check{display:grid;grid-template-columns:18px 150px 1fr;gap:8px;font-size:12.5px;align-items:start}
+.check .ic{font-weight:700}.check.ok .ic{color:var(--ok)}.check.no .ic{color:var(--bad)}
+.check .nm{font-family:var(--mono);font-size:12px}
+.check .dt{color:var(--ink-2)}
+.ev{display:grid;grid-template-columns:70px 1fr 70px;gap:6px 10px;align-items:center;font-size:12px}
+.ev .bar{height:10px;border-radius:5px;background:var(--line-soft);overflow:hidden}
+.ev .bar span{display:block;height:100%}
+.hist{list-style:none;margin:0;padding:0;border-left:2px solid var(--line-soft)}
+.hist li{padding:4px 0 8px 14px;position:relative;font-size:12.5px}
+.hist li::before{content:"";position:absolute;left:-6px;top:9px;width:10px;height:10px;border-radius:50%;background:var(--surface);border:2px solid var(--line)}
+.hist .who{font-weight:600}
+.hist .st{font-family:var(--mono);font-size:11px;color:var(--ink-3)}
+.kv{display:grid;grid-template-columns:130px 1fr;gap:4px 12px;font-size:13px}
+.kv dt{color:var(--ink-3)} .kv dd{margin:0}
+.toast{position:fixed;bottom:18px;left:50%;transform:translateX(-50%);background:var(--ink);color:var(--bg);padding:9px 16px;border-radius:8px;font-weight:500}
+.conn{font-size:12px;color:var(--ink-3)}
+</style>
+</head>
+<body>
+<header>
+  <h1>Swarm Board</h1>
+  <div class="chips" id="chips"></div>
+  <div class="agents" id="agents"></div>
+  <button class="btn primary" id="runBtn">Run swarm</button>
+  <span class="conn" id="conn">connecting…</span>
+</header>
+<main>
+  <div class="board" id="board"></div>
+  <aside class="side">
+    <section><h3>Activity</h3><ul class="feed" id="feed"></ul></section>
+    <section style="flex:1"><h3>Tool registry</h3><div class="tools" id="tools"></div></section>
+  </aside>
+</main>
+<div id="drawerRoot" hidden></div>
+<div class="toast" id="toast" hidden></div>
+
+<script>
+const COLUMNS = [
+  ["New Issue",""],["Triaged",""],["In Progress",""],["Awaiting Tests",""],["In Review",""],
+  ["Rejected","rejected"],["Needs Human","human"],["Approved","approved"],["Merged",""],["Closed",""]];
+const S = {tasks:new Map(), tools:[], activity:[], status:null, open:null};
+const $ = id => document.getElementById(id);
+const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const t = ts => { const d = new Date(ts); return isNaN(d) ? "" : d.toLocaleTimeString([], {hour:"2-digit",minute:"2-digit",second:"2-digit"}); };
+
+function toast(msg){ const el=$("toast"); el.textContent=msg; el.hidden=false; clearTimeout(toast.h); toast.h=setTimeout(()=>el.hidden=true,2600); }
+
+function renderBoard(flashId){
+  const byState = new Map(COLUMNS.map(([s])=>[s,[]]));
+  for (const task of S.tasks.values()) (byState.get(task.state) || []).push(task);
+  $("board").innerHTML = COLUMNS.map(([state, cls]) => {
+    const list = byState.get(state).sort((a,b)=>a.task_id.localeCompare(b.task_id));
+    return `<div class="col ${cls}"><h2>${esc(state)} <span class="n">${list.length}</span></h2><div class="cards">${
+      list.length ? list.map(card).join("") : '<div class="empty-col">—</div>'}</div></div>`;
+  }).join("");
+  if (flashId) document.querySelector(`[data-id="${flashId}"]`)?.classList.add("flash");
+}
+function card(task){
+  const tags = [task.kind !== "unknown" ? task.kind : null].filter(Boolean).map(k=>`<span class="tag">${esc(k)}</span>`).join("")
+    + (task.priority !== "unset" ? `<span class="tag p-${esc(task.priority)}">${esc(task.priority)}</span>` : "")
+    + (task.attempts > 1 ? `<span class="tag">attempt ${task.attempts}</span>` : "")
+    + ((task.artifacts.tools_used||[]).map(x=>`<span class="tag mono">${esc(x)}</span>`).join(""));
+  const note = task.note && ["Needs Human","Rejected","Closed"].includes(task.state) ? `<div class="note">${esc(task.note.slice(0,140))}</div>` : "";
+  const who = task.assigned_agent ? `<div class="who">● ${esc(task.assigned_agent)} working</div>` : "";
+  return `<div class="card" tabindex="0" role="button" data-id="${esc(task.task_id)}">
+    <div class="top"><span>${esc(task.task_id)}</span><span>${esc(task.source_issue)}</span></div>
+    <div class="t">${esc(task.title)}</div><div class="tags">${tags}</div>${note}${who}</div>`;
+}
+
+function renderStatus(){
+  const st = S.status; if (!st) return;
+  $("chips").innerHTML = `<span class="chip">sandbox: ${esc(st.sandbox)}</span><span class="chip">${st.llm.active ? "LLM: "+esc(st.llm.active) : "LLM off · heuristics"}</span><span class="chip mono" title="${esc(st.repo)}">${esc(st.repo.split("/").slice(-1)[0])}</span>`;
+  $("agents").innerHTML = st.agents.map(a=>`<span class="agent ${a.busy?"busy":"idle"}"><i></i>${esc(a.name)}</span>`).join("");
+  $("runBtn").textContent = st.running ? "Pause swarm" : "Run swarm";
+}
+function renderFeed(){
+  $("feed").innerHTML = S.activity.slice(-80).reverse().map(e =>
+    `<li><span class="a ${esc(e.agent)}">${esc(e.agent)}${e.task_id?` · <span class="mono">${esc(e.task_id)}</span>`:""}</span><span class="ts">${t(e.ts)}</span><span class="m">${esc(e.message)}</span></li>`).join("")
+    || '<li><span class="m">Nothing yet. Press “Run swarm”.</span></li>';
+}
+function renderTools(){
+  $("tools").innerHTML = S.tools.map(r=>`<div class="tool"><b>${esc(r.tool_id)}</b>
+    <div class="d">${esc(r.description)}</div>
+    <div class="u"><span class="tag ${r.validated?"":"p-high"}">${r.validated?"validated":"not validated"}</span><span class="tag">used ${r.usage_count}×</span><span class="tag">by ${esc(r.used_by_tasks.join(", "))}</span></div></div>`).join("")
+    || '<div class="tool"><div class="d">No tools yet. The tester writes one when existing tests can’t prove a fix.</div></div>';
+}
+
+function renderDiff(diff){
+  if (!diff) return '<div class="conn">No patch yet.</div>';
+  return '<div class="diff">' + diff.split("\n").map(l=>{
+    const c = l.startsWith("+++")||l.startsWith("---") ? "file" : l.startsWith("@@") ? "hunk" : l.startsWith("+") ? "add" : l.startsWith("-") ? "del" : "";
+    return `<div class="${c}">${esc(l)||" "}</div>`; }).join("") + "</div>";
+}
+function renderEvidence(sum){
+  const ev = sum?.harness?.evidence; if (!ev) return "";
+  const rows = Object.entries(ev).map(([test,e])=>{
+    const bar = (r,color) => { const f=r.failures??0, n=r.runs||1; return `<div class="bar"><span style="width:${Math.max(2,f/n*100)}%;background:${color}"></span></div><span class="mono">${f}/${n} fail</span>`; };
+    return `<div class="mono" style="grid-column:1/-1;font-size:11.5px;color:var(--ink-3)">${esc(test)}</div>
+      <span>before</span>${bar(e.before,"var(--bad)")}<span>after</span>${bar(e.after,"var(--ok)")}`;
+  }).join("");
+  const s = sum.suite_patched || {};
+  return `<h4>Test evidence · ${esc(sum.harness.tool_id)} ${sum.harness.reused?"(reused)":"(written for this task)"}</h4>
+    <div class="ev">${rows}</div>
+    <div class="conn" style="margin-top:8px">Full suite with patch: ${s.passed??"?"} passed, ${s.failed??"?"} failed${(sum.preexisting_failures||[]).length?` — known flaky, tracked elsewhere: ${esc(sum.preexisting_failures.join(", "))}`:""}. Sandbox: ${esc(sum.sandbox)}.</div>`;
+}
+function renderChecks(review){
+  if (!review) return "";
+  return `<h4>Review ${review.sensitive?"· security-sensitive":""}</h4><div class="checks">${review.checks.map(c=>
+    `<div class="check ${c.ok?"ok":"no"}"><span class="ic">${c.ok?"✓":"✕"}</span><span class="nm">${esc(c.name)}</span><span class="dt">${esc(c.detail)}</span></div>`).join("")}</div>`;
+}
+
+function openDrawer(id){
+  S.open = id; const task = S.tasks.get(id); if (!task) return;
+  const a = task.artifacts;
+  const tri = a.triage ? `${esc(a.triage.rationale)} (confidence ${a.triage.confidence})` : "—";
+  let actions = "";
+  if (task.state === "Approved") actions = `<button class="btn good" data-act="merge">Merge</button><input id="cmt" placeholder="What should change? (for Request changes)"><button class="btn bad" data-act="reject">Request changes</button>`;
+  else if (task.state === "Needs Human") actions = `<input id="cmt" placeholder="Comment (required to request changes)">${a.diff_text?'<button class="btn good" data-act="approve">Approve patch</button><button class="btn bad" data-act="reject">Request changes</button>':''}<button class="btn" data-act="reopen">Send to swarm</button><button class="btn" data-act="close">Close</button>`;
+  else if (task.state === "Closed") actions = `<button class="btn" data-act="reopen">Reopen for the swarm</button>`;
+  $("drawerRoot").hidden = false;
+  $("drawerRoot").innerHTML = `<div class="scrim" data-close></div><div class="drawer" role="dialog" aria-label="${esc(task.title)}">
+    <div class="hd"><div style="flex:1;min-width:0"><div class="mono conn">${esc(task.task_id)} · issue ${esc(task.source_issue)} · ${esc(task.state)}</div><h2>${esc(task.title)}</h2>
+      <div class="tags"><span class="tag">${esc(task.kind)}</span><span class="tag p-${esc(task.priority)}">${esc(task.priority)}</span>${task.labels.filter(l=>l!==task.kind&&!l.startsWith("priority:")).map(l=>`<span class="tag">${esc(l)}</span>`).join("")}</div></div>
+      <button class="btn" data-close aria-label="Close">✕</button></div>
+    <div class="body">
+      ${task.note?`<div class="card" style="cursor:default"><div class="note" style="border-color:var(--warn)">${esc(task.note)}</div></div>`:""}
+      <div><h4>Issue</h4><div style="white-space:pre-wrap;color:var(--ink-2)">${esc(task.body)}</div></div>
+      <dl class="kv"><dt>Triage</dt><dd>${tri}</dd>
+        ${a.root_cause?`<dt>Root cause</dt><dd>${esc(a.root_cause)}</dd><dt>Strategy</dt><dd class="mono">${esc(a.strategy)} (attempt ${task.attempts})</dd>`:""}
+        ${a.rejected_strategies?.length?`<dt>Rejected before</dt><dd class="mono">${esc(a.rejected_strategies.join(", "))}</dd>`:""}
+        ${a.flakiness_source?`<dt>Flakiness source</dt><dd>${esc(a.flakiness_source)}</dd>`:""}</dl>
+      ${a.diff_text?`<div><h4>Patch</h4>${renderDiff(a.diff_text)}</div>`:""}
+      <div>${renderEvidence(a.test_summary)}</div>
+      <div>${renderChecks(a.review)}</div>
+      <div><h4>History</h4><ul class="hist">${task.history.slice().reverse().map(h=>`<li><span class="who">${esc(h.agent)}</span> ${esc(h.action)}<div class="st">${t(h.ts)}${h.to_state?` · → ${esc(h.to_state)}`:""}</div></li>`).join("")}</ul></div>
+    </div>
+    ${actions?`<div class="actions">${actions}</div>`:""}</div>`;
+}
+function closeDrawer(){ S.open=null; $("drawerRoot").hidden=true; $("drawerRoot").innerHTML=""; }
+
+async function post(path, body){
+  const r = await fetch(path, {method:"POST", headers:{"content-type":"application/json"}, body: JSON.stringify(body||{})});
+  const data = await r.json().catch(()=>({}));
+  if (!r.ok) throw new Error(data.detail || r.statusText);
+  return data;
+}
+
+document.addEventListener("click", async e => {
+  if (e.target.closest("[data-close]")) return closeDrawer();
+  const c = e.target.closest(".card[data-id]"); if (c) return openDrawer(c.dataset.id);
+  const b = e.target.closest("[data-act]");
+  if (b && S.open){
+    const act = b.dataset.act, comment = $("cmt")?.value || "";
+    try { await post(`/api/tasks/${S.open}/${act}`, {comment}); toast({merge:"Merged",approve:"Approved",reject:"Sent back to the coder",reopen:"Sent to the swarm",close:"Closed"}[act]); }
+    catch(err){ toast(err.message); }
+  }
+});
+document.addEventListener("keydown", e => {
+  if (e.key==="Escape") closeDrawer();
+  if (e.key==="Enter" && e.target.matches(".card[data-id]")) openDrawer(e.target.dataset.id);
+});
+$("runBtn").onclick = async () => {
+  try { if (S.status?.running){ await post("/api/pause"); toast("Paused after the current step"); } else { const r=await post("/api/run"); toast(`Swarm running · ${r.ingested} new issue(s)`);} }
+  catch(err){ toast(err.message); }
+};
+
+function connect(){
+  const ws = new WebSocket((location.protocol==="https:"?"wss://":"ws://")+location.host+"/ws");
+  ws.onopen = () => $("conn").textContent = "live";
+  ws.onclose = () => { $("conn").textContent = "reconnecting…"; setTimeout(connect, 1500); };
+  ws.onmessage = ev => {
+    const m = JSON.parse(ev.data);
+    if (m.type==="snapshot"){ S.tasks=new Map(m.tasks.map(x=>[x.task_id,x])); S.tools=m.tools; S.activity=m.activity; S.status=m.status; renderBoard(); renderStatus(); renderFeed(); renderTools(); }
+    else if (m.type==="task"){ S.tasks.set(m.task.task_id, m.task); renderBoard(m.event==="transition"||m.event==="created" ? m.task.task_id : null); if (S.open===m.task.task_id) openDrawer(S.open); }
+    else if (m.type==="activity"){ S.activity.push(m.entry); renderFeed(); }
+    else if (m.type==="status"){ S.status=m.status; renderStatus(); }
+    else if (m.type==="tools"){ S.tools=m.tools; renderTools(); }
+  };
+}
+renderBoard(); renderFeed(); renderTools(); connect();
+</script>
+</body>
+</html>

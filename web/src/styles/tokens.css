@@ -1,0 +1,54 @@
+/* Swarm design tokens — light, airy, Ctrl-inspired. Tomato Grotesk → Schibsted Grotesk
+   (swap --font-sans to a licensed Tomato Grotesk @font-face to match Ctrl exactly). */
+:root {
+  --font-sans: "Schibsted Grotesk", "Helvetica Neue", Arial, sans-serif;
+  --font-mono: "Geist Mono", ui-monospace, "SF Mono", Menlo, monospace;
+
+  --white: #ffffff;
+  --grey-8: #f9faf9;   /* section ground */
+  --grey-7: #f0f2ef;
+  --grey-6: #eceFec;   /* pill nav, chips */
+  --line: #d9ded9;
+  --line-soft: #e7eae6;
+  --ink: #0f0f0f;
+  --ink-2: #5a585a;
+  --ink-3: #8a8d8a;
+
+  /* one pastel per agent — they recur everywhere the agents appear */
+  --triager: #fbe74e;  /* yellow */
+  --coder: #9dc4f5;    /* sky */
+  --tester: #ff8a7a;   /* coral */
+  --reviewer: #5dd36a; /* green */
+  --green: #5acd4c;
+  --green-deep: #05a82a;
+  --coral: #ff5a4d;
+  --pink: #ffcadc;
+  --mint-strong: #bdecc4;
+  --sky-card: #a7cbf6;   /* Ctrl's tall grid cards */
+  --pink-card: #ffd0e2;
+  --yellow-card: #fcea59;
+  --mint: #e2f2e5;
+  --sky-soft: #e3eefc;
+  --yellow-soft: #fdf6c4;
+  --coral-soft: #ffe3df;
+
+  --ok: #169b3b;
+  --warn: #c98a00;
+  --bad: #e0443a;
+
+  --radius-sm: 10px;
+  --radius: 18px;
+  --radius-lg: 28px;
+  --radius-xl: 34px;     /* Ctrl app frames, boxes, FAQ items */
+  --radius-2xl: 50px;    /* horizontal cards */
+  --radius-3xl: 64px;    /* tall grid cards */
+  --pill: 999px;
+
+  --ease-out: cubic-bezier(0.165, 0.84, 0.44, 1);   /* Ctrl's ease-out-quart */
+  --ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
+  --t-fast: 0.25s;
+  --t: 0.5s;
+
+  --shadow-card: 0 1px 0 rgba(15, 15, 15, 0.04), 0 12px 32px -12px rgba(15, 15, 15, 0.12);
+  --gutter: clamp(16px, 4vw, 64px);
+}

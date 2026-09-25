@@ -1,0 +1,8 @@
+.venv
+web
+.swarm*
+.env
+secrets
+tests
+**/__pycache__
+*.egg-info

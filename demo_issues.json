@@ -1,0 +1,16 @@
+[
+  {"number": 101, "title": "test_normalize_tags fails intermittently in CI",
+   "body": "tests/test_tags.py::test_normalize_tags passes locally but fails on roughly a third of CI runs with a list order mismatch: ['bug', 'ui', 'api'] != ['api', 'bug', 'ui']. Re-running the job usually makes it green. This is blocking merges."},
+  {"number": 102, "title": "Flaky: test_backoff_is_increasing sometimes fails",
+   "body": "tests/test_retry.py::test_backoff_is_increasing is nondeterministic. It fails maybe 1 in 4 runs with an assertion that the delays are not strictly increasing. Looks random."},
+  {"number": 103, "title": "test_admin_scopes randomly failing on CI",
+   "body": "tests/test_auth.py::test_admin_scopes fails intermittently: the scopes come back in a different order on some runs. Passes on retry."},
+  {"number": 104, "title": "normalize_tags test flaky again",
+   "body": "Seeing test_normalize_tags fail sporadically on CI with the tags in a different order. Passes on re-run."},
+  {"number": 105, "title": "end_of_month returns the wrong day",
+   "body": "end_of_month(2024, 1) returns 2024-01-30 instead of 2024-01-31. Off-by-one bug in tagkit/dates.py."},
+  {"number": 106, "title": "How do I use a custom separator with join_tags?",
+   "body": "Is it possible to join tags with a semicolon? How do I configure that?"},
+  {"number": 107, "title": "broken",
+   "body": "it doesnt work"}
+]

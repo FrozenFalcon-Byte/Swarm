@@ -1,0 +1,16 @@
+.venv/
+__pycache__/
+*.pyc
+.swarm/
+.pytest_cache/
+*.egg-info/
+.DS_Store
+.swarm-service/
+web/node_modules/
+web/dist/
+web/.env.local
+firebase-debug.log
+firestore-debug.log
+ui-debug.log
+.env
+secrets/

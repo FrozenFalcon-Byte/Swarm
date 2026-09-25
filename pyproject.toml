@@ -1,0 +1,27 @@
+[project]
+name = "maintenance-swarm"
+version = "0.1.0"
+description = "A swarm of narrow agents (triager, coder, tester, reviewer) that maintain a codebase through a shared task board."
+requires-python = ">=3.11"
+dependencies = ["fastapi>=0.110", "uvicorn[standard]>=0.29", "httpx>=0.27", "pydantic>=2.6", "pytest>=8"]
+
+[project.optional-dependencies]
+embeddings = ["sentence-transformers>=3"]
+cloud = ["firebase-admin>=6.5"]
+mcp = ["mcp>=2.2"]
+
+[project.scripts]
+swarm = "swarm.cli:main"
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["swarm*"]
+
+[tool.setuptools.package-data]
+swarm = ["dashboard/*.html"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

@@ -1,0 +1,297 @@
+"""The Swarm worker: turns Firestore requests into agent work.
+
+The web app never writes tasks. It only creates:
+* repos/{id}/runs/{run}       {status: "queued"}            -> ingest issues, run agents until idle
+* repos/{id}/actions/{action} {status: "pending", type, taskId, comment}
+                                                             -> merge / approve / reject / reopen / close
+The worker validates every request against the state machine and repo
+membership, so security rules can keep tasks read-only for clients.
+"""
+
+from __future__ import annotations
+
+import copy
+import logging
+import os
+import shutil
+import socket
+import time
+from datetime import datetime, timezone
+from pathlib import Path
+
+import httpx
+from google.cloud import firestore as gfs
+
+from ..board import InvalidTransition, TaskState
+from ..board.models import utcnow
+from ..config import Settings
+from ..issues import from_file, from_github
+from ..orchestrator import Swarm
+from . import firebase
+from .board import FirestoreTaskBoard
+from .github import GitError, explain, issues_changed_since, open_pull_request, repo_info, sync_checkout
+from .registry import FirestoreToolRegistry
+
+log = logging.getLogger("swarm.worker")
+ROOT = Path(__file__).resolve().parents[2]
+
+
+class Worker:
+    def __init__(self, settings: Settings | None = None, poll_s: float = 2.0):
+        self.settings = settings or Settings()
+        self.db = firebase.db()
+        self.bucket = firebase.bucket()
+        self.poll_s = poll_s
+        self.worker_id = f"{socket.gethostname()}-{os.getpid()}"
+        self._last_beat = 0.0
+        self._last_sync = 0.0
+        # how often to look for new GitHub issues on connected repos; 0 turns it off
+        self.sync_minutes = float(os.environ.get("SWARM_SYNC_MINUTES", "10"))
+
+    # -- per-repo swarm --------------------------------------------------------
+    def _repo(self, repo_id: str) -> dict:
+        snap = self.db.collection("repos").document(repo_id).get()
+        if not snap.exists:
+            raise KeyError(repo_id)
+        return snap.to_dict()
+
+    def _token(self, repo: dict) -> str | None:
+        """The repo owner's GitHub token, else the worker's own GITHUB_TOKEN, else anonymous."""
+        snap = self.db.collection("users").document(repo["ownerUid"]).collection("private").document("github").get()
+        saved = (snap.to_dict() or {}).get("token") if snap.exists else None
+        return saved or os.environ.get("GITHUB_TOKEN") or None
+
+    def _swarm(self, repo_id: str, repo: dict) -> Swarm:
+        s = copy.copy(self.settings)
+        s.home = self.settings.home / "repos" / repo_id
+        s.repo_path = s.home / "checkout"
+        s.ensure_dirs()
+        board = FirestoreTaskBoard(self.db, repo_id)
+        registry = FirestoreToolRegistry(self.db, self.bucket, repo_id, s.tools_dir, s.use_embeddings)
+        swarm = Swarm(s, board=board, registry=registry)
+        activity = self.db.collection("repos").document(repo_id).collection("activity")
+        swarm.on_activity(lambda e: activity.add({**e, "createdAt": gfs.SERVER_TIMESTAMP}))
+        return swarm
+
+    def _prepare_checkout(self, swarm: Swarm, repo: dict) -> None:
+        dest = swarm.settings.repo_path
+        if repo.get("source") == "demo":
+            if not dest.exists():
+                shutil.copytree(ROOT / "demo_repo", dest, ignore=shutil.ignore_patterns("__pycache__"))
+            return
+        sync_checkout(repo["fullName"], dest, self._token(repo), repo.get("defaultBranch"))
+
+    def _issues(self, repo: dict):
+        if repo.get("source") == "demo":
+            return from_file(ROOT / "demo_issues.json")
+        try:
+            return from_github(repo["fullName"], self._token(repo) or "")
+        except httpx.HTTPStatusError as e:
+            raise GitError(explain(e.response, repo["fullName"])) from e
+
+    # -- runs ------------------------------------------------------------------
+    def _claim(self, ref, field_value: str, new_value: str) -> bool:
+        @gfs.transactional
+        def txn(tx) -> bool:
+            snap = ref.get(transaction=tx)
+            if not snap.exists or snap.get("status") != field_value:
+                return False
+            tx.update(ref, {"status": new_value, "worker": self.worker_id, "startedAt": gfs.SERVER_TIMESTAMP})
+            return True
+
+        return txn(self.db.transaction())
+
+    def process_runs(self) -> int:
+        done = 0
+        q = self.db.collection_group("runs").where(filter=gfs.FieldFilter("status", "==", "queued")).limit(5)
+        for snap in q.stream():
+            if not self._claim(snap.reference, "queued", "running"):
+                continue
+            repo_id = snap.reference.parent.parent.id
+            try:
+                summary = self.run_repo(repo_id)
+                snap.reference.update({"status": "done", "finishedAt": gfs.SERVER_TIMESTAMP, "summary": summary})
+            except Exception as e:  # a failed run is reported, never retried silently
+                log.exception("run failed for %s", repo_id)
+                snap.reference.update({"status": "failed", "finishedAt": gfs.SERVER_TIMESTAMP, "error": str(e)[:500]})
+                self.db.collection("repos").document(repo_id).update({"status": "error", "lastError": str(e)[:300]})
+            done += 1
+        return done
+
+    def run_repo(self, repo_id: str) -> dict:
+        repo = self._repo(repo_id)
+        repo_ref = self.db.collection("repos").document(repo_id)
+        started = datetime.now(timezone.utc).isoformat(timespec="seconds")
+        repo_ref.update({"status": "running"})
+        if repo.get("source") == "github":
+            # refresh branch/visibility each run: repos get renamed, made private, or change default branch
+            info = repo_info(repo["fullName"], self._token(repo))
+            repo_ref.update(info)
+            repo.update(info)
+        swarm = self._swarm(repo_id, repo)
+        self._prepare_checkout(swarm, repo)
+        before = {t.task_id: t.state for t in swarm.board.list()}
+        created = swarm.ingest(self._issues(repo))
+        rounds = swarm.run_until_idle()
+        self._upload_artifacts(repo_id, swarm)
+        after = swarm.board.list()
+        moved = sum(1 for t in after if before.get(t.task_id) != t.state)
+        stats = self.compute_stats(swarm)
+        repo_ref.update({"status": "idle", "stats": stats, "lastRunAt": gfs.SERVER_TIMESTAMP, "lastError": None,
+                         "lastSyncedAt": started})
+        return {"ingested": created, "rounds": rounds, "tasksMoved": moved, "llm": swarm.llm.describe()["active"],
+                "sandbox": swarm.sandbox.backend}
+
+    def _upload_artifacts(self, repo_id: str, swarm: Swarm) -> None:
+        """Patches and test results go to Cloud Storage alongside the task that made them."""
+        for d, kind in ((swarm.settings.patches_dir, "patches"), (swarm.settings.results_dir, "results")):
+            for f in d.glob("*"):
+                blob = self.bucket.blob(f"repos/{repo_id}/{kind}/{f.name}")
+                if not blob.exists():
+                    blob.upload_from_filename(str(f), content_type="application/json" if f.suffix == ".json" else "text/x-diff")
+
+    @staticmethod
+    def compute_stats(swarm: Swarm) -> dict:
+        tasks = swarm.board.list()
+        counts = {s.value: 0 for s in TaskState}
+        for t in tasks:
+            counts[t.state.value] += 1
+        tools = swarm.registry.all()
+        before, after = [], []
+        for t in tasks:
+            for e in (t.artifacts.get("test_summary", {}).get("harness", {}).get("evidence", {}) or {}).values():
+                if e.get("before", {}).get("runs"):
+                    before.append(e["before"]["failures"] / e["before"]["runs"])
+                    after.append((e["after"].get("failures") or 0) / max(1, e["after"].get("runs") or 1))
+        return {
+            "counts": counts,
+            "total": len(tasks),
+            "open": sum(counts[s.value] for s in (TaskState.TRIAGED, TaskState.IN_PROGRESS, TaskState.AWAITING_TESTS,
+                                                   TaskState.IN_REVIEW, TaskState.REJECTED)),
+            "needsYou": counts[TaskState.APPROVED.value] + counts[TaskState.HUMAN_REVIEW.value],
+            "merged": counts[TaskState.MERGED.value],
+            "toolsWritten": len(tools),
+            "toolReuses": sum(max(0, r.usage_count - 1) for r in tools),
+            "flakeRateBefore": round(sum(before) / len(before), 3) if before else None,
+            "flakeRateAfter": round(sum(after) / len(after), 3) if after else None,
+            "updatedAt": utcnow(),
+        }
+
+    # -- GitHub sync ----------------------------------------------------------------
+    def sync_due_repos(self, force: bool = False) -> int:
+        """Queue a run for each GitHub repo that has new or edited issues since its last run."""
+        if not force and (self.sync_minutes <= 0 or time.monotonic() - self._last_sync < self.sync_minutes * 60):
+            return 0
+        self._last_sync = time.monotonic()
+        queued = 0
+        repos = self.db.collection("repos").where(filter=gfs.FieldFilter("source", "==", "github")).stream()
+        for snap in repos:
+            repo = snap.to_dict()
+            if repo.get("paused") or (repo.get("settings") or {}).get("autoSync") is False:
+                continue
+            if repo.get("status") in ("queued", "running") or not repo.get("lastSyncedAt"):
+                continue  # busy, or never run: the connect run covers it
+            try:
+                changed = issues_changed_since(repo["fullName"], self._token(repo), repo["lastSyncedAt"])
+            except (GitError, httpx.HTTPError) as e:
+                log.warning("sync check failed for %s: %s", repo.get("fullName"), e)
+                continue
+            if changed:
+                snap.reference.collection("runs").add({"status": "queued", "trigger": "github-sync", "requestedBy": "worker",
+                                                       "changedIssues": changed, "createdAt": gfs.SERVER_TIMESTAMP})
+                snap.reference.update({"status": "queued"})
+                queued += 1
+        return queued
+
+    # -- human actions ------------------------------------------------------------
+    def process_actions(self) -> int:
+        done = 0
+        q = self.db.collection_group("actions").where(filter=gfs.FieldFilter("status", "==", "pending")).limit(10)
+        for snap in q.stream():
+            if not self._claim(snap.reference, "pending", "processing"):
+                continue
+            repo_id = snap.reference.parent.parent.id
+            a = snap.to_dict()
+            try:
+                result = self.apply_action(repo_id, a)
+                snap.reference.update({"status": "done", "result": result, "finishedAt": gfs.SERVER_TIMESTAMP})
+            except (InvalidTransition, ValueError, KeyError, PermissionError, GitError) as e:
+                snap.reference.update({"status": "failed", "error": str(e)[:400], "finishedAt": gfs.SERVER_TIMESTAMP})
+            done += 1
+        return done
+
+    def apply_action(self, repo_id: str, a: dict) -> str:
+        repo = self._repo(repo_id)
+        if a.get("uid") not in repo.get("members", []):
+            raise PermissionError("not a member of this repository")
+        swarm = self._swarm(repo_id, repo)
+        who = a.get("userName") or "maintainer"
+        kind, task_id, comment = a["type"], a["taskId"], (a.get("comment") or "").strip()
+        if kind == "merge":
+            self._prepare_checkout(swarm, repo)
+            deliver = None
+            token = self._token(repo)
+            if repo.get("source") == "github" and token:
+                def deliver(task):
+                    url = open_pull_request(repo["fullName"], swarm.settings.repo_path, token,
+                                            repo.get("defaultBranch") or "main", task.task_id,
+                                            f"Fix flaky test: {task.title}", _pr_body(task), task.artifacts["diff_text"])
+                    return f"opened {url}"
+            task = swarm.merge(task_id, deliver=deliver)
+            result = task.artifacts.get("delivery", "merged")
+        elif kind == "approve":
+            swarm.approve(task_id, f"{who}: {comment}" if comment else who)
+            result = "approved"
+        elif kind == "reject":
+            if not comment:
+                raise ValueError("say what should change so the coder can act on it")
+            swarm.reject(task_id, f"{who}: {comment}")
+            result = "sent back to the coder"
+        elif kind == "reopen":
+            swarm.reopen(task_id, comment)
+            result = "sent to the swarm"
+        elif kind == "close":
+            swarm.close(task_id, comment or f"closed by {who}")
+            result = "closed"
+        else:
+            raise ValueError(f"unknown action {kind}")
+        self.db.collection("repos").document(repo_id).update({"stats": self.compute_stats(swarm)})
+        if kind in ("approve", "reject", "reopen"):  # the swarm has new work
+            self.db.collection("repos").document(repo_id).collection("runs").add(
+                {"status": "queued", "trigger": f"action:{kind}", "requestedBy": a.get("uid"), "createdAt": gfs.SERVER_TIMESTAMP})
+        return result
+
+    # -- loop -------------------------------------------------------------------
+    def heartbeat(self) -> None:
+        if time.monotonic() - self._last_beat < 15:
+            return
+        self._last_beat = time.monotonic()
+        from ..llm import LLM
+        from ..sandbox import Sandbox
+
+        self.db.collection("workers").document(self.worker_id).set({
+            "lastSeen": gfs.SERVER_TIMESTAMP, "llm": LLM(self.settings).describe(),
+            "sandbox": Sandbox(self.settings).backend, "host": socket.gethostname(),
+            "syncMinutes": self.sync_minutes, "githubFallbackToken": bool(os.environ.get("GITHUB_TOKEN")),
+        })
+
+    def run_forever(self) -> None:
+        log.info("worker %s polling (emulators=%s)", self.worker_id, firebase.using_emulators())
+        while True:
+            self.heartbeat()
+            self.sync_due_repos()
+            busy = self.process_actions() + self.process_runs()
+            if not busy:
+                time.sleep(self.poll_s)
+
+
+def _pr_body(task) -> str:
+    a = task.artifacts
+    ev = a.get("test_summary", {}).get("harness", {})
+    lines = [f"Fixes {task.source_issue}.", "", f"**Root cause:** {a.get('root_cause', '')}", "",
+             f"**Verified with** `{ev.get('tool_id', '-')}`:"]
+    for test, e in (ev.get("evidence") or {}).items():
+        lines.append(f"- `{test}`: {e['before'].get('failures')}/{e['before'].get('runs')} failing before → "
+                     f"{e['after'].get('failures')}/{e['after'].get('runs')} after")
+    lines += ["", "Reviewed by the Swarm reviewer agent and approved by a maintainer."]
+    return "\n".join(lines)

@@ -1,0 +1,82 @@
+"""Firebase Admin initialisation.
+
+Credentials, in order:
+* emulators: FIRESTORE_EMULATOR_HOST / FIREBASE_STORAGE_EMULATOR_HOST set; no credentials needed.
+* FIREBASE_SERVICE_ACCOUNT_JSON: the service-account JSON itself, for hosts that only take env vars.
+* GOOGLE_APPLICATION_CREDENTIALS: a path to the service-account JSON file.
+* application default credentials (e.g. on Cloud Run, or after `gcloud auth application-default login`).
+"""
+
+from __future__ import annotations
+
+import json
+import os
+from functools import lru_cache
+from pathlib import Path
+
+import firebase_admin
+from firebase_admin import credentials, firestore, storage
+
+
+def service_account() -> dict | None:
+    inline = os.environ.get("FIREBASE_SERVICE_ACCOUNT_JSON", "").strip()
+    if inline:
+        return json.loads(inline)
+    path = os.environ.get("GOOGLE_APPLICATION_CREDENTIALS", "").strip()
+    if path and Path(path).expanduser().is_file():
+        return json.loads(Path(path).expanduser().read_text())
+    return None
+
+
+def project_id() -> str:
+    explicit = os.environ.get("FIREBASE_PROJECT_ID") or os.environ.get("GCLOUD_PROJECT")
+    if explicit:
+        return explicit
+    if not using_emulators():
+        try:
+            sa = service_account()
+        except (OSError, ValueError):
+            sa = None
+        if sa and sa.get("project_id"):
+            return sa["project_id"]
+    return "demo-swarm"
+
+
+def bucket_name() -> str:
+    # Projects created since late 2024 get <id>.firebasestorage.app; older ones <id>.appspot.com.
+    return os.environ.get("FIREBASE_STORAGE_BUCKET") or f"{project_id()}.firebasestorage.app"
+
+
+def using_emulators() -> bool:
+    return bool(os.environ.get("FIRESTORE_EMULATOR_HOST"))
+
+
+@lru_cache(maxsize=1)
+def app() -> firebase_admin.App:
+    if firebase_admin._apps:
+        return firebase_admin.get_app()
+    sa = service_account()
+    cred = credentials.Certificate(sa) if sa else None  # None → application default credentials
+    return firebase_admin.initialize_app(cred, {"projectId": project_id(), "storageBucket": bucket_name()})
+
+
+@lru_cache(maxsize=1)
+def db():
+    if using_emulators():
+        # The emulators accept any caller; the Admin SDK would otherwise demand real Google credentials.
+        from google.auth.credentials import AnonymousCredentials
+        from google.cloud import firestore as gfs
+
+        return gfs.Client(project=project_id(), credentials=AnonymousCredentials())
+    return firestore.client(app())
+
+
+@lru_cache(maxsize=1)
+def bucket():
+    if using_emulators():
+        from google.auth.credentials import AnonymousCredentials
+        from google.cloud import storage as gcs
+
+        os.environ.setdefault("STORAGE_EMULATOR_HOST", "http://" + os.environ.get("FIREBASE_STORAGE_EMULATOR_HOST", "127.0.0.1:9199"))
+        return gcs.Client(project=project_id(), credentials=AnonymousCredentials()).bucket(bucket_name())
+    return storage.bucket(app=app())

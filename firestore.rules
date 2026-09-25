@@ -1,0 +1,60 @@
+rules_version = '2';
+// Clients read what they are a member of and can only *request* work.
+// Tasks, tools, activity and stats are written by the worker (Admin SDK bypasses rules),
+// so a browser can never push a card through the state machine itself.
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() { return request.auth != null; }
+    function isMember(repoId) {
+      return signedIn() && request.auth.uid in get(/databases/$(database)/documents/repos/$(repoId)).data.members;
+    }
+
+    match /users/{uid} {
+      allow read, write: if signedIn() && request.auth.uid == uid;
+      // GitHub access token for cloning private repos and opening PRs: owner-only.
+      match /private/{doc} {
+        allow read, delete: if signedIn() && request.auth.uid == uid;
+        allow create, update: if signedIn() && request.auth.uid == uid
+          && request.resource.data.token is string && request.resource.data.token.size() < 400
+          && request.resource.data.keys().hasOnly(['token', 'source', 'scopes', 'login', 'avatarUrl', 'savedAt']);
+      }
+    }
+
+    match /repos/{repoId} {
+      allow read: if signedIn() && request.auth.uid in resource.data.members;
+      allow create: if signedIn()
+        && request.resource.data.ownerUid == request.auth.uid
+        && request.resource.data.members == [request.auth.uid]
+        && request.resource.data.source in ['github', 'demo']
+        && request.resource.data.fullName is string
+        && request.resource.data.status == 'queued'
+        && request.resource.data.keys().hasOnly(['fullName', 'displayName', 'source', 'ownerUid', 'members', 'status',
+             'createdAt', 'defaultBranch', 'private', 'htmlUrl', 'description', 'settings']);
+      // owners may rename/pause/delete; workers own everything else on the doc
+      allow update: if signedIn() && resource.data.ownerUid == request.auth.uid
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['displayName', 'paused', 'settings']);
+      allow delete: if signedIn() && resource.data.ownerUid == request.auth.uid;
+
+      match /tasks/{taskId} { allow read: if isMember(repoId); }
+      match /tools/{toolId} { allow read: if isMember(repoId); }
+      match /activity/{id} { allow read: if isMember(repoId); }
+
+      match /runs/{runId} {
+        allow read: if isMember(repoId);
+        allow create: if isMember(repoId)
+          && request.resource.data.status == 'queued'
+          && request.resource.data.requestedBy == request.auth.uid;
+      }
+      match /actions/{actionId} {
+        allow read: if isMember(repoId);
+        allow create: if isMember(repoId)
+          && request.resource.data.status == 'pending'
+          && request.resource.data.uid == request.auth.uid
+          && request.resource.data.type in ['merge', 'approve', 'reject', 'reopen', 'close'];
+      }
+    }
+
+    // Worker heartbeats: any signed-in user may see whether a worker is online.
+    match /workers/{id} { allow read: if signedIn(); }
+  }
+}
