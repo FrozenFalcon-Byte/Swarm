@@ -7,9 +7,9 @@ Add "ollama" to the list to use a local model.
 
 * ollama     — local, no key. Model: SWARM_OLLAMA_MODEL (default qwen2.5-coder:7b,
                falls back to any installed model).
-* groq       — free tier, GROQ_API_KEY        (OpenAI-compatible)
-* gemini     — free tier, GEMINI_API_KEY      (OpenAI-compatible endpoint)
-* openrouter — free models, OPENROUTER_API_KEY (OpenAI-compatible)
+* groq       — free tier, GROQ_API_KEY        (OpenAI-compatible; SWARM_GROQ_MODEL, default openai/gpt-oss-120b)
+* gemini     — free tier, GEMINI_API_KEY      (OpenAI-compatible; SWARM_GEMINI_MODEL, default gemini-flash-latest)
+* openrouter — free models, OPENROUTER_API_KEY (SWARM_OPENROUTER_MODEL, default openrouter/free)
 * anthropic  — ANTHROPIC_API_KEY
 
 Every agent works without any of them: when nothing is available,
@@ -160,11 +160,11 @@ def build_providers(settings: Settings) -> list[Provider]:
     table: dict[str, Provider] = {
         "ollama": Ollama(),
         "groq": OpenAICompatible("groq", "https://api.groq.com/openai/v1", "GROQ_API_KEY",
-                                 "SWARM_GROQ_MODEL", "llama-3.3-70b-versatile"),
+                                 "SWARM_GROQ_MODEL", "openai/gpt-oss-120b"),
         "gemini": OpenAICompatible("gemini", "https://generativelanguage.googleapis.com/v1beta/openai",
-                                   "GEMINI_API_KEY", "SWARM_GEMINI_MODEL", "gemini-2.5-flash"),
+                                   "GEMINI_API_KEY", "SWARM_GEMINI_MODEL", "gemini-flash-latest"),
         "openrouter": OpenAICompatible("openrouter", "https://openrouter.ai/api/v1", "OPENROUTER_API_KEY",
-                                       "SWARM_OPENROUTER_MODEL", "meta-llama/llama-3.3-70b-instruct:free"),
+                                       "SWARM_OPENROUTER_MODEL", "openrouter/free"),
         "anthropic": Anthropic(settings),
     }
     order = os.environ.get("SWARM_LLM_PROVIDERS", "groq,gemini,openrouter,anthropic")

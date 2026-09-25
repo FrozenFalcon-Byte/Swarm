@@ -93,45 +93,53 @@ def _models(settings: Settings) -> list[Check]:
     from .llm import build_providers
 
     out: list[Check] = []
-    probes = {
-        "groq": ("https://api.groq.com/openai/v1/models", "GROQ_API_KEY", "console.groq.com/keys"),
-        "gemini": ("https://generativelanguage.googleapis.com/v1beta/openai/models", "GEMINI_API_KEY", "aistudio.google.com/apikey"),
-        "openrouter": ("https://openrouter.ai/api/v1/key", "OPENROUTER_API_KEY", "openrouter.ai/settings/keys"),
+    keys = {  # provider → (key variable, model variable, where to get a key)
+        "groq": ("GROQ_API_KEY", "SWARM_GROQ_MODEL", "console.groq.com/keys"),
+        "gemini": ("GEMINI_API_KEY", "SWARM_GEMINI_MODEL", "aistudio.google.com/apikey"),
+        "openrouter": ("OPENROUTER_API_KEY", "SWARM_OPENROUTER_MODEL", "openrouter.ai/settings/keys"),
+        "anthropic": ("ANTHROPIC_API_KEY", "SWARM_MODEL", "console.anthropic.com → API keys"),
     }
     for p in build_providers(settings):
         if p.name == "ollama":
             ok = p.ready()
             out.append(Check("models", "ollama", "ok" if ok else "skip", p.model if ok else "not running",
                              "" if ok else "Install from ollama.com, then: ollama pull qwen2.5-coder:7b"))
-        elif p.name in probes:
-            url, env, where = probes[p.name]
-            key = os.environ.get(env)
-            if not key:
-                out.append(Check("models", p.name, "skip", "no key", f"Free key at {where} → {env} in .env"))
-                continue
-            try:
-                r = httpx.get(url, headers={"Authorization": f"Bearer {key}"}, timeout=10)
-                good = r.status_code == 200
-                out.append(Check("models", p.name, "ok" if good else "fail", p.model if good else f"key rejected ({r.status_code})",
-                                 "" if good else f"Make a new key at {where}."))
-            except httpx.HTTPError as e:
-                out.append(Check("models", p.name, "fail", f"unreachable: {e}"))
-        elif p.name == "anthropic":
-            key = settings.anthropic_api_key
-            if not key:
-                out.append(Check("models", "anthropic", "skip", "no key", "Paid. console.anthropic.com → API keys → ANTHROPIC_API_KEY"))
-                continue
-            try:
-                r = httpx.get(f"{settings.anthropic_base_url.rstrip('/')}/v1/models",
-                              headers={"x-api-key": key, "anthropic-version": "2023-06-01"}, timeout=10)
-                good = r.status_code == 200
-                out.append(Check("models", "anthropic", "ok" if good else "fail", p.model if good else f"key rejected ({r.status_code})"))
-            except httpx.HTTPError as e:
-                out.append(Check("models", "anthropic", "fail", f"unreachable: {e}"))
+            continue
+        if p.name not in keys:
+            continue
+        key_env, model_env, where = keys[p.name]
+        if not p.ready():
+            hint = f"Paid. {where} → {key_env}" if p.name == "anthropic" else f"Free key at {where} → {key_env} in .env"
+            out.append(Check("models", p.name, "skip", "no key", hint))
+            continue
+        out.append(_probe_model(p, key_env, model_env, where))
     if not any(c.status == "ok" for c in out):
         out.append(Check("models", "any model", "warn", "none available; agents fall back to built-in heuristics",
                          "Add one free key: GROQ_API_KEY (console.groq.com/keys) or GEMINI_API_KEY (aistudio.google.com/apikey)."))
     return out
+
+
+def _probe_model(p, key_env: str, model_env: str, where: str) -> Check:
+    """A one-line request, so a valid key paired with a retired model shows up here, not mid-run."""
+    from .llm import LLMError
+
+    try:
+        p.complete("Reply with the word ok.", "ok?", 16, False)
+        return Check("models", p.name, "ok", p.model)
+    except LLMError as e:
+        msg = str(e)
+        status = msg.split(" ", 2)[1].rstrip(":") if msg.count(" ") >= 1 else ""
+        if status in ("401", "403"):
+            return Check("models", p.name, "fail", f"key rejected ({status})", f"Make a new key at {where}.")
+        if status in ("429", "500", "502", "503"):
+            busy = "rate limited" if status == "429" else "busy"
+            return Check("models", p.name, "warn", f"{p.model}: {busy} right now ({status})", "Usually temporary; the next provider takes over meanwhile.")
+        if status in ("400", "404"):
+            return Check("models", p.name, "fail", f"{p.model} isn't available to this key",
+                         f"Set {model_env} in .env to a model listed on your {p.name} account.")
+        return Check("models", p.name, "fail", " ".join(msg.split())[:160])
+    except httpx.HTTPError as e:
+        return Check("models", p.name, "fail", f"unreachable: {e}")
 
 
 def _tools(settings: Settings) -> list[Check]:

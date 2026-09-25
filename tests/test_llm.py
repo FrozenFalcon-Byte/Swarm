@@ -49,3 +49,13 @@ def test_triage_blends_llm_with_heuristics(settings, issues):
     tri.llm = LLM(settings, providers=[Fake("a", reply='{"kind": "question", "priority": "low", "confidence": 0.9}')])
     t = tri.classify(issue.title, issue.body)
     assert t.confidence < settings.triage_confidence_threshold  # disagreement goes to a human
+
+
+def test_tool_writing_falls_back_to_template_when_every_provider_fails(settings):
+    from swarm.toolgen import write_tool
+
+    settings.llm_disabled = False
+    llm = LLM(settings, providers=[Fake("a", fail=True), Fake("b", fail=True)])
+    code = write_tool("hash-order", "hashseed_sweep_v1", "task-001", 20, llm)
+    compile(code, "hashseed_sweep_v1.py", "exec")  # the built-in template, not a crash
+    assert "task-001" in code

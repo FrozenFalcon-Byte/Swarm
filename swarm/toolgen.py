@@ -12,9 +12,12 @@ contract. Either way the tool is validated before it is trusted.
 
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass
 
-from .llm import LLM
+from .llm import LLM, LLMError
+
+log = logging.getLogger("swarm.tester")
 
 CONTRACT = (
     "A standalone Python 3 script. Usage: python tool.py <pytest node id> <runs>. It runs the test <runs> times "
@@ -104,14 +107,18 @@ def spec_for(source: str) -> ToolSpec:
 def write_tool(source: str, tool_id: str, task_id: str, default_runs: int, llm: LLM | None = None) -> str:
     spec = KINDS.get(source, KINDS["unknown"])
     if llm is not None and llm.available:
-        code = llm.complete(
-            "You write small, safe, standard-library-only Python test harnesses. Output only the code.",
-            f"Write a harness for this purpose: {spec['description']}\nContract: {CONTRACT}\n"
-            f"Default runs: {default_runs}. Output a single python file, no markdown fences.",
-            max_tokens=2000,
-        ).strip()
-        if code.startswith("```"):
-            code = code.strip("`").split("\n", 1)[1]
-        return code
+        try:
+            code = llm.complete(
+                "You write small, safe, standard-library-only Python test harnesses. Output only the code.",
+                f"Write a harness for this purpose: {spec['description']}\nContract: {CONTRACT}\n"
+                f"Default runs: {default_runs}. Output a single python file, no markdown fences.",
+                max_tokens=2000,
+            ).strip()
+        except LLMError as e:  # every provider down or rate-limited: the template still does the job
+            log.warning("LLM tool writing failed, using the built-in template: %s", str(e)[:200])
+        else:
+            if code.startswith("```"):
+                code = code.strip("`").split("\n", 1)[1]
+            return code
     return _TEMPLATE.format(description=spec["description"], task_id=task_id, tool_id=tool_id,
                             default_runs=default_runs, loop_body=spec["loop_body"])

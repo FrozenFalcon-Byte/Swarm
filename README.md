@@ -46,9 +46,9 @@ Providers are tried in order, and a failing call falls through to the next one
 
 | Provider | Setup | Default model |
 |---|---|---|
-| Groq (free tier) | `GROQ_API_KEY` | `llama-3.3-70b-versatile` |
-| Gemini (free tier) | `GEMINI_API_KEY` | `gemini-2.5-flash` |
-| OpenRouter (free models) | `OPENROUTER_API_KEY` | `meta-llama/llama-3.3-70b-instruct:free` |
+| Groq (free tier) | `GROQ_API_KEY` | `openai/gpt-oss-120b` |
+| Gemini (free tier) | `GEMINI_API_KEY` | `gemini-flash-latest` |
+| OpenRouter (free models) | `OPENROUTER_API_KEY` | `openrouter/free` |
 | Anthropic | `ANTHROPIC_API_KEY` | `claude-sonnet-5` |
 | Ollama (opt-in: add `ollama` to `SWARM_LLM_PROVIDERS`) | a local model | `SWARM_OLLAMA_MODEL` |
 
