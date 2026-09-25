@@ -27,7 +27,7 @@ export default function Settings() {
             <Conn name="Models" tone={worker?.llm?.active ? 'ok' : 'warn'} state={worker?.llm?.active ? 'ready' : worker ? 'heuristics' : 'unknown'}
               detail={!worker ? 'Shown once a worker is online. Models are configured on the worker, never in the browser.'
                 : worker.llm?.active ? `Using ${worker.llm.active}${worker.llm.fallbacks?.length ? `, then ${worker.llm.fallbacks.join(', ')}` : ''}.`
-                : 'No model configured, so the agents use built-in heuristics. Add Ollama or a free Groq or Gemini key to the worker’s .env.'} />
+                : 'No model configured, so the agents use built-in heuristics. Add a free Groq or Gemini key to the worker’s .env.'} />
           </div>
         </Section>
         <Section title="Use from Claude" action={<span className="pill tone-work">MCP</span>}>
@@ -65,7 +65,7 @@ function FirebaseRow() {
     <Conn name="Firebase" tone={usingEmulators ? 'warn' : 'ok'} state={usingEmulators ? 'emulators' : 'live'}
       detail={usingEmulators
         ? 'Local emulators. Accounts and data here are for testing and vanish when the emulators stop. Put your project’s web config in web/.env.local to go live.'
-        : <>Project <span className="mono">{projectId}</span>: sign-in, the task board (Firestore) and patches and tools (Storage).</>} />
+        : <>Project <span className="mono">{projectId}</span>: sign-in, and the task board and agent-written tools in Firestore.</>} />
   )
 }
 

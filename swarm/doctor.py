@@ -33,8 +33,16 @@ def _firebase() -> list[Check]:
         except (OSError, ValueError) as e:
             return [Check("firebase", "service account", "fail", f"couldn't read it: {e}",
                           "Firebase console → Project settings → Service accounts → Generate new private key.")]
+        wanted = os.environ.get("GOOGLE_APPLICATION_CREDENTIALS", "").strip()
         if sa:
             out.append(Check("firebase", "service account", "ok", sa.get("client_email", "loaded")))
+        elif wanted:
+            out.append(Check("firebase", "service account", "fail", f"{wanted} doesn't exist yet",
+                             "Firebase console → Project settings → Service accounts → Generate new private key, "
+                             f"then save the file as {wanted}."))
+            out.append(Check("firebase", "project", "ok", firebase.project_id()))
+            out.append(Check("firebase", "firestore", "skip", "waiting for the service account"))
+            return out
         else:
             out.append(Check("firebase", "service account", "warn", "none set; trying application default credentials",
                              "Set GOOGLE_APPLICATION_CREDENTIALS=/path/to/service-account.json in .env "
@@ -50,6 +58,9 @@ def _firebase() -> list[Check]:
     except Exception as e:  # noqa: BLE001 - any failure here is a setup problem to report
         out.append(Check("firebase", "firestore", "fail", str(e).splitlines()[0][:160],
                          "Create the database: Firebase console → Build → Firestore Database → Create database."))
+    if not firebase.storage_enabled():
+        out.append(Check("firebase", "storage", "ok", "not used: tool code is kept in Firestore (fine on the free Spark plan)"))
+        return out
     try:
         b = firebase.bucket()
         ok = firebase.using_emulators() or b.exists()
@@ -119,7 +130,7 @@ def _models(settings: Settings) -> list[Check]:
                 out.append(Check("models", "anthropic", "fail", f"unreachable: {e}"))
     if not any(c.status == "ok" for c in out):
         out.append(Check("models", "any model", "warn", "none available; agents fall back to built-in heuristics",
-                         "Run Ollama locally or add one free key (Groq is the quickest)."))
+                         "Add one free key: GROQ_API_KEY (console.groq.com/keys) or GEMINI_API_KEY (aistudio.google.com/apikey)."))
     return out
 
 

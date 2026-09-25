@@ -24,7 +24,7 @@ After filling things in, run `swarm doctor`. It checks every connection and tell
    2. Open **github.com/settings/developers → OAuth Apps → New OAuth App**. Set the homepage to your site and the *Authorization callback URL* to the callback URL from Firebase.
    3. Copy the new app's **Client ID**, click **Generate a new client secret**, and paste both into the Firebase GitHub provider. Save.
 4. **Build → Firestore Database → Create database.** Choose *production mode* and a region close to you.
-5. **Build → Storage → Get started.** Storage needs the Blaze (pay-as-you-go) plan on new projects. Swarm's use fits well inside the free allowance. Note the bucket name, for example `your-project.firebasestorage.app`.
+5. **Storage is optional.** New projects need the Blaze (pay-as-you-go) plan for it. On the free Spark plan, leave `FIREBASE_STORAGE_BUCKET` empty: Swarm keeps agent-written tools in Firestore and the diffs and evidence on each task. If you upgrade later, enable Storage and set the bucket in both env files.
 6. **Authentication → Settings → Authorized domains.** `localhost` and `<project>.web.app` are there already. Add your own domain if you use one.
 
 ### Web config → `web/.env.local`
@@ -39,7 +39,7 @@ cp web/.env.example web/.env.local
 VITE_FIREBASE_API_KEY=AIza...                              # apiKey
 VITE_FIREBASE_AUTH_DOMAIN=your-project.firebaseapp.com     # authDomain
 VITE_FIREBASE_PROJECT_ID=your-project                      # projectId
-VITE_FIREBASE_STORAGE_BUCKET=your-project.firebasestorage.app  # storageBucket
+VITE_FIREBASE_STORAGE_BUCKET=                              # empty on the Spark plan
 VITE_FIREBASE_MESSAGING_SENDER_ID=1234567890               # messagingSenderId
 VITE_FIREBASE_APP_ID=1:1234567890:web:abc123               # appId
 VITE_USE_EMULATORS=false
@@ -58,7 +58,7 @@ cp .env.example .env
 
 ```ini
 FIREBASE_PROJECT_ID=your-project
-FIREBASE_STORAGE_BUCKET=your-project.firebasestorage.app
+FIREBASE_STORAGE_BUCKET=                       # empty on the Spark plan
 GOOGLE_APPLICATION_CREDENTIALS=./secrets/service-account.json
 ```
 
@@ -68,7 +68,7 @@ On a host that only takes environment variables (Railway, Fly, Render), paste th
 
 ```bash
 npx firebase-tools login          # once
-scripts/deploy.sh                 # builds web/, deploys Firestore + Storage rules, indexes and Hosting
+scripts/deploy.sh                 # builds web/, deploys Firestore rules, indexes and Hosting (Storage rules too if you set a bucket)
 ```
 
 Your dashboard is then at `https://your-project.web.app`. `scripts/deploy.sh rules` deploys only the rules.
@@ -77,17 +77,16 @@ Your dashboard is then at `https://your-project.web.app`. `scripts/deploy.sh rul
 
 ## 2. Models: where the agents get their brains
 
-All of these are optional. They're tried in this order, and with none at all the agents use built-in heuristics. Put the keys in `.env`:
+They're tried in this order, and with none at all the agents use built-in heuristics. One free key is enough; two gives a fallback when a rate limit hits. Put the keys in `.env`:
 
 | Provider | Cost | Get a key | Variable |
 |---|---|---|---|
-| Ollama (local) | Free, runs on your machine | Install from **ollama.com**, then `ollama pull qwen2.5-coder:7b` | `OLLAMA_HOST` (default `http://127.0.0.1:11434`) |
 | Groq | Free tier, very fast | **console.groq.com/keys** → Create API key | `GROQ_API_KEY` |
 | Google Gemini | Free tier | **aistudio.google.com/apikey** → Create API key | `GEMINI_API_KEY` |
 | OpenRouter | Free models (`:free`) | **openrouter.ai/settings/keys** → Create key | `OPENROUTER_API_KEY` |
 | Anthropic | Paid | **console.anthropic.com** → API keys | `ANTHROPIC_API_KEY` |
 
-For a worker in the cloud, Groq or Gemini is simplest. Ollama needs a machine with around 8 GB of free memory.
+A local Ollama model still works: add `ollama` to `SWARM_LLM_PROVIDERS`.
 
 ---
 

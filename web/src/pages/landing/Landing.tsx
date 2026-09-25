@@ -431,7 +431,7 @@ function StatGrid() {
 const FEATURES: { title: string; text: string; glyph: GlyphName; color: string }[] = [
   { title: 'Sandboxed', text: 'Every patch and every agent-written tool runs in a throwaway copy of your repo, with no network.', glyph: 'box', color: 'var(--coder)' },
   { title: 'Never auto-merges', text: 'Approved means ready for you. Auth and security paths always wait for a maintainer.', glyph: 'shield', color: 'var(--mint-strong)' },
-  { title: 'Your models', text: 'Local models through Ollama, or free Groq and Gemini keys. Your code can stay on your machine.', glyph: 'chip', color: 'var(--triager)' },
+  { title: 'Your models', text: 'Free Groq and Gemini APIs out of the box, falling back from one to the next. Bring Anthropic or a local model if you prefer.', glyph: 'chip', color: 'var(--triager)' },
   { title: 'Remembers', text: 'Validated tools are saved per repository, so the swarm gets faster the longer it works there.', glyph: 'hash', color: 'var(--pink)' },
   { title: 'Audit trail', text: 'Every card records who moved it, when and why, from triage to merge.', glyph: 'sort', color: 'var(--coder)' },
 ]
@@ -462,12 +462,12 @@ function HorizontalList() {
 const FAQS = [
   ['Does Swarm merge anything on its own?', 'No. The best a task can reach on its own is Approved. A maintainer clicks Merge, which opens a pull request on GitHub. Security-sensitive paths need your approval even before that.'],
   ['Where does the code run?', 'In a disposable copy of your repository. With Docker it runs in a container with no network access and memory, CPU and process limits. Without Docker it falls back to a local sandbox with CPU, file-size and time limits.'],
-  ['Which models does it use?', 'Local models through Ollama by default (qwen2.5-coder works well). It can fall back to free Groq, Gemini or OpenRouter keys, or Anthropic. With no model at all, the agents use built-in fix strategies.'],
+  ['Which models does it use?', 'Free model APIs by default: Groq first, then Gemini and OpenRouter, with Anthropic or a local Ollama model as options. With no model at all, the agents use built-in fix strategies.'],
   ['What kind of issues does it handle?', 'Version 1 focuses on flaky tests: ordering, randomness and timing. Everything else is triaged and handed to you with a label, not guessed at.'],
   ['What is a “tool” in Swarm?', 'A small harness the tester writes when existing tests can’t prove a fix, for example running a test under 12 hash seeds. It must catch the bug on the old code before it is trusted and saved for reuse.'],
   ['Can I talk to Swarm from Claude?', 'Yes. Swarm is also an MCP server: add `swarm mcp` to Claude Desktop, Claude Code or any MCP client and ask what the agents did overnight, read a diff or a harness, start a run, or send a patch back with feedback. Merging still happens only in the dashboard.'],
   ['Can I use it on a private repository?', 'Yes. Connect GitHub (or paste a fine-grained token) in Settings. It is stored in your private user record and only the worker reads it, to clone, read issues and open pull requests. New issues are picked up automatically every few minutes.'],
-  ['What does it cost to run?', 'With local models, nothing but your own compute. The free API tiers also work within their rate limits.'],
+  ['What does it cost to run?', 'Nothing to start: Firebase’s free plan and the free tiers of Groq and Gemini cover a small team, within their rate limits.'],
 ]
 
 function Faq() {

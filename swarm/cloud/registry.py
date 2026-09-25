@@ -1,5 +1,5 @@
-"""Repo-scoped tool registry: records in Firestore (repos/{id}/tools), code in
-Cloud Storage (repos/{id}/tools/{tool_id}.py), cached locally for execution."""
+"""Repo-scoped tool registry: records in Firestore (repos/{id}/tools), code in Cloud Storage
+(repos/{id}/tools/{tool_id}.py) or, without a bucket, in the record itself. Cached locally for execution."""
 
 from __future__ import annotations
 
@@ -24,16 +24,23 @@ class FirestoreToolRegistry:
     def _local(self, rec: ToolRecord) -> ToolRecord:
         path = self.dir / f"{rec.tool_id}.py"
         if not path.exists():
-            path.write_text(self._blob(rec.tool_id).download_as_text())
+            if self.bucket is None:
+                path.write_text(self.col.document(rec.tool_id).get().get("code"))
+            else:
+                path.write_text(self._blob(rec.tool_id).download_as_text())
         rec.code_path = str(path)
         return rec
 
+    @staticmethod
+    def _record(d: dict) -> ToolRecord:
+        return ToolRecord.model_validate({k: v for k, v in d.items() if k not in ("code", "storage_path")})
+
     def all(self) -> list[ToolRecord]:
-        return sorted((ToolRecord.model_validate(s.to_dict()) for s in self.col.stream()), key=lambda r: r.created_at)
+        return sorted((self._record(s.to_dict()) for s in self.col.stream()), key=lambda r: r.created_at)
 
     def get(self, tool_id: str) -> ToolRecord | None:
         snap = self.col.document(tool_id).get()
-        return self._local(ToolRecord.model_validate(snap.to_dict())) if snap.exists else None
+        return self._local(self._record(snap.to_dict())) if snap.exists else None
 
     def search(self, query: str, min_score: float = 0.35, validated_only: bool = True) -> list[tuple[ToolRecord, float]]:
         records = [r for r in self.all() if r.validated or not validated_only]
@@ -46,13 +53,17 @@ class FirestoreToolRegistry:
 
     def register(self, tool_id: str, description: str, code: str, task_id: str, tags: list[str],
                  validated: bool, validation: dict) -> ToolRecord:
-        self._blob(tool_id).upload_from_string(code, content_type="text/x-python")
+        if self.bucket is not None:
+            self._blob(tool_id).upload_from_string(code, content_type="text/x-python")
         path = self.dir / f"{tool_id}.py"
         path.write_text(code)
         rec = ToolRecord(tool_id=tool_id, description=description, code_path=str(path), created_by_task=task_id,
                          validated=validated, tags=tags, validation=validation, usage_count=1, used_by_tasks=[task_id])
         doc = rec.model_dump()
-        doc["storage_path"] = self._blob(tool_id).name
+        if self.bucket is not None:
+            doc["storage_path"] = self._blob(tool_id).name
+        else:
+            doc["code"] = code  # harnesses are a few KB, far under Firestore's 1 MB document limit
         self.col.document(tool_id).set(doc)
         return rec
 

@@ -1,8 +1,9 @@
 """LLM access with automatic provider fallback.
 
 Providers are tried in order (SWARM_LLM_PROVIDERS, default
-"ollama,groq,gemini,openrouter,anthropic"); a provider is used only if it is
+"groq,gemini,openrouter,anthropic"); a provider is used only if it is
 configured and reachable, and a failing call falls through to the next one.
+Add "ollama" to the list to use a local model.
 
 * ollama     — local, no key. Model: SWARM_OLLAMA_MODEL (default qwen2.5-coder:7b,
                falls back to any installed model).
@@ -166,7 +167,7 @@ def build_providers(settings: Settings) -> list[Provider]:
                                        "SWARM_OPENROUTER_MODEL", "meta-llama/llama-3.3-70b-instruct:free"),
         "anthropic": Anthropic(settings),
     }
-    order = os.environ.get("SWARM_LLM_PROVIDERS", "ollama,groq,gemini,openrouter,anthropic")
+    order = os.environ.get("SWARM_LLM_PROVIDERS", "groq,gemini,openrouter,anthropic")
     return [table[n.strip()] for n in order.split(",") if n.strip() in table]
 
 

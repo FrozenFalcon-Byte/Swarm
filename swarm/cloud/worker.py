@@ -143,7 +143,10 @@ class Worker:
                 "sandbox": swarm.sandbox.backend}
 
     def _upload_artifacts(self, repo_id: str, swarm: Swarm) -> None:
-        """Patches and test results go to Cloud Storage alongside the task that made them."""
+        """Patches and test results go to Cloud Storage alongside the task that made them (when there is a bucket;
+        the diff and the evidence are on the task document either way)."""
+        if self.bucket is None:
+            return
         for d, kind in ((swarm.settings.patches_dir, "patches"), (swarm.settings.results_dir, "results")):
             for f in d.glob("*"):
                 blob = self.bucket.blob(f"repos/{repo_id}/{kind}/{f.name}")

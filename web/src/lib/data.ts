@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import {
-  addDoc, collection, deleteDoc, doc, limit, onSnapshot, orderBy, query, serverTimestamp, updateDoc, where,
+  addDoc, collection, deleteDoc, doc, getDoc, limit, onSnapshot, orderBy, query, serverTimestamp, updateDoc, where,
   type DocumentData, type Query,
 } from 'firebase/firestore'
 import { getBytes, ref } from 'firebase/storage'
@@ -124,6 +124,10 @@ export function requestAction(uid: string, userName: string, repoId: string, typ
 }
 
 export async function readToolCode(repoId: string, toolId: string) {
+  // Without a Storage bucket (free Spark plan) the worker keeps the code on the tool's own document.
+  const snap = await getDoc(doc(db, 'repos', repoId, 'tools', toolId))
+  const inline = snap.data()?.code
+  if (typeof inline === 'string') return inline
   const bytes = await getBytes(ref(storage, `repos/${repoId}/tools/${toolId}.py`))
   return new TextDecoder().decode(bytes)
 }

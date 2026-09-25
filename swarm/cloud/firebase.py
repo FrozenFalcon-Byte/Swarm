@@ -23,8 +23,12 @@ def service_account() -> dict | None:
     if inline:
         return json.loads(inline)
     path = os.environ.get("GOOGLE_APPLICATION_CREDENTIALS", "").strip()
-    if path and Path(path).expanduser().is_file():
-        return json.loads(Path(path).expanduser().read_text())
+    if not path:
+        return None
+    # a relative path in .env means relative to the project, wherever the command is run from
+    for candidate in (Path(path).expanduser(), Path(__file__).resolve().parents[2] / path):
+        if candidate.is_file():
+            return json.loads(candidate.read_text())
     return None
 
 
@@ -45,6 +49,12 @@ def project_id() -> str:
 def bucket_name() -> str:
     # Projects created since late 2024 get <id>.firebasestorage.app; older ones <id>.appspot.com.
     return os.environ.get("FIREBASE_STORAGE_BUCKET") or f"{project_id()}.firebasestorage.app"
+
+
+def storage_enabled() -> bool:
+    """Cloud Storage is optional: new projects need the Blaze plan for it. Without a bucket,
+    tool code lives in Firestore and patches/results stay on the task documents."""
+    return using_emulators() or bool(os.environ.get("FIREBASE_STORAGE_BUCKET", "").strip())
 
 
 def using_emulators() -> bool:
@@ -73,6 +83,8 @@ def db():
 
 @lru_cache(maxsize=1)
 def bucket():
+    if not storage_enabled():
+        return None
     if using_emulators():
         from google.auth.credentials import AnonymousCredentials
         from google.cloud import storage as gcs

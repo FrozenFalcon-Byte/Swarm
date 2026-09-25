@@ -39,18 +39,18 @@ stats are written only by the worker, and the security rules
 ([firestore.rules](firestore.rules), [storage.rules](storage.rules)) enforce this. A
 browser can never push a card through the state machine itself.
 
-## Models: local first, free fallbacks
+## Models: free APIs, with fallbacks
 
 Providers are tried in order, and a failing call falls through to the next one
 ([swarm/llm.py](swarm/llm.py)):
 
 | Provider | Setup | Default model |
 |---|---|---|
-| Ollama (local) | `ollama pull qwen2.5-coder:7b` | `qwen2.5-coder:7b` (else any installed model) |
 | Groq (free tier) | `GROQ_API_KEY` | `llama-3.3-70b-versatile` |
 | Gemini (free tier) | `GEMINI_API_KEY` | `gemini-2.5-flash` |
 | OpenRouter (free models) | `OPENROUTER_API_KEY` | `meta-llama/llama-3.3-70b-instruct:free` |
 | Anthropic | `ANTHROPIC_API_KEY` | `claude-sonnet-5` |
+| Ollama (opt-in: add `ollama` to `SWARM_LLM_PROVIDERS`) | a local model | `SWARM_OLLAMA_MODEL` |
 
 With no model at all, the agents use built-in heuristics and fix strategies.
 
@@ -62,7 +62,7 @@ Small local models are treated with care:
 
 ## Run it locally (Firebase emulators, no credentials needed)
 
-Needs Python 3.11+, Node 20+, Java 21+ (for the emulators) and optionally Ollama.
+Needs Python 3.11+, Node 20+ and Java 21+ (for the emulators).
 
 ```bash
 python3 -m venv .venv && .venv/bin/pip install -e ".[cloud,mcp]"
@@ -127,7 +127,7 @@ The original single-machine mode still works:
 | `swarm/agents/` | Triager, Coder, Tester, Reviewer |
 | `swarm/sandbox.py` | Throwaway repo copies. Docker (`--network none`, resource limits) or local rlimits |
 | `swarm/toolgen.py`, `swarm/registry.py` | Agent-written harnesses and the searchable tool registry |
-| `swarm/llm.py` | Provider chain (Ollama → Groq → Gemini → OpenRouter → Anthropic) |
+| `swarm/llm.py` | Provider chain (Groq → Gemini → OpenRouter → Anthropic, Ollama opt-in) |
 | `swarm/cloud/` | Firestore board, Storage-backed registry, worker (with GitHub issue sync), GitHub clone + PR |
 | `swarm/mcp_server.py` | The MCP server (`swarm mcp`) |
 | `swarm/doctor.py`, `swarm/env.py` | `swarm doctor` connection checks; `.env` loading |
@@ -140,6 +140,7 @@ The original single-machine mode still works:
 
 * The offline Coder knows three fix strategies. Beyond those it relies on the LLM, or hands off to a human.
 * The local sandbox can't block the network at the kernel level. Use Docker for untrusted repositories.
+* Cloud Storage is optional. Without a bucket (the free Spark plan), tool code is stored in Firestore.
 * The GitHub token is stored in the user's private Firestore document (owner-only by rules). A GitHub App would be the stronger long-term design.
 * Issue sync polls GitHub. Instant pickup needs a webhook, which means a public endpoint (Cloud Functions, on the Blaze plan).
 * MCP cloud mode uses the worker's admin credentials, so run it only where the worker's `.env` already lives.

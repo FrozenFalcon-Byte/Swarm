@@ -13,7 +13,9 @@ if grep -qE '^VITE_USE_EMULATORS=true' web/.env.local; then
   echo "web/.env.local still has VITE_USE_EMULATORS=true. Set it to false before deploying." >&2; exit 1
 fi
 
-only="firestore:rules,firestore:indexes,storage"
+only="firestore:rules,firestore:indexes"
+# Storage rules only if the project uses Cloud Storage (Blaze plan)
+if grep -qE '^VITE_FIREBASE_STORAGE_BUCKET=.+' web/.env.local; then only="${only},storage"; fi
 if [[ "${1:-all}" != "rules" ]]; then
   (cd web && npm run build)
   only="${only},hosting"

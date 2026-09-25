@@ -9,7 +9,7 @@ const projectId = env.VITE_FIREBASE_PROJECT_ID || 'demo-swarm'
 
 /** Web config values that are missing when pointing at a real project; empty means ready. */
 export const missingConfig: string[] = usingEmulators ? [] : (
-  ['VITE_FIREBASE_API_KEY', 'VITE_FIREBASE_AUTH_DOMAIN', 'VITE_FIREBASE_PROJECT_ID', 'VITE_FIREBASE_STORAGE_BUCKET', 'VITE_FIREBASE_APP_ID']
+  ['VITE_FIREBASE_API_KEY', 'VITE_FIREBASE_AUTH_DOMAIN', 'VITE_FIREBASE_PROJECT_ID', 'VITE_FIREBASE_APP_ID']
     .filter((k) => !env[k] || (k === 'VITE_FIREBASE_PROJECT_ID' && env[k] === 'demo-swarm'))
 )
 
