@@ -1,5 +1,9 @@
 """`swarm server`: Swarm's public HTTP server, next to the worker.
 
+  /a2a                      A2A (Agent2Agent) JSON-RPC: the "Swarm" agent other agents can talk to, with
+                            the same access tokens (see swarm.a2a.gateway)
+  /.well-known/agent-card.json   its agent card, public
+  /agents                   the cards of the four agents inside the swarm, public
   /mcp                      MCP over streamable HTTP, for any number of clients at once. Every request
                             needs `Authorization: Bearer swm_…`, a personal access token made in the
                             dashboard (Settings → Use from Claude). A token acts as the person who made
@@ -84,7 +88,8 @@ def create_app(settings: Settings, public_url: str, host: str = "127.0.0.1"):
 
     db = firebase.db()
     origins = web_origins()
-    server = build(settings, cloud=True, token_verifier=FirestoreTokens(db), auth=AuthSettings(
+    tokens = FirestoreTokens(db)
+    server = build(settings, cloud=True, token_verifier=tokens, auth=AuthSettings(
         issuer_url=public_url, resource_server_url=f"{public_url}/mcp", validate_token_resource=False,
         required_scopes=["swarm"]))
     passkeys = Passkeys(db, origins)
@@ -138,9 +143,27 @@ def create_app(settings: Settings, public_url: str, host: str = "127.0.0.1"):
 
     @server.custom_route("/healthz", methods=["GET"])
     async def healthz(request: Request):
-        return JSONResponse({"ok": True, "mcp": f"{public_url}/mcp", "project": firebase.project_id()})
+        return JSONResponse({"ok": True, "mcp": f"{public_url}/mcp", "a2a": f"{public_url}/a2a",
+                             "agentCard": f"{public_url}/.well-known/agent-card.json", "project": firebase.project_id()})
+
+    @server.custom_route("/agents", methods=["GET"])
+    async def agents(request: Request):
+        from .a2a import AGENTS, agent_card, card_json
+
+        return JSONResponse({"gateway": f"{public_url}/.well-known/agent-card.json",
+                             "agents": [card_json(agent_card(n, public_url)) for n in AGENTS]})
 
     app = server.streamable_http_app(host=host)
+    # A2A: the public Swarm agent. Its routes go first so /a2a isn't taken for an MCP path.
+    from .a2a.gateway import TokenGate, gateway_routes
+    from .mcp_server import CloudBackend
+
+    class GatewayBackend(CloudBackend):
+        via = "via A2A"
+
+    routes, _card = gateway_routes(public_url, lambda uid, name: GatewayBackend(settings, as_user=(uid, name)))
+    app.router.routes[:0] = routes
+    app = TokenGate(app, tokens.verify_token)
     # the web app calls /api from its own origin; MCP clients aren't browsers, so they don't need CORS
     return CORSMiddleware(app, allow_origins=origins, allow_methods=["GET", "POST", "OPTIONS"],
                           allow_headers=["authorization", "content-type"], max_age=600)
@@ -150,5 +173,5 @@ def serve(settings: Settings, host: str, port: int) -> None:
     import uvicorn
 
     public = (os.environ.get("SWARM_PUBLIC_URL") or f"http://{'localhost' if host in ('127.0.0.1', '0.0.0.0') else host}:{port}").rstrip("/")
-    log.warning("Swarm server on %s  (MCP: %s/mcp)", public, public)
+    log.warning("Swarm server on %s  (MCP: %s/mcp, A2A: %s/a2a)", public, public, public)
     uvicorn.run(create_app(settings, public, host), host=host, port=port, log_level="warning")

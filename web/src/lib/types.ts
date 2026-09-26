@@ -32,6 +32,7 @@ export interface Task {
     rejected_strategies?: string[]
     tools_used?: string[]
     delivery?: string
+    second_opinions?: SecondOpinion[]
     review?: { checks: ReviewCheck[]; sensitive: boolean }
     test_summary?: {
       sandbox?: string
@@ -58,7 +59,7 @@ export interface Repo {
   id: string
   fullName: string
   displayName?: string
-  source: 'github' | 'demo'
+  source: 'github' | 'demo' | 'lab'
   ownerUid: string
   members: string[]
   status?: 'idle' | 'queued' | 'running' | 'error'
@@ -70,7 +71,27 @@ export interface Repo {
   private?: boolean
   htmlUrl?: string
   description?: string
-  settings?: { autoSync?: boolean }
+  settings?: { autoSync?: boolean; secondOpinionAgents?: string[] }
+  lab?: { waves: LabSpec[] }
+  labStatus?: string | null
+}
+
+export type LabKind = 'hash-order' | 'jitter' | 'clock' | 'shared-state'
+export type LabSize = 'small' | 'medium' | 'large'
+export interface LabSpec { seed: number; size: LabSize; kinds: LabKind[] | null; requestedAt?: string }
+/** repos/{id}/lab/{index}: one made-up wave, with its answer key. */
+export interface LabWave {
+  index: number
+  seed: number
+  package: string
+  description: string
+  via: string
+  files: Record<string, string>
+  issues: { number: number; title: string; body: string }[]
+  bugs: { kind: LabKind; module: string; test: string; issue: number; root_cause: string; fix: string | null; title: string
+    verified: { buggy: { runs: number; failures: number }; fixed: { runs: number; failures: number } } | null; builtIn?: boolean }[]
+  noise: { issue: number; type: 'question' | 'vague' | 'bug' | 'feature' | 'duplicate' }[]
+  createdAt?: Stamp
 }
 
 export interface Tool {
@@ -95,10 +116,47 @@ export interface Run {
 export interface WorkerInfo {
   id: string; lastSeen?: { toDate(): Date }; llm?: { active: string | null; fallbacks: string[] }; sandbox?: string
   syncMinutes?: number; githubFallbackToken?: boolean; mode?: 'always-on' | 'scheduled'
+  protocol?: 'a2a'; agents?: AgentCard[]
 }
 
+/** An A2A agent card, as JSON (see a2a-protocol.org). */
+export interface AgentCard {
+  name: string; description: string; version?: string
+  supportedInterfaces?: { url: string; protocolBinding?: string }[]
+  capabilities?: { streaming?: boolean; pushNotifications?: boolean }
+  defaultInputModes?: string[]; defaultOutputModes?: string[]
+  skills?: { id: string; name: string; description: string; tags?: string[]; examples?: string[] }[]
+  securitySchemes?: Record<string, unknown>
+  provider?: { organization?: string; url?: string }
+}
+
+/** One thing on the wire between agents: a message, a status update, a result, or the final state. */
+export interface A2AEvent {
+  id: string; ts: string
+  kind: 'message' | 'task' | 'status' | 'artifact' | 'reply' | 'error' | 'external'
+  from: string; to: string; taskId: string; context?: string; a2aTask?: string
+  state?: string; text?: string; name?: string; url?: string; reference?: string | null
+  data?: Record<string, unknown> | null
+  wire?: unknown
+}
+
+export interface SecondOpinion { url: string; agent: string; state: string; verdict: 'approve' | 'reject' | 'comment' | 'no answer'; text: string; at: string }
+
 type Stamp = { toDate(): Date } | null
-export interface Profile { displayName?: string; email?: string; avatar?: string | null; githubLogin?: string | null; createdAt?: Stamp }
+export interface Onboarding { step?: number; role?: string; goals?: string[]; repoId?: string | null; review?: 'every' | 'batch' }
+export const ONB_ROLES = ['I maintain an open-source project', 'I lead a team', 'I work on my own', 'I’m just looking around']
+export const ONB_GOALS = ['Fix tests that fail at random', 'Sort and triage issues', 'Review fixes before they merge', 'Connect my own agents over A2A']
+/** How the app behaves for this person, saved on their profile so it follows them between devices. */
+export interface Prefs {
+  motion?: 'system' | 'less' | 'full'; notify?: boolean; startPage?: 'overview' | 'repos' | 'last'
+  /** which tab a repository opens on */
+  repoTab?: 'board' | 'handoffs' | 'activity'
+  /** 'focus' folds empty lanes and Closed; 'all' keeps every lane open */
+  lanes?: 'focus' | 'all'
+  density?: 'comfortable' | 'compact'
+}
+export interface Profile { displayName?: string; email?: string; avatar?: string | null; githubLogin?: string | null; createdAt?: Stamp
+  onboarding?: Onboarding; onboardedAt?: Stamp | null; prefs?: Prefs }
 export interface Passkey { id: string; uid: string; name: string; deviceType?: string; backedUp?: boolean; createdAt?: Stamp; lastUsedAt?: Stamp }
 export interface McpToken { id: string; uid: string; name: string; prefix: string; createdAt?: Stamp; lastUsedAt?: Stamp }
 

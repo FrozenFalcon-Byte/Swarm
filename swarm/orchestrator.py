@@ -1,12 +1,14 @@
-"""Wires the agents to one board and drives them. Agents never call each other:
-each one reads cards from its column and writes cards to the next."""
+"""Wires the agents to one board and puts them on an A2A network.
+
+Each agent is an A2A server with its own agent card. When one finishes with a task it looks up the peer
+offering the skill the task needs next and sends it a message; the board is where they all record what
+they did. `run_until_idle` starts whatever is waiting and returns once no agent has anything left to do."""
 
 from __future__ import annotations
 
 import logging
 import shutil
 import threading
-import time
 from collections import deque
 from typing import Callable
 
@@ -45,6 +47,11 @@ class Swarm:
         self._loop: threading.Thread | None = None
         self._stop = threading.Event()
         self._run_lock = threading.Lock()
+        self.a2a_log: deque[dict] = deque(maxlen=600)
+        from .a2a import AgentNetwork
+
+        self.network = AgentNetwork(self)
+        self.network.on_exchange(self.a2a_log.append)
 
     # -- activity feed -------------------------------------------------------
     def on_activity(self, fn: ActivityListener) -> None:
@@ -68,31 +75,18 @@ class Swarm:
     def ingest(self, issues: list[Issue]) -> int:
         return self.triager.ingest(issues)
 
-    # -- driving -------------------------------------------------------------
-    def run_once(self, delay: float = 0.0) -> bool:
-        """Give each agent one turn. Returns True if any agent did work."""
-        progressed = False
-        with self._run_lock:
-            for agent in self.agents:
-                self.busy[agent.name] = True
-                try:
-                    did = agent.step()
-                except Exception as e:  # an agent crash parks nothing; it is logged and the loop continues
-                    log.exception("%s crashed", agent.name)
-                    self._record(agent.name, f"error: {e}", None)
-                    did = False
-                finally:
-                    self.busy[agent.name] = False
-                progressed |= did
-                if did and delay:
-                    time.sleep(delay)
-        return progressed
+    # -- A2A traffic ---------------------------------------------------------
+    def on_exchange(self, fn: ActivityListener) -> None:
+        """Every message, status update and result the agents send each other."""
+        self.network.on_exchange(fn)
 
-    def run_until_idle(self, max_rounds: int = 200, delay: float = 0.0) -> int:
-        rounds = 0
-        while rounds < max_rounds and self.run_once(delay):
-            rounds += 1
-        return rounds
+    # -- driving -------------------------------------------------------------
+    def run_until_idle(self, max_messages: int = 400, delay: float | None = None) -> int:
+        """Let the agents work until none has anything to do. Returns how many A2A messages they sent."""
+        with self._run_lock:
+            if delay is not None:
+                self.network.delay = delay
+            return self.network.run_sync(max_messages)
 
     def start_background(self, interval: float = 1.0, delay: float = 0.6) -> None:
         if self._loop and self._loop.is_alive():
@@ -101,7 +95,12 @@ class Swarm:
 
         def loop() -> None:
             while not self._stop.is_set():
-                if not self.run_once(delay):
+                try:
+                    sent = self.run_until_idle(delay=delay)
+                except Exception:
+                    log.exception("agent network stopped")
+                    sent = 0
+                if not sent:
                     self._stop.wait(interval)
 
         self._loop = threading.Thread(target=loop, name="swarm-loop", daemon=True)
@@ -158,6 +157,7 @@ class Swarm:
         return {
             "counts": counts,
             "agents": [{"name": a.name, "busy": self.busy[a.name]} for a in self.agents],
+            "protocol": "a2a",
             "llm": self.llm.describe(),
             "sandbox": self.sandbox.backend,
             "repo": str(self.settings.repo_path),

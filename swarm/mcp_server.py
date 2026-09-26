@@ -91,9 +91,9 @@ class LocalBackend:
     def run(self, repo: str | None) -> str:
         before = {t.task_id: t.state for t in self.swarm.board.list()}
         self.swarm.ingest(self.swarm.load_issues(None))
-        rounds = self.swarm.run_until_idle()
+        sent = self.swarm.run_until_idle()
         moved = [t for t in self.swarm.board.list() if before.get(t.task_id) != t.state]
-        return f"ran {rounds} rounds; {len(moved)} task(s) moved: " + ", ".join(f"{t.task_id}→{t.state.value}" for t in moved)
+        return f"the agents exchanged {sent} A2A messages; {len(moved)} task(s) moved: " + ", ".join(f"{t.task_id}→{t.state.value}" for t in moved)
 
     def request_changes(self, repo: str | None, task_id: str, comment: str) -> str:
         self.swarm.reject(task_id, f"via MCP: {comment}")
@@ -118,17 +118,22 @@ def current_user() -> tuple[str | None, str]:
 
 class CloudBackend:
     kind = "cloud"
+    via = "via MCP"  # how requests from this backend are labelled on the board
 
-    def __init__(self, settings: Settings, per_user: bool = False):
+    def __init__(self, settings: Settings, per_user: bool = False, as_user: tuple[str, str] | None = None):
         from .cloud import firebase
 
         self.settings = settings
         self.db = firebase.db()
         self.bucket = firebase.bucket()
-        self.per_user = per_user  # over HTTP every call must come from a token's user
+        self.per_user = per_user or bool(as_user)  # over HTTP every call must come from a token's user
+        self.as_user = as_user  # (uid, token name) when the caller is known up front, as in the A2A gateway
+
+    def _who(self) -> tuple[str | None, str]:
+        return self.as_user or current_user()
 
     def _uid(self) -> str | None:
-        uid, _ = current_user()
+        uid, _ = self._who()
         if self.per_user and not uid:
             raise PermissionError("this server needs an access token")
         return uid
@@ -171,24 +176,29 @@ class CloudBackend:
         rid = self._repo_id(repo)
         return FirestoreToolRegistry(self.db, self.bucket, rid, self.settings.tools_dir / rid, self.settings.use_embeddings)
 
-    def run(self, repo: str | None) -> str:
+    def queue_run(self, repo: str | None, trigger: str = "mcp"):
+        """Queue a run for the worker; returns (repo id, the run's document)."""
         from google.cloud import firestore as gfs
 
         rid = self._repo_id(repo)
-        self.db.collection("repos").document(rid).collection("runs").add(
-            {"status": "queued", "trigger": "mcp", "requestedBy": self._uid() or "mcp", "createdAt": gfs.SERVER_TIMESTAMP})
+        _, ref = self.db.collection("repos").document(rid).collection("runs").add(
+            {"status": "queued", "trigger": trigger, "requestedBy": self._uid() or trigger, "createdAt": gfs.SERVER_TIMESTAMP})
+        return rid, ref
+
+    def run(self, repo: str | None) -> str:
+        self.queue_run(repo)
         return "queued; the worker picks it up within seconds. Check back with board_summary."
 
     def request_changes(self, repo: str | None, task_id: str, comment: str) -> str:
         from google.cloud import firestore as gfs
 
         rid = self._repo_id(repo)
-        uid, client = current_user()
+        uid, client = self._who()
         # over stdio the operator speaks for the repo owner; over HTTP the token's user speaks for themselves
         uid = uid or self.db.collection("repos").document(rid).get().get("ownerUid")
         self.db.collection("repos").document(rid).collection("actions").add(
             {"status": "pending", "type": "reject", "taskId": task_id, "comment": comment, "uid": uid,
-             "userName": f"via MCP ({client})" if client else "via MCP", "createdAt": gfs.SERVER_TIMESTAMP})
+             "userName": f"{self.via} ({client})" if client else self.via, "createdAt": gfs.SERVER_TIMESTAMP})
         return f"sent {task_id} back to the coder; the worker applies it and starts a new run."
 
     def read_tool(self, repo: str | None, tool_id: str) -> str:

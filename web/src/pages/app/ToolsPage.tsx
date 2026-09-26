@@ -1,4 +1,4 @@
-import { AnimatePresence, motion } from 'motion/react'
+import { motion } from 'motion/react'
 import { useState } from 'react'
 import { useAuth } from '../../lib/auth'
 import { readToolCode, useRepos, useTools } from '../../lib/data'
@@ -7,6 +7,7 @@ import type { Tool } from '../../lib/types'
 import { PageHead } from './Overview'
 import { Section, timeAgo } from './ui'
 import { Roll } from '../../components/Roll'
+import { CodeDialog } from '../../components/CodeWindow'
 
 export default function ToolsPage() {
   const { user } = useAuth()
@@ -29,9 +30,11 @@ export function ToolCards({ repoId }: { repoId: string }) {
   const { data: tools, loading } = useTools(repoId)
   const [open, setOpen] = useState<Tool | null>(null)
   const [code, setCode] = useState<string>('')
+  const [loadingCode, setLoadingCode] = useState(false)
   const show = async (t: Tool) => {
-    setOpen(t); setCode('Loading…')
-    try { setCode(await readToolCode(repoId, t.tool_id)) } catch { setCode('The code couldn’t be loaded from storage.') }
+    setOpen(t); setCode(''); setLoadingCode(true)
+    try { setCode(await readToolCode(repoId, t.tool_id)) } catch { setCode('# The code couldn’t be loaded from storage.') }
+    setLoadingCode(false)
   }
   if (!loading && !tools.length) return <Section><p className="muted pad">No tools yet. The tester writes one the first time a single green run can’t prove a fix.</p></Section>
   return (
@@ -49,18 +52,7 @@ export function ToolCards({ repoId }: { repoId: string }) {
           </motion.article>
         ))}
       </div>
-      <AnimatePresence>
-        {open && (
-          <motion.div className="modal" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setOpen(null)}>
-            <div className="scrim" />
-            <motion.div className="modal-box" style={{ position: 'relative', zIndex: 71 }} initial={{ y: 30, scale: 0.97 }} animate={{ y: 0, scale: 1 }} exit={{ y: 20, opacity: 0 }}
-              transition={{ duration: 0.45, ease: easeOut }} onClick={(e) => e.stopPropagation()} role="dialog" aria-label={open.tool_id}>
-              <header><b className="mono">{open.tool_id}.py</b><button className="icon-btn" onClick={() => setOpen(null)} aria-label="Close">✕</button></header>
-              <pre className="mono">{code}</pre>
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+      <CodeDialog open={!!open} title={open ? `${open.tool_id}.py` : ''} code={code} lang="python" loading={loadingCode} onClose={() => setOpen(null)} />
     </>
   )
 }

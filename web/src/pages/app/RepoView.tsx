@@ -1,16 +1,19 @@
 import { AnimatePresence, LayoutGroup, motion } from 'motion/react'
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link, NavLink, useNavigate, useParams } from 'react-router-dom'
+import { createPortal } from 'react-dom'
 import { agentColor } from '../../components/AgentDots'
 import { useAuth } from '../../lib/auth'
 import { useToast } from '../../components/Island'
-import { queueRun, removeRepo, requestAction, setAutoSync, useActionStatus, useActivity, useRepo, useRuns, useTasks } from '../../lib/data'
+import { queueRun, removeRepo, requestAction, setAutoSync, useActionStatus, useIsAdmin, useActivity, useProfile, useRepo, useRuns, useTasks } from '../../lib/data'
 import { easeInOut, easeOut } from '../../lib/motion'
 import type { Task } from '../../lib/types'
 import { Handoffs } from './Handoffs'
+import { MoreIssues } from './Lab'
 import { ToolCards } from './ToolsPage'
 import { LANES, PIPELINE, Section, StatePill, kindLabel, timeAgo } from './ui'
 import { Roll } from '../../components/Roll'
+import { useBootHold } from '../../lib/boot'
 
 export default function RepoView() {
   const params = useParams()
@@ -20,10 +23,21 @@ export default function RepoView() {
   const openTask = rest[0] === 'tasks' ? rest[1] : null
   const { user } = useAuth()
   const { repo, loading } = useRepo(repoId)
+  useBootHold(loading)
   const { data: tasks } = useTasks(repoId)
+  const admin = useIsAdmin(user?.uid)
   const navigate = useNavigate()
   const [queued, setQueued] = useState(false)
   const toast = useToast()
+  const prefs = useProfile(user?.uid)?.prefs
+  // open on the tab you chose in your profile, the first time you arrive at this repo (clicking Board later stays on Board)
+  useEffect(() => {
+    if (!prefs) return
+    const first = !openedRepos.has(repoId)
+    openedRepos.add(repoId)
+    if (first && !rest[0] && prefs.repoTab && prefs.repoTab !== 'board') navigate(`/app/repos/${repoId}/${prefs.repoTab}`, { replace: true })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [repoId, !!prefs])
 
   if (loading) return null
   if (!repo) return <div className="page"><Section title="Repository not found"><p className="muted">It may have been removed, or you aren’t a member. <Link className="link" to="/app/repos">Back to repositories</Link></p></Section></div>
@@ -42,7 +56,7 @@ export default function RepoView() {
     <div className="page">
       <header className="repo-head">
         <div>
-          <p className="surtitle"><span style={{ background: busy ? 'var(--triager)' : 'var(--green)' }} />{repo.source === 'demo' ? 'Demo repository' : 'GitHub repository'}</p>
+          <p className="surtitle"><span style={{ background: busy ? 'var(--triager)' : 'var(--green)' }} />{repo.source === 'demo' ? 'Demo repository' : repo.source === 'lab' ? 'Test-lab project' : 'GitHub repository'}</p>
           <h1 style={{ marginTop: 14 }}>{repo.displayName || repo.fullName}</h1>
           <div className="repo-meta">
             {repo.htmlUrl ? <a className="mono link" href={repo.htmlUrl} target="_blank" rel="noreferrer">{repo.fullName}</a> : <span className="mono">{repo.fullName}</span>}
@@ -52,6 +66,7 @@ export default function RepoView() {
           </div>
         </div>
         <div className="repo-actions">
+          {admin && repo.source !== 'github' && repo.ownerUid === user?.uid && <MoreIssues repo={repo} />}
           {repo.source === 'github' && repo.ownerUid === user?.uid && (
             <label className="toggle" title="The worker checks GitHub for new or edited issues and runs the swarm when it finds some">
               <input type="checkbox" checked={repo.settings?.autoSync !== false} onChange={(e) => setAutoSync(repoId, e.target.checked)} />
@@ -75,7 +90,7 @@ export default function RepoView() {
 
       <LayoutGroup id="tabs">
         <nav className="tabs" aria-label="Repository sections">
-          {[['board', 'Board', needsYou], ['handoffs', 'Handoffs', 0], ['activity', 'Activity', 0], ['tools', 'Tools', 0], ['runs', 'Runs', 0]].map(([id, label, n]) => (
+          {[['board', 'Board', needsYou], ['handoffs', 'Agent traffic', 0], ['activity', 'Activity', 0], ['tools', 'Tools', 0], ['runs', 'Runs', 0]].map(([id, label, n]) => (
             <NavLink key={id as string} to={`/app/repos/${repoId}${id === 'board' ? '' : `/${id}`}`} end className={`tab ${tab === id ? 'on' : ''}`}>
               {tab === id && <motion.span layoutId="tab-bg" className="tab-bg" transition={{ duration: 0.4, ease: easeOut }} />}
               <span>{label}</span>{!!n && <span className="tab-count">{n}</span>}
@@ -86,8 +101,8 @@ export default function RepoView() {
 
       <AnimatePresence mode="wait">
         <motion.div key={tab} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -6 }} transition={{ duration: 0.35, ease: easeOut }}>
-          {tab === 'board' && <Lanes tasks={tasks} onOpen={(id) => navigate(`/app/repos/${repoId}/tasks/${id}`)} />}
-          {tab === 'handoffs' && <Handoffs tasks={tasks} onOpen={(id) => navigate(`/app/repos/${repoId}/tasks/${id}`)} />}
+          {tab === 'board' && <Lanes tasks={tasks} allOpen={prefs?.lanes === 'all'} onOpen={(id) => navigate(`/app/repos/${repoId}/tasks/${id}`)} />}
+          {tab === 'handoffs' && <Handoffs repoId={repoId} tasks={tasks} onOpen={(id) => navigate(`/app/repos/${repoId}/tasks/${id}`)} />}
           {tab === 'activity' && <ActivityFeed repoId={repoId} />}
           {tab === 'tools' && <ToolCards repoId={repoId} />}
           {tab === 'runs' && <Runs repoId={repoId} />}
@@ -103,38 +118,99 @@ export default function RepoView() {
 
 /* ------------------------------------------------------------------ board */
 
-function Lanes({ tasks, onOpen }: { tasks: Task[]; onOpen: (id: string) => void }) {
+const openedRepos = new Set<string>()
+
+function Lanes({ tasks, onOpen, allOpen }: { tasks: Task[]; onOpen: (id: string) => void; allOpen?: boolean }) {
   const byLane = useMemo(() => LANES.map((l) => ({ ...l, tasks: tasks.filter((t) => l.states.includes(t.state)).sort((a, b) => a.task_id.localeCompare(b.task_id)) })), [tasks])
+  // lanes you folded or opened by hand; otherwise empty lanes and Closed start folded
+  const [manual, setManual] = useState<Record<string, boolean>>({})
+  const narrow = useMedia('(max-width: 760px)')
+  const firstBusy = byLane.find((l) => l.id === 'you' && l.tasks.length) || byLane.find((l) => l.tasks.length && l.id !== 'closed') || byLane[0]
+  const [pick, setPick] = useState<string | null>(null)
   if (!tasks.length) return <Section><p className="muted pad">No tasks yet. When the worker picks up the first run, issues appear here and move across the lanes live.</p></Section>
+  const folded = (l: (typeof byLane)[number]) => manual[l.id] ?? (allOpen ? false : !l.tasks.length || l.id === 'closed')
+  const toggle = (l: (typeof byLane)[number]) => setManual((m) => ({ ...m, [l.id]: !folded(l) }))
+  const tone = (t: string) => t === 'none' ? 'var(--grey-6)' : `var(--${t})`
+
+  const cards = (lane: (typeof byLane)[number]) => (
+    <>
+      <AnimatePresence>
+        {lane.tasks.map((t) => (
+          <motion.div key={t.task_id} layoutId={t.task_id} layout="position" className="task-card" role="button" tabIndex={0}
+            onClick={() => onOpen(t.task_id)} onKeyDown={(e) => e.key === 'Enter' && onOpen(t.task_id)}
+            initial={{ opacity: 0, scale: 0.94 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0 }} transition={{ layout: { duration: 0.7, ease: easeInOut }, duration: 0.4 }}>
+            <div className="task-card-top mono"><span>{t.task_id}</span><span>{t.source_issue}</span></div>
+            <b>{t.title}</b>
+            <div className="task-card-tags">
+              <StatePill state={t.state} />
+              {t.priority !== 'unset' && <span className={`chip ${t.priority === 'high' || t.priority === 'critical' ? 'hot' : ''}`}>{t.priority}</span>}
+              {t.attempts > 1 && <span className="chip">attempt {t.attempts}</span>}
+            </div>
+            {t.assigned_agent && <span className="working"><span className="move-dot" style={{ background: agentColor(t.assigned_agent), width: 10, height: 10 }} />{t.assigned_agent} is on it</span>}
+          </motion.div>
+        ))}
+      </AnimatePresence>
+      {!lane.tasks.length && <div className="lane-empty">Nothing here</div>}
+    </>
+  )
+
+  // phones: one lane at a time, picked from a strip of lane chips
+  if (narrow) {
+    const lane = byLane.find((l) => l.id === (pick || firstBusy.id)) || byLane[0]
+    return (
+      <LayoutGroup id="lanes">
+        <div className="lane-pick" role="tablist" aria-label="Lanes">
+          {byLane.map((l) => (
+            <button key={l.id} role="tab" aria-selected={l.id === lane.id} className={`lane-chip ${l.id === lane.id ? 'on' : ''}`} onClick={() => setPick(l.id)}>
+              <span className="lane-swatch" style={{ background: tone(l.tone) }} />{l.title}<span className="lane-n">{l.tasks.length}</span>
+            </button>
+          ))}
+        </div>
+        <AnimatePresence mode="wait" initial={false}>
+          <motion.div key={lane.id} className="lane lane--solo" initial={{ opacity: 0, x: 16 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -12 }} transition={{ duration: 0.3, ease: easeOut }}>
+            <p className="lane-hint">{lane.hint}</p>
+            {cards(lane)}
+          </motion.div>
+        </AnimatePresence>
+      </LayoutGroup>
+    )
+  }
+
   return (
     <LayoutGroup id="lanes">
-      <div className="lanes">
-        {byLane.map((lane) => (
-          <div key={lane.id} className="lane">
-            <div className="lane-head"><span className="lane-swatch" style={{ background: lane.tone === 'none' ? 'var(--grey-6)' : `var(--${lane.tone})` }} /><b>{lane.title}</b><span className="lane-n">{lane.tasks.length}</span></div>
+      <div className="lanes" style={{ gridTemplateColumns: byLane.map((l) => folded(l) ? '58px' : 'minmax(0, 1fr)').join(' ') }}>
+        {byLane.map((lane) => folded(lane) ? (
+          <button key={lane.id} className="lane lane--folded" onClick={() => toggle(lane)} title={lane.tasks.length ? `Show ${lane.title}` : `${lane.title}: nothing here`} aria-expanded={false}>
+            <span className="lane-swatch" style={{ background: tone(lane.tone) }} />
+            <span className="lane-n">{lane.tasks.length}</span>
+            <b className="lane-folded-t">{lane.title}</b>
+          </button>
+        ) : (
+          <motion.div key={lane.id} className="lane" initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }} transition={{ duration: 0.35, ease: easeOut }}>
+            <div className="lane-head">
+              <span className="lane-swatch" style={{ background: tone(lane.tone) }} /><b>{lane.title}</b><span className="lane-n">{lane.tasks.length}</span>
+              <button className="lane-fold" onClick={() => toggle(lane)} aria-label={`Fold ${lane.title}`} title="Fold this lane">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><path d="M15 6l-6 6 6 6" /></svg>
+              </button>
+            </div>
             <p className="lane-hint">{lane.hint}</p>
-            <AnimatePresence>
-              {lane.tasks.map((t) => (
-                <motion.div key={t.task_id} layoutId={t.task_id} className="task-card" role="button" tabIndex={0}
-                  onClick={() => onOpen(t.task_id)} onKeyDown={(e) => e.key === 'Enter' && onOpen(t.task_id)}
-                  initial={{ opacity: 0, scale: 0.94 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0 }} transition={{ layout: { duration: 0.7, ease: easeInOut }, duration: 0.4 }}>
-                  <div className="task-card-top mono"><span>{t.task_id}</span><span>{t.source_issue}</span></div>
-                  <b>{t.title}</b>
-                  <div className="task-card-tags">
-                    <StatePill state={t.state} />
-                    {t.priority !== 'unset' && <span className={`chip ${t.priority === 'high' || t.priority === 'critical' ? 'hot' : ''}`}>{t.priority}</span>}
-                    {t.attempts > 1 && <span className="chip">attempt {t.attempts}</span>}
-                  </div>
-                  {t.assigned_agent && <span className="working"><span className="move-dot" style={{ background: agentColor(t.assigned_agent), width: 10, height: 10 }} />{t.assigned_agent} is on it</span>}
-                </motion.div>
-              ))}
-            </AnimatePresence>
-            {!lane.tasks.length && <div className="lane-empty">Nothing here</div>}
-          </div>
+            {cards(lane)}
+          </motion.div>
         ))}
       </div>
     </LayoutGroup>
   )
+}
+
+function useMedia(q: string) {
+  const [on, setOn] = useState(() => typeof window !== 'undefined' && window.matchMedia(q).matches)
+  useEffect(() => {
+    const m = window.matchMedia(q)
+    const f = () => setOn(m.matches)
+    m.addEventListener('change', f)
+    return () => m.removeEventListener('change', f)
+  }, [q])
+  return on
 }
 
 /* ------------------------------------------------------------------ activity + runs */
@@ -200,10 +276,23 @@ function TaskDrawer({ repoId, task, onClose }: { repoId: string; task?: Task; on
     toast.ok({ merge: 'Merging', approve: 'Approved', reject: 'Sent back to the coder', reopen: 'Back to the swarm', close: 'Closed' }[type], `${task.task_id} · the worker takes it from here`)
   }
 
-  return (
+  // Esc closes it, and the page behind doesn't scroll while it's open
+  const close = useRef(onClose)
+  close.current = onClose
+  useEffect(() => {
+    const key = (e: KeyboardEvent) => { if (e.key === 'Escape') close.current() }
+    window.addEventListener('keydown', key)
+    const html = document.documentElement, prev = html.style.overflow
+    html.style.overflow = 'hidden'
+    return () => { window.removeEventListener('keydown', key); html.style.overflow = prev }
+  }, [])
+
+  // portaled: the page underneath is transformed during transitions, which would pin a fixed drawer to it
+  return createPortal(
     <>
-      <motion.div className="scrim" onClick={onClose} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} />
-      <motion.aside className="drawer" role="dialog" aria-label={task?.title || 'Task'} initial={{ x: '105%' }} animate={{ x: 0 }} exit={{ x: '105%' }} transition={{ duration: 0.6, ease: easeInOut }}>
+      <motion.div className="scrim scrim--drawer" onClick={onClose} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.3 }} />
+      <motion.aside className="drawer" role="dialog" aria-modal="true" aria-label={task?.title || 'Task'} initial={{ x: '104%' }} animate={{ x: 0 }} exit={{ x: '104%' }}
+        transition={{ type: 'spring', stiffness: 380, damping: 40, mass: 0.9 }}>
         {!task ? <div className="drawer-body"><p className="muted">Loading task…</p></div> : (
           <>
             <header className="drawer-head">
@@ -212,7 +301,9 @@ function TaskDrawer({ repoId, task, onClose }: { repoId: string; task?: Task; on
                 <h2>{task.title}</h2>
                 <div className="task-card-tags"><StatePill state={task.state} /><span className="chip">{kindLabel(task.kind)}</span>{task.priority !== 'unset' && <span className="chip">{task.priority}</span>}</div>
               </div>
-              <button className="icon-btn" onClick={onClose} aria-label="Close">✕</button>
+              <button className="drawer-close" onClick={onClose} aria-label="Close" title="Close (Esc)">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round"><path d="M6 6l12 12M18 6L6 18" /></svg>
+              </button>
             </header>
             <div className="drawer-body">
               <Stepper task={task} />
@@ -234,6 +325,13 @@ function TaskDrawer({ repoId, task, onClose }: { repoId: string; task?: Task; on
                   ))}</div>
                 </div>
               )}
+              {!!task.artifacts.second_opinions?.length && (
+                <div className="dsec"><h4>Second opinions</h4>
+                  <div className="checks">{task.artifacts.second_opinions.map((o) => (
+                    <div key={o.url} className={`check ${o.verdict === 'reject' ? 'no' : 'ok'}`}><span className="check-ic">{o.verdict === 'reject' ? '✕' : o.verdict === 'approve' ? '✓' : '·'}</span><span className="mono">{o.agent}</span><span className="check-detail">{o.text || o.verdict}</span></div>
+                  ))}</div>
+                </div>
+              )}
               <div className="dsec"><h4>History</h4>
                 <ul className="hist">{task.history.slice().reverse().map((h, k) => (
                   <li key={k}><span className="move-dot" style={{ background: agentColor(h.agent) }} /><span><span className="who">{h.agent}</span>{h.action}</span><span className="muted">{timeAgo(h.ts)}</span></li>
@@ -244,7 +342,8 @@ function TaskDrawer({ repoId, task, onClose }: { repoId: string; task?: Task; on
           </>
         )}
       </motion.aside>
-    </>
+    </>,
+    document.body,
   )
 }
 

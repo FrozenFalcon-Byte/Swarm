@@ -1,10 +1,18 @@
 # Swarm
 
 Four narrow AI agents (**Triager, Coder, Tester, Reviewer**) that maintain a GitHub
-repository by moving cards across a shared task board, the way a real dev team works.
-They never talk to each other directly. Each agent reads cards from its own column
-and writes them to the next. Every change is validated by a state machine and
-recorded in the card's history. Nothing merges without a human.
+repository, the way a real dev team works. Each agent is its own **A2A** (Agent2Agent)
+service with an agent card listing its skills. When one finishes with a task, it finds
+the peer offering the skill the task needs next and sends it a message; the peer streams
+back its progress and result. The shared board is the record: every change is validated
+by a state machine and kept in the card's history. Nothing merges without a human.
+
+- `swarm agents` serves the four agents over HTTP for any A2A client (cards at
+  `/agents/<name>/.well-known/agent-card.json`).
+- `swarm server` exposes one public A2A agent, **Swarm**, at `/a2a` (bearer token), so
+  other agents can read the board, start runs and follow every hand-off live.
+- The reviewer can ask outside A2A agents for a second opinion before a fix waits for you.
+- Every A2A message is logged and shown in the dashboard under *Agent traffic*.
 
 **v1 niche: flaky tests.** When a single green run can't prove a fix (it never can
 for a flaky test), the Tester **writes a harness**. It checks that the harness catches

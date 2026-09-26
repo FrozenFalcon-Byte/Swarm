@@ -1,12 +1,15 @@
 import { AnimatePresence, LayoutGroup, motion } from 'motion/react'
 import { useRef, useState, type FormEvent, type ReactNode } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Avatar } from '../../components/Avatar'
 import { AvatarCropper } from '../../components/AvatarCropper'
+import { createPortal } from 'react-dom'
 import { Roll } from '../../components/Roll'
 import { passkeysSupported, webauthnError } from '../../lib/api'
 import { friendlyAuthError, useAuth } from '../../lib/auth'
-import { removePasskey, renamePasskey, setAvatar, usePasskeys, useProfile } from '../../lib/data'
+import { removePasskey, renamePasskey, setAvatar, useAllTasks, usePasskeys, useProfile, useRepos } from '../../lib/data'
+import { Activity, Preferences, Workspace, YourData } from './ProfileExtras'
+import { IdentityCard, PhotoSwap } from './IdentityCard'
+import { PanelLayout, usePanel, type PanelItem } from '../../components/PanelLayout'
 import { easeInOut, easeOut } from '../../lib/motion'
 import { Section, timeAgo } from './ui'
 import { useToast } from '../../components/Island'
@@ -16,12 +19,15 @@ type Op = () => Promise<unknown>
 export default function Profile() {
   const { user, logOut, version } = useAuth()
   const profile = useProfile(user?.uid)
+  const { data: repos } = useRepos(user?.uid)
+  const tasks = useAllTasks(repos.map((r) => r.id))
   const [file, setFile] = useState<File | null>(null)
   const [dragging, setDragging] = useState(false)
   const [reauth, setReauth] = useState<{ op: Op; done: string; after?: Report } | null>(null)
   const input = useRef<HTMLInputElement>(null)
   const navigate = useNavigate()
   const toast = useToast()
+  const [tab, setTab] = usePanel(SECTIONS, 'account')
   if (!user) return null
 
   const providers = user.providerData.map((p) => p.providerId)
@@ -38,43 +44,53 @@ export default function Profile() {
 
   const pick = (f?: File | null) => { if (f && f.type.startsWith('image/')) setFile(f) }
 
+  const fixed = tasks.filter((t) => t.state === 'Merged' || t.state === 'Approved').length
+  const waiting = tasks.filter((t) => t.state === 'Approved' || t.state === 'Needs Human').length
+  const drop = {
+    onDragOver: (e: React.DragEvent) => { e.preventDefault(); setDragging(true) },
+    onDragLeave: () => setDragging(false),
+    onDrop: (e: React.DragEvent) => { e.preventDefault(); setDragging(false); pick(e.dataTransfer.files[0]) },
+  }
+  const signOut = () => { navigate('/', { replace: true }); void logOut() }
   return (
-    <div className="page" data-v={version}>
-      <motion.header className="profile-hero" initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.7, ease: easeOut }}>
-        <button type="button" className={`profile-photo ${dragging ? 'is-drop' : ''}`} onClick={() => input.current?.click()} aria-label="Change profile picture"
-          onDragOver={(e) => { e.preventDefault(); setDragging(true) }} onDragLeave={() => setDragging(false)}
-          onDrop={(e) => { e.preventDefault(); setDragging(false); pick(e.dataTransfer.files[0]) }}>
-          <motion.span className="profile-photo-inner" initial={{ scale: 0.6, rotate: -12 }} animate={{ scale: 1, rotate: 0 }} transition={{ type: 'spring', stiffness: 220, damping: 16, delay: 0.1 }}>
-            <Avatar size={132} src={profile?.avatar ?? null} name={user.displayName || user.email} />
-          </motion.span>
-          <span className="profile-photo-cta"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M4 8h3l2-3h6l2 3h3v11H4z" /><circle cx="12" cy="13" r="3.5" /></svg>{profile?.avatar ? 'Change' : 'Add photo'}</span>
-        </button>
-        <input ref={input} type="file" accept="image/*" hidden onChange={(e) => { pick(e.target.files?.[0]); e.target.value = '' }} />
-        <div className="profile-id">
-          <p className="surtitle"><span style={{ background: 'var(--green)' }} />Your profile</p>
-          <h1>{user.displayName || user.email?.split('@')[0]}</h1>
-          <p className="profile-sub">{user.email}{since && <> · with Swarm since {since}</>}</p>
-          <div className="profile-methods">{providers.map((p) => <span key={p} className="chip">{PROVIDER[p]?.label || p}</span>)}</div>
-        </div>
-        {profile?.avatar && <button type="button" className="btn btn-line btn-sm profile-remove" onClick={async () => { await setAvatar(user.uid, null); toast.info('Photo removed') }}><Roll>Remove photo</Roll></button>}
-      </motion.header>
+    <div className="page page--wide" data-v={version}>
+      <IdentityCard uid={user.uid} name={user.displayName || user.email?.split('@')[0] || 'You'}
+        sub={<>{user.email}{since && <> · with Swarm since {since}</>}</>}
+        chips={providers.map((p) => <span key={p} className="chip">{PROVIDER[p]?.label || p}</span>)}
+        photo={<PhotoSwap src={profile?.avatar ?? null} initial={(user.displayName || user.email || '?').slice(0, 1).toUpperCase()} size={116} />}
+        onPhoto={() => input.current?.click()} dragging={dragging} dropProps={drop}
+        onRemove={profile?.avatar ? async () => { await setAvatar(user.uid, null); toast.info('Photo removed') } : undefined}
+        stats={[['repositories', repos.length], ['tests fixed', fixed], ['waiting for you', waiting]]} />
+      <input ref={input} type="file" accept="image/*" hidden onChange={(e) => { pick(e.target.files?.[0]); e.target.value = '' }} />
 
-      <AvatarCropper file={file} onCancel={() => setFile(null)} onSave={async (data) => { await setAvatar(user.uid, data); setFile(null); toast.ok('Photo updated', 'Looking sharp.') }} />
+      <AvatarCropper file={file} onCancel={() => setFile(null)} onSave={async (data) => { setFile(null); await setAvatar(user.uid, data); toast.ok('Photo updated', 'Looking sharp.') }} />
 
-      <div className="profile-grid">
-        <Details guarded={guarded} />
-        <SignInMethods guarded={guarded} />
-        <Passkeys />
-        <Section title="Leave Swarm" className="card-danger">
-          <DeleteAccount guarded={guarded} onDone={() => navigate('/')} />
-        </Section>
-        <div className="profile-signout"><button className="btn btn-ghost" onClick={async () => { await logOut(); navigate('/') }}><Roll>Sign out</Roll></button></div>
-      </div>
+      <PanelLayout items={SECTIONS} active={tab} onPick={setTab}
+        foot={<button className="pl-signout" onClick={signOut}><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M15 17l5-5-5-5M20 12H9M12 21H5a2 2 0 01-2-2V5a2 2 0 012-2h7" /></svg>Sign out</button>}>
+        {tab === 'account' && <div className="pl-grid"><Details guarded={guarded} /><Workspace prefs={profile?.prefs ?? {}} /></div>}
+        {tab === 'security' && <div className="pl-grid"><SignInMethods guarded={guarded} /><Passkeys /></div>}
+        {tab === 'preferences' && <Preferences prefs={profile?.prefs ?? {}} />}
+        {tab === 'activity' && <Activity repos={repos} tasks={tasks} />}
+        {tab === 'data' && (
+          <div className="pl-grid">
+            <YourData profile={profile} repos={repos} tasks={tasks} />
+            <Section title="Leave Swarm" className="card-danger"><DeleteAccount guarded={guarded} onDone={() => navigate('/')} /></Section>
+          </div>
+        )}
+      </PanelLayout>
 
       <Reauth state={reauth} onClose={() => setReauth(null)} />
     </div>
   )
 }
+
+const SECTIONS: PanelItem[] = [
+  { id: 'account', label: 'Account', hint: 'Name, email, your workspace', color: 'var(--coder)' },
+  { id: 'security', label: 'Sign-in & security', hint: 'Methods and passkeys', color: 'var(--reviewer)' },
+  { id: 'preferences', label: 'Preferences', hint: 'Notifications, motion, start page', color: 'var(--triager)' },
+  { id: 'activity', label: 'Activity', hint: 'What the agents did for you', color: 'var(--tester)' },
+  { id: 'data', label: 'Your data', hint: 'Export, account ID, leave', color: 'var(--lab)' },
+]
 
 type Report = (msg: string, ok: boolean) => void
 type Guarded = (op: Op, done: string, report: Report) => Promise<void>
@@ -298,7 +314,7 @@ function Reauth({ state, onClose }: { state: { op: Op; done: string; after?: Rep
       setPw(''); onClose()
     } catch (x) { setErr(friendlyAuthError(x)) } finally { setBusy(false) }
   }
-  return (
+  return createPortal(
     <AnimatePresence>
       {state && (
         <motion.div className="modal" role="dialog" aria-label="Confirm it’s you" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
@@ -314,6 +330,7 @@ function Reauth({ state, onClose }: { state: { op: Op; done: string; after?: Rep
           </motion.form>
         </motion.div>
       )}
-    </AnimatePresence>
+    </AnimatePresence>,
+    document.body,
   )
 }

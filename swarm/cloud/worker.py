@@ -26,7 +26,8 @@ from google.cloud import firestore as gfs
 from ..board import InvalidTransition, TaskState
 from ..board.models import utcnow
 from ..config import Settings
-from ..issues import from_file, from_github
+from .. import lab
+from ..issues import Issue, from_file, from_github
 from ..orchestrator import Swarm
 from . import firebase
 from .board import FirestoreTaskBoard
@@ -73,19 +74,37 @@ class Worker:
         swarm = Swarm(s, board=board, registry=registry)
         activity = self.db.collection("repos").document(repo_id).collection("activity")
         swarm.on_activity(lambda e: activity.add({**e, "createdAt": gfs.SERVER_TIMESTAMP}))
+        # every A2A message, status update and result between agents, for the Handoffs view
+        a2a = self.db.collection("repos").document(repo_id).collection("a2a")
+        swarm.on_exchange(lambda e: a2a.add({**e, "createdAt": gfs.SERVER_TIMESTAMP}))
+        outside = (repo.get("settings") or {}).get("secondOpinionAgents")
+        if isinstance(outside, list):
+            swarm.network.external = [u for u in outside if isinstance(u, str) and u.startswith(("https://", "http://"))][:3]
         return swarm
 
     def _prepare_checkout(self, swarm: Swarm, repo: dict) -> None:
         dest = swarm.settings.repo_path
+        if repo.get("source") == "lab":
+            written = lab.materialize(lab.project_of(repo["_lab"]).files, dest)
+            if written:
+                log.info("lab: wrote %d new files", len(written))
+            return
         if repo.get("source") == "demo":
             if not dest.exists():
                 shutil.copytree(ROOT / "demo_repo", dest, ignore=shutil.ignore_patterns("__pycache__"))
+            if repo.get("_lab"):  # an admin made up extra waves of bugs on top of the demo
+                lab.materialize(lab.project_of(repo["_lab"]).files, dest)
             return
         sync_checkout(repo["fullName"], dest, self._token(repo), repo.get("defaultBranch"))
 
     def _issues(self, repo: dict):
+        if repo.get("source") == "lab":
+            return [Issue(i["number"], i["title"], i.get("body") or "", i.get("labels") or [])
+                    for i in lab.project_of(repo["_lab"]).issues]
         if repo.get("source") == "demo":
-            return from_file(ROOT / "demo_issues.json")
+            extra = [Issue(i["number"], i["title"], i.get("body") or "", i.get("labels") or [])
+                     for i in lab.project_of(repo["_lab"]).issues] if repo.get("_lab") else []
+            return from_file(ROOT / "demo_issues.json") + extra
         try:
             return from_github(repo["fullName"], self._token(repo) or "")
         except httpx.HTTPStatusError as e:
@@ -131,18 +150,51 @@ class Worker:
             repo_ref.update(info)
             repo.update(info)
         swarm = self._swarm(repo_id, repo)
+        if repo.get("source") == "lab" or (repo.get("source") == "demo" and (repo.get("lab") or {}).get("waves")):
+            repo["_lab"] = self._lab_waves(repo_id, repo, swarm)
         self._prepare_checkout(swarm, repo)
         before = {t.task_id: t.state for t in swarm.board.list()}
         created = swarm.ingest(self._issues(repo))
-        rounds = swarm.run_until_idle()
+        messages = swarm.run_until_idle()
         self._upload_artifacts(repo_id, swarm)
         after = swarm.board.list()
         moved = sum(1 for t in after if before.get(t.task_id) != t.state)
         stats = self.compute_stats(swarm)
         repo_ref.update({"status": "idle", "stats": stats, "lastRunAt": gfs.SERVER_TIMESTAMP, "lastError": None,
                          "lastSyncedAt": started})
-        return {"ingested": created, "rounds": rounds, "tasksMoved": moved, "llm": swarm.llm.describe()["active"],
+        return {"ingested": created, "messages": messages, "tasksMoved": moved, "llm": swarm.llm.describe()["active"],
                 "sandbox": swarm.sandbox.backend}
+
+    def _lab_waves(self, repo_id: str, repo: dict, swarm: Swarm) -> list[dict]:
+        """Test-lab repos: make up every wave that was asked for and not made yet, then return them all."""
+        repo_ref = self.db.collection("repos").document(repo_id)
+        store = repo_ref.collection("lab")
+        records = sorted((s.to_dict() for s in store.stream()), key=lambda r: r["index"])
+        specs = ((repo.get("lab") or {}).get("waves") or [])[:20]
+        activity = repo_ref.collection("activity")
+
+        def say(msg: str) -> None:
+            log.info("lab %s: %s", repo_id, msg)
+            activity.add({"ts": utcnow(), "agent": "lab", "message": msg, "task_id": None, "createdAt": gfs.SERVER_TIMESTAMP})
+
+        for i in range(len(records), len(specs)):
+            spec = specs[i] if isinstance(specs[i], dict) else {}
+            avoid = []
+            if i == 0:
+                mine = self.db.collection("repos").where(filter=gfs.FieldFilter("ownerUid", "==", repo["ownerUid"])).stream()
+                avoid = [(r.to_dict() or {}).get("displayName", "") for r in mine if (r.to_dict() or {}).get("source") == "lab"][:20]
+            say(f"making up wave {i + 1}")
+            repo_ref.update({"labStatus": f"making up wave {i + 1}"})
+            rec = lab.make_wave(spec, lab.LabState.of(records), swarm.llm, swarm.settings, avoid=avoid, say=say)
+            rec.update(index=i, createdAt=gfs.SERVER_TIMESTAMP)
+            store.document(f"{i:03d}").set(rec)
+            records.append(rec)
+            if i == 0 and repo.get("source") == "lab":
+                repo_ref.update({"displayName": rec["package"], "fullName": f"lab/{rec['package']}",
+                                 "description": rec["description"][:200]})
+            say(f"wave {i + 1}: {len(rec['bugs'])} bugs and {len(rec['issues'])} issues, made by {rec['via']}")
+        repo_ref.update({"labStatus": None})
+        return records
 
     def _upload_artifacts(self, repo_id: str, swarm: Swarm) -> None:
         """Patches and test results go to Cloud Storage alongside the task that made them (when there is a bucket;
@@ -278,8 +330,15 @@ class Worker:
             "lastSeen": gfs.SERVER_TIMESTAMP, "llm": LLM(self.settings).describe(),
             "sandbox": Sandbox(self.settings).backend, "host": socket.gethostname(),
             "syncMinutes": self.sync_minutes, "githubFallbackToken": bool(os.environ.get("GITHUB_TOKEN")),
-            "mode": self.mode,
+            "mode": self.mode, "protocol": "a2a", "agents": self._cards(),
         })
+
+    @staticmethod
+    def _cards() -> list[dict]:
+        from ..a2a import AGENTS, agent_card, card_json
+        from ..a2a.network import INTERNAL_URL
+
+        return [card_json(agent_card(name, INTERNAL_URL)) for name in AGENTS]
 
     def run_once(self) -> None:
         """One pass for scheduled hosts (cron, CI): sync issues, then work until nothing is waiting."""

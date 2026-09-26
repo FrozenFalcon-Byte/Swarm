@@ -23,6 +23,7 @@ const FLOW = [
 const PLACES = [
   { to: '/app', name: 'Overview', text: 'How your repos are doing, and everything waiting for you.' },
   { to: '/app/repos', name: 'Repositories', text: 'Connect a repo. Each one has a board, an activity feed, its tools and its runs.' },
+  { to: '/app/agents', name: 'Agents', text: 'The agents’ cards, how other agents can talk to Swarm, and second opinions.' },
   { to: '/app/tools', name: 'Tools', text: 'Test harnesses the tester wrote and saved for reuse.' },
   { to: '/app/settings', name: 'Settings', text: 'GitHub, the worker, models, and access tokens for Claude and other AI tools.' },
   { to: '/app/profile', name: 'Your profile', text: 'Your name, photo, sign-in methods and passkeys.' },
@@ -31,7 +32,10 @@ const PLACES = [
 const WORDS: [string, string][] = [
   ['Random test failure', 'A test that passes on one run and fails on the next without any code changing. Engineers often call these “flaky tests”. They waste hours because nobody can tell a real bug from noise.'],
   ['Swarm', 'A group of small, focused agents working together, like a swarm of bees. Each agent does one job well; together they take an issue all the way to a reviewed fix.'],
-  ['Board', 'The shared list of tasks every agent reads and updates. Agents never talk to each other directly: they move cards on the board, and every move is recorded.'],
+  ['Board', 'The shared record of every task. Each agent writes what it did here, so you, Claude and the agents all see the same state.'],
+  ['A2A', 'Agent2Agent, an open protocol for agents to talk to each other. Each Swarm agent is an A2A service: when it finishes, it sends the next agent a message directly. You can watch those messages under a repository’s Agent traffic tab.'],
+  ['Agent card', 'A small JSON file an A2A agent publishes: its name, what skills it offers and how to reach it. Agents find each other by reading cards.'],
+  ['Second opinion', 'An outside A2A agent the reviewer can ask about a fix before it waits for you. Its answer is advice only.'],
   ['Task', 'One GitHub issue as the agents see it, with its fix, test results, review and full history.'],
   ['Run', 'One working session: the worker fetches new issues and the agents work until nothing more can move.'],
   ['Worker', 'The program that runs the agents. It lives on a computer or server you control, never in your browser.'],
@@ -57,7 +61,7 @@ export default function Help() {
         <div className="help-hero-copy">
           <p className="surtitle"><span style={{ background: 'var(--triager)' }} />Help</p>
           <h1>Why “Swarm”?</h1>
-          <p>Because it’s not one big AI. It’s four small ones, each with one job, working the same board like a swarm of bees. Together they take a failing test from a new issue to a fix you only have to approve.</p>
+          <p>Because it’s not one big AI. It’s four small ones, each with one job, passing work to each other like a swarm of bees. Together they take a failing test from a new issue to a fix you only have to approve.</p>
         </div>
         <HiveArt />
       </motion.header>

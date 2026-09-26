@@ -82,7 +82,29 @@ img, svg { display: block; max-width: 100%; }
   *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
 }
 
-.splash { min-height: 100svh; display: grid; place-items: center; background: var(--white); }
+.splash { min-height: 60svh; display: grid; place-items: center; }
+.splash-dots { display: flex; gap: 7px; opacity: 0; animation: splash-in 0.4s var(--ease-out) 0.45s forwards; }
+.splash-dots i { width: 9px; height: 9px; border-radius: 50%; border: 1.5px solid var(--ink); animation: splash-hop 1.1s var(--ease-in-out) infinite; }
+.splash-dots i:nth-child(1) { background: var(--triager); } .splash-dots i:nth-child(2) { background: var(--coder); animation-delay: 0.12s; }
+.splash-dots i:nth-child(3) { background: var(--tester); animation-delay: 0.24s; } .splash-dots i:nth-child(4) { background: var(--reviewer); animation-delay: 0.36s; }
+@keyframes splash-in { to { opacity: 1; } }
+@keyframes splash-hop { 0%, 60%, 100% { transform: translateY(0); } 30% { transform: translateY(-7px); } }
+
+/* the page underneath the boot screen, as it folds away (see lib/boot.ts and index.html) */
+.booting-in .pt-content > :not(.shell) { animation: boot-rise 0.95s var(--ease-out) both; }
+.booting-in .side-nav > *, .booting-in .side-repos, .booting-in .side-foot { animation: boot-slide 0.8s var(--ease-out) both; }
+.booting-in .side-nav > :nth-child(2) { animation-delay: 0.04s; } .booting-in .side-nav > :nth-child(3) { animation-delay: 0.08s; }
+.booting-in .side-nav > :nth-child(4) { animation-delay: 0.12s; } .booting-in .side-nav > :nth-child(5) { animation-delay: 0.16s; }
+.booting-in .side-nav > :nth-child(6) { animation-delay: 0.2s; } .booting-in .side-nav > :nth-child(7) { animation-delay: 0.24s; }
+.booting-in .side-nav > :nth-child(n + 8) { animation-delay: 0.28s; }
+.booting-in .side-repos { animation-delay: 0.3s; } .booting-in .side-foot { animation-delay: 0.36s; }
+.booting-in .main .page > * { animation: boot-rise 0.9s var(--ease-out) both; }
+.booting-in .main .page > :nth-child(2) { animation-delay: 0.08s; } .booting-in .main .page > :nth-child(3) { animation-delay: 0.16s; }
+.booting-in .main .page > :nth-child(n + 4) { animation-delay: 0.24s; }
+@keyframes boot-rise { from { opacity: 0; transform: translateY(22px); } to { opacity: 1; transform: none; } }
+@keyframes boot-slide { from { opacity: 0; transform: translateX(-14px); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) { .booting-in * { animation: none !important; } }
+.less-motion *, .less-motion *::before, .less-motion *::after { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important; scroll-behavior: auto !important; }
 
 /* Ctrl primitives shared by landing and app */
 .surtitle { display: inline-flex; align-items: center; gap: 12px; font-size: 18px; font-weight: 500; }
@@ -139,3 +161,7 @@ img, svg { display: block; max-width: 100%; }
 .island-wave i { width: 3px; height: 100%; border-radius: 2px; background: var(--triager); animation: wave 0.9s var(--ease-in-out) infinite; }
 .island-wave i:nth-child(2) { animation-delay: 0.12s; background: var(--coder); } .island-wave i:nth-child(3) { animation-delay: 0.24s; background: var(--tester); } .island-wave i:nth-child(4) { animation-delay: 0.36s; background: var(--reviewer); }
 @keyframes wave { 0%, 100% { transform: scaleY(0.3); } 50% { transform: scaleY(1); } }
+
+/* ---------- the Swarm logo (used everywhere, so it lives here) */
+.logo { display: inline-flex; align-items: center; gap: 10px; font-weight: 600; font-size: 26px; letter-spacing: -0.04em; justify-self: start; }
+.logo .mark { width: 34px; height: 34px; }

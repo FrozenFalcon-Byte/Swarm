@@ -8,11 +8,13 @@ import { useAllTasks, useRepos } from '../../lib/data'
 import { easeOut } from '../../lib/motion'
 import { AGENTS, type Task } from '../../lib/types'
 import ConnectRepo from './ConnectRepo'
+import { useBootHold } from '../../lib/boot'
 import { CountUp, EmptyState, Section, StatePill, evidenceRows, timeAgo } from './ui'
 
 export default function Overview() {
   const { user } = useAuth()
   const { data: repos, loading } = useRepos(user?.uid)
+  useBootHold(loading)
   const tasks = useAllTasks(repos.map((r) => r.id))
   const first = (user?.displayName || 'there').split(' ')[0]
 

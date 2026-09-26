@@ -1,0 +1,21 @@
+# Render blueprint for `swarm server`: MCP, the A2A gateway and passkey sign-in, on the free plan.
+# New → Blueprint in the Render dashboard, pick this repository, then fill in the secrets it asks for.
+# The worker doesn't run here: it runs on a schedule in GitHub Actions (.github/workflows/worker.yml).
+services:
+  - type: web
+    name: swarm-server
+    runtime: docker
+    plan: free
+    dockerfilePath: ./Dockerfile
+    dockerCommand: swarm server
+    healthCheckPath: /healthz
+    autoDeploy: true
+    envVars:
+      - key: FIREBASE_SERVICE_ACCOUNT_JSON  # the whole service-account JSON, pasted as one value
+        sync: false
+      - key: SWARM_PUBLIC_URL               # https://swarm-server-xxxx.onrender.com (after the first deploy)
+        sync: false
+      - key: SWARM_WEB_ORIGINS
+        value: https://swarm-4ce56.web.app,https://swarm-4ce56.firebaseapp.com
+      - key: SWARM_HOME
+        value: /tmp/swarm

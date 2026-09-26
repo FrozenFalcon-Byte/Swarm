@@ -19,6 +19,15 @@ from ..retrieval import RepoIndex, Symbol
 from .base import Agent
 
 TEST_ID = re.compile(r"\btest_[a-z0-9_]+\b")
+# a mutable default argument, or a module-level list/dict/set that functions write to
+SHARED_DEFAULT = re.compile(r"def \w+\([^)]*=\s*(\[\]|\{\}|list\(\)|dict\(\)|set\(\))\s*[,)]")
+MODULE_STATE = re.compile(r"^_?[A-Za-z_]\w*\s*(:\s*[\w\[\], ]+)?=\s*(\[\]|\{\}|list\(\)|dict\(\)|set\(\))\s*$", re.M)
+_STRINGS = re.compile(r'''(?s)[rbfuRBFU]{0,2}("""|\'\'\'|"|\')(?:\\.|(?!\1).)*?\1''')
+
+
+def _without_strings(src: str) -> str:
+    """Source with string literals blanked, so braces in f-strings aren't read as set literals."""
+    return _STRINGS.sub('""', src)
 
 
 def _digest(diff: str) -> str:
@@ -29,7 +38,7 @@ def _digest(diff: str) -> str:
 class Context:
     tests: list[Symbol]
     targets: list[Symbol]  # code under test
-    flakiness_source: str  # hash-order | rng | time | unknown
+    flakiness_source: str  # hash-order | rng | time | shared-state | unknown
     files: dict[str, str] = field(default_factory=dict)
 
 
@@ -137,10 +146,12 @@ class CoderAgent(Agent):
                 # one hop further: helpers the code under test calls
                 for inner in s.calls:
                     targets.extend(x for x in index.find(inner, tests=False) if x not in targets)
-        src = "\n".join(s.source for s in targets)
-        if re.search(r"\bset\(|\{[^}:]+\}|frozenset\(", src):
+        src = _without_strings("\n".join(s.source for s in targets))
+        if SHARED_DEFAULT.search(src) or MODULE_STATE.search(_without_strings("\n".join(index.files.get(p, "") for p in {s.path for s in targets}))):
+            source = "shared-state"
+        elif re.search(r"\bset\(|\{[^}:]+\}|frozenset\(", src):
             source = "hash-order"
-        elif "random." in src or "uuid" in src:
+        elif "random." in src or "uuid" in src or re.search(r"^\s*from random import", src, re.M):
             source = "rng"
         elif "time." in src or "datetime.now" in src or "sleep(" in src:
             source = "time"
@@ -154,6 +165,8 @@ class CoderAgent(Agent):
         strategies = [
             ("sort-set-result", self._fix_sort_set_result),
             ("bound-jitter", self._fix_bound_jitter),
+            ("fresh-default", self._fix_fresh_default),
+            ("unique-clock-id", self._fix_unique_clock_id),
             # Last resort, and naive: pins the RNG in the test. The reviewer is expected to push back.
             ("seed-test-rng", self._fix_seed_test_rng),
         ]
@@ -194,6 +207,56 @@ class CoderAgent(Agent):
                 new = "import random\n" + new
             changes[t.path] = (old, new)
         return Proposal("seed-test-rng", "Test depends on unseeded randomness; seed the RNG in the test.", changes)
+
+    def _fix_fresh_default(self, ctx: Context) -> Proposal | None:
+        changes: dict[str, tuple[str, str]] = {}
+        for sym in ctx.targets:
+            m = re.search(r"^(\s*)def \w+\(.*?\b(\w+)\s*=\s*(\[\]|\{\}|list\(\)|dict\(\)|set\(\))\s*[,)].*:\s*$", sym.source, re.M)
+            if not m:
+                continue
+            name, empty = m.group(2), m.group(3)
+            lines = sym.source.splitlines()
+            head = next(i for i, l in enumerate(lines) if l.rstrip().endswith(":") and "def " in lines[0])
+            lines[head] = re.sub(rf"\b{name}\s*=\s*{re.escape(empty)}", f"{name}=None", lines[head], count=1)
+            body = head + 1
+            indent = re.match(r"\s*", lines[body]).group(0) if body < len(lines) else m.group(1) + "    "
+            if body < len(lines) and lines[body].strip().startswith(('"""', "'''")):
+                q = lines[body].strip()[:3]
+                if not (lines[body].strip().count(q) >= 2 and len(lines[body].strip()) > 3):
+                    body += 1
+                    while body < len(lines) and q not in lines[body]:
+                        body += 1
+                body += 1
+            lines[body:body] = [f"{indent}if {name} is None:", f"{indent}    {name} = {empty}"]
+            new_src = "\n".join(lines) + ("\n" if sym.source.endswith("\n") else "")
+            self._edit_symbol(ctx, sym, new_src, changes)
+        if not changes:
+            return None
+        return Proposal("fresh-default",
+                        "A mutable default argument is created once and shared by every call, so items from one "
+                        "call (or one test) leak into the next. Defaulting to None and making a fresh one per call "
+                        "keeps calls independent.", changes)
+
+    def _fix_unique_clock_id(self, ctx: Context) -> Proposal | None:
+        changes: dict[str, tuple[str, str]] = {}
+        for sym in ctx.targets:
+            m = re.search(r"str\(int\(time\.time\(\)\s*\*\s*\d+\)\)", sym.source)
+            if not m:
+                continue
+            self._edit_symbol(ctx, sym, sym.source.replace(m.group(0), m.group(0) + ' + "-" + str(next(_SEQUENCE))'), changes)
+            old, new = changes[sym.path]
+            if "_SEQUENCE = " not in new:
+                if not re.search(r"^import itertools$", new, re.M):
+                    new = "import itertools\n" + new
+                imports = list(re.finditer(r"^(import|from) .*$", new, re.M))
+                at = imports[-1].end() if imports else 0
+                new = new[:at] + "\n\n_SEQUENCE = itertools.count(1)" + new[at:]
+            changes[sym.path] = (old, new)
+        if not changes:
+            return None
+        return Proposal("unique-clock-id",
+                        "The id is only the time in milliseconds, so two made in the same millisecond are equal. "
+                        "Adding a process-wide counter keeps every id unique while keeping the timestamp.", changes)
 
     def _fix_bound_jitter(self, ctx: Context) -> Proposal | None:
         changes: dict[str, tuple[str, str]] = {}

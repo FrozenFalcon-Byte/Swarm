@@ -5,6 +5,11 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
     function signedIn() { return request.auth != null; }
+    // Admins (the test lab) are listed in admins/{uid}, written only with `swarm admin add`.
+    function isAdmin() { return signedIn() && exists(/databases/$(database)/documents/admins/$(request.auth.uid)); }
+    function labWaves(d) {
+      return d.lab is map && d.lab.keys().hasOnly(['waves']) && d.lab.waves is list && d.lab.waves.size() <= 20;
+    }
     function isMember(repoId) {
       return signedIn() && request.auth.uid in get(/databases/$(database)/documents/repos/$(repoId)).data.members;
     }
@@ -30,19 +35,28 @@ service cloud.firestore {
       allow create: if signedIn()
         && request.resource.data.ownerUid == request.auth.uid
         && request.resource.data.members == [request.auth.uid]
-        && request.resource.data.source in ['github', 'demo']
+        && (request.resource.data.source in ['github', 'demo']
+            || (request.resource.data.source == 'lab' && isAdmin() && labWaves(request.resource.data)))
         && request.resource.data.fullName is string
         && request.resource.data.status == 'queued'
         && request.resource.data.keys().hasOnly(['fullName', 'displayName', 'source', 'ownerUid', 'members', 'status',
-             'createdAt', 'defaultBranch', 'private', 'htmlUrl', 'description', 'settings']);
+             'createdAt', 'defaultBranch', 'private', 'htmlUrl', 'description', 'settings', 'lab']);
       // owners may rename/pause/delete; workers own everything else on the doc
       allow update: if signedIn() && resource.data.ownerUid == request.auth.uid
-        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['displayName', 'paused', 'settings']);
+        && (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['displayName', 'paused', 'settings'])
+            || (resource.data.source in ['lab', 'demo'] && isAdmin() && labWaves(request.resource.data)
+                && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['lab'])))
+        && (!('settings' in request.resource.data) || !('secondOpinionAgents' in request.resource.data.settings)
+            || (request.resource.data.settings.secondOpinionAgents is list && request.resource.data.settings.secondOpinionAgents.size() <= 3));
       allow delete: if signedIn() && resource.data.ownerUid == request.auth.uid;
 
       match /tasks/{taskId} { allow read: if isMember(repoId); }
       match /tools/{toolId} { allow read: if isMember(repoId); }
       match /activity/{id} { allow read: if isMember(repoId); }
+      // A2A traffic between the agents (messages, status updates, results), written by the worker
+      match /a2a/{id} { allow read: if isMember(repoId); }
+      // test-lab waves: the made-up files, issues, and the answer key (root causes and fixes)
+      match /lab/{id} { allow read: if isMember(repoId); }
 
       match /runs/{runId} {
         allow read: if isMember(repoId);
@@ -77,6 +91,8 @@ service cloud.firestore {
         && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['name'])
         && request.resource.data.name is string && request.resource.data.name.size() > 0 && request.resource.data.name.size() <= 60;
     }
+
+    match /admins/{uid} { allow read: if signedIn() && request.auth.uid == uid; }
 
     // Worker heartbeats: any signed-in user may see whether a worker is online.
     match /workers/{id} { allow read: if signedIn(); }

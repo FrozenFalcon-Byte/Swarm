@@ -22,11 +22,15 @@ class Agent:
         self.llm = llm or LLM(settings)
         self.log = logging.getLogger(f"swarm.{self.name}")
         self._on_activity = on_activity
+        # set while the agent serves an A2A request: each thing it says becomes a status update on that task
+        self.tap: Callable[[str], None] | None = None
 
     def say(self, message: str, task: Task | None = None) -> None:
         self.log.info("%s%s", f"[{task.task_id}] " if task else "", message)
         if self._on_activity:
             self._on_activity(self.name, message, task.task_id if task else None)
+        if self.tap:
+            self.tap(message)
 
     def step(self) -> bool:
         """Process one task from the input column. Returns True if work was done."""

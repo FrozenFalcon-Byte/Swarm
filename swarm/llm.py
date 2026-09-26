@@ -44,7 +44,7 @@ class Provider:
     def ready(self) -> bool:  # pragma: no cover - interface
         raise NotImplementedError
 
-    def complete(self, system: str, prompt: str, max_tokens: int, json_mode: bool) -> str:  # pragma: no cover
+    def complete(self, system: str, prompt: str, max_tokens: int, json_mode: bool, temperature: float = 0.1) -> str:  # pragma: no cover
         raise NotImplementedError
 
     @property
@@ -81,12 +81,12 @@ class Ollama(Provider):
     def model(self) -> str:
         return self._model or self.wanted
 
-    def complete(self, system: str, prompt: str, max_tokens: int, json_mode: bool) -> str:
+    def complete(self, system: str, prompt: str, max_tokens: int, json_mode: bool, temperature: float = 0.1) -> str:
         body: dict[str, Any] = {
             "model": self.model,
             "stream": False,
             "messages": [{"role": "system", "content": system}, {"role": "user", "content": prompt}],
-            "options": {"num_predict": max_tokens, "temperature": 0.1},
+            "options": {"num_predict": max_tokens, "temperature": temperature},
         }
         if json_mode:
             body["format"] = "json"
@@ -114,11 +114,11 @@ class OpenAICompatible(Provider):
     def model(self) -> str:
         return self._model
 
-    def complete(self, system: str, prompt: str, max_tokens: int, json_mode: bool) -> str:
+    def complete(self, system: str, prompt: str, max_tokens: int, json_mode: bool, temperature: float = 0.1) -> str:
         body: dict[str, Any] = {
             "model": self.model,
             "max_tokens": max_tokens,
-            "temperature": 0.1,
+            "temperature": temperature,
             "messages": [{"role": "system", "content": system}, {"role": "user", "content": prompt}],
         }
         if json_mode:
@@ -142,12 +142,12 @@ class Anthropic(Provider):
     def model(self) -> str:
         return self.settings.model
 
-    def complete(self, system: str, prompt: str, max_tokens: int, json_mode: bool) -> str:
+    def complete(self, system: str, prompt: str, max_tokens: int, json_mode: bool, temperature: float = 0.1) -> str:
         resp = httpx.post(
             f"{self.settings.anthropic_base_url.rstrip('/')}/v1/messages",
             headers={"x-api-key": self.settings.anthropic_api_key, "anthropic-version": "2023-06-01",
                      "content-type": "application/json"},
-            json={"model": self.model, "max_tokens": max_tokens, "system": system,
+            json={"model": self.model, "max_tokens": max_tokens, "system": system, "temperature": temperature,
                   "messages": [{"role": "user", "content": prompt}]},
             timeout=180,
         )
@@ -191,20 +191,23 @@ class LLM:
         return {"enabled": bool(ready), "active": f"{ready[0].name}:{ready[0].model}" if ready else None,
                 "fallbacks": [f"{p.name}:{p.model}" for p in ready[1:]], "last_used": self.last_used}
 
-    def complete(self, system: str, prompt: str, max_tokens: int = 4096, json_mode: bool = False) -> str:
+    def complete(self, system: str, prompt: str, max_tokens: int = 4096, json_mode: bool = False,
+                 temperature: float | None = None) -> str:
         errors = []
+        extra = {} if temperature is None else {"temperature": temperature}
         for p in self._ready():
             try:
-                text = _THINK.sub("", p.complete(system, prompt, max_tokens, json_mode)).strip()
+                text = _THINK.sub("", p.complete(system, prompt, max_tokens, json_mode, **extra)).strip()
                 self.last_used = f"{p.name}:{p.model}"
                 return text
             except (LLMError, httpx.HTTPError, KeyError, ValueError) as e:
                 errors.append(f"{p.name}: {e}")
         raise LLMError("no LLM provider succeeded" + (f" ({'; '.join(errors)})" if errors else " (none configured)"))
 
-    def complete_json(self, system: str, prompt: str, max_tokens: int = 4096) -> dict[str, Any]:
+    def complete_json(self, system: str, prompt: str, max_tokens: int = 4096,
+                      temperature: float | None = None) -> dict[str, Any]:
         text = self.complete(system + "\nRespond with a single JSON object and nothing else.", prompt,
-                             max_tokens, json_mode=True)
+                             max_tokens, json_mode=True, temperature=temperature)
         return extract_json(text)
 
 

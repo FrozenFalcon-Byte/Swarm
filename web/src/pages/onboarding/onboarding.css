@@ -1,0 +1,98 @@
+/* ---------- first-time setup */
+.onb { --rail: 340px; min-height: 100svh; display: grid; grid-template-columns: var(--rail) minmax(0, 1fr); background: var(--white); }
+.onb .word-mask { display: inline-block; overflow: hidden; vertical-align: top; padding-bottom: 0.08em; margin-bottom: -0.08em; }
+.onb .word { display: inline-block; will-change: transform; }
+.onb .bellows--pane { left: var(--rail); }
+
+.onb-rail { position: sticky; top: 0; height: 100svh; display: flex; flex-direction: column; gap: 32px; padding: 30px 26px 24px; background: var(--grey-8); border-right: 1.5px solid var(--line-soft); }
+.onb-rail .logo { font-size: 24px; }
+.onb-rail-mid { flex: 1; display: flex; flex-direction: column; justify-content: center; gap: 18px; }
+.onb-kicker { font-size: 13px; font-weight: 600; color: var(--ink-3); letter-spacing: 0.02em; }
+.onb-steps { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+.onb-steps li { position: relative; display: flex; align-items: center; gap: 14px; height: 52px; padding: 0 14px; border-radius: 16px; font-size: 16px; font-weight: 500; color: var(--ink-3); transition: color 0.4s var(--ease-out); }
+.onb-steps li > *:not(.onb-step-now) { position: relative; z-index: 1; }
+.onb-steps li.now, .onb-steps li.done { color: var(--ink); }
+.onb-step-now { position: absolute; inset: 0; border-radius: 16px; background: var(--white); box-shadow: 0 0 0 2px var(--ink), 0 10px 24px -14px rgba(15, 15, 15, 0.4); }
+.onb-step-dot { width: 28px; height: 28px; flex: none; border-radius: 50%; display: grid; place-items: center; font-size: 12.5px; font-weight: 700; border: 2px solid currentColor; background: var(--white);
+  transition: background 0.4s var(--ease-out), border-color 0.4s var(--ease-out); }
+.onb-steps li.now .onb-step-dot, .onb-steps li.done .onb-step-dot { background: var(--c); border-color: var(--ink); color: var(--ink); }
+.onb-rail-foot { display: flex; flex-direction: column; gap: 6px; align-items: flex-start; }
+.onb-rail-foot .muted { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%; }
+
+.onb-main { position: relative; min-width: 0; display: flex; flex-direction: column; }
+.onb-progress { position: sticky; top: 0; z-index: 5; height: 4px; background: var(--grey-6); }
+.onb-progress span { display: block; height: 100%; transform-origin: 0 50%; transform: scaleX(0);
+  background: linear-gradient(90deg, var(--triager) 0 20%, var(--coder) 20% 40%, var(--tester) 40% 60%, var(--reviewer) 60% 80%, var(--lab) 80%); }
+.onb-main > .pt { flex: 1; display: flex; }
+.onb-main .pt-content { flex: 1; display: flex; }
+.onb-card { width: 100%; max-width: 760px; margin: auto; padding: clamp(32px, 7vh, 88px) clamp(20px, 5vw, 64px); display: flex; flex-direction: column; gap: 28px; }
+.onb-count { font-size: 12.5px; color: var(--ink-3); }
+.onb-head { display: flex; flex-direction: column; gap: 16px; }
+.onb-head h1 { font-size: clamp(40px, 5.2vw, 76px); line-height: 0.96; font-weight: 600; letter-spacing: -0.05em; margin: 0; }
+.onb-head p { margin: 0; font-size: clamp(16px, 1.5vw, 20px); line-height: 1.5; color: var(--ink-2); max-width: 600px; }
+
+.onb-field { display: flex; flex-direction: column; gap: 8px; max-width: 480px; }
+.onb-field label, .onb-label { font-size: 13px; font-weight: 600; color: var(--ink-3); letter-spacing: 0.02em; }
+.onb-field input { height: 64px; padding: 0 24px; border-radius: var(--pill); border: 2px solid var(--line); background: var(--grey-8); font-size: 22px; font-weight: 500; letter-spacing: -0.02em;
+  transition: border-color var(--t) var(--ease-out), background-color var(--t) var(--ease-out), box-shadow var(--t) var(--ease-out); }
+.onb-field input:focus { outline: none; border-color: var(--ink); background: var(--white); box-shadow: 0 0 0 5px var(--grey-6); }
+
+.onb-group { display: flex; flex-direction: column; gap: 10px; }
+.onb-options { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.onb-options--big { grid-template-columns: minmax(0, 1fr); }
+.onb-option { display: flex; align-items: center; gap: 12px; min-height: 58px; padding: 12px 16px; border-radius: 18px; border: 2px solid var(--line); background: var(--white); text-align: left; font-size: 15px; font-weight: 500; cursor: pointer;
+  transition: border-color var(--t-fast) var(--ease-out), background var(--t-fast) var(--ease-out), transform var(--t-fast) var(--ease-out); }
+.onb-option:hover { border-color: #bfc5bf; transform: translateY(-2px); }
+.onb-option.on { border-color: var(--ink); background: var(--sky-soft); }
+.onb-option > span:last-child:not(.onb-radio):not(.onb-check) { display: flex; flex-direction: column; gap: 2px; }
+.onb-option b { font-size: 16px; font-weight: 600; }
+.onb-radio, .onb-check { flex: none; width: 22px; height: 22px; border: 2px solid var(--ink); background: var(--white); display: grid; place-items: center; transition: background 0.3s var(--ease-out); }
+.onb-radio { border-radius: 50%; position: relative; }
+.onb-radio::after { content: ""; width: 10px; height: 10px; border-radius: 50%; background: var(--ink); transform: scale(0); transition: transform 0.35s var(--ease-out); }
+.onb-option.on .onb-radio::after { transform: scale(1); }
+.onb-check { border-radius: 7px; color: var(--ink); }
+.onb-check svg { opacity: 0; transform: scale(0.4); transition: opacity 0.25s, transform 0.35s var(--ease-out); }
+.onb-option.on .onb-check { background: var(--triager); }
+.onb-option.on .onb-check svg { opacity: 1; transform: none; }
+
+.onb-chain { display: flex; flex-direction: column; gap: 8px; }
+.onb-agent { display: flex; align-items: flex-start; gap: 14px; padding: 14px 16px; border-radius: 18px; background: var(--grey-8); border: 2px solid transparent; opacity: 0.55;
+  transition: opacity 0.5s var(--ease-out), border-color 0.5s var(--ease-out), background 0.5s var(--ease-out), transform 0.5s var(--ease-out); }
+.onb-agent.past { opacity: 0.85; }
+.onb-agent.on { opacity: 1; border-color: var(--ink); background: color-mix(in srgb, var(--c) 28%, white); transform: translateX(8px); }
+.onb-you.on { background: var(--white); }
+.onb-agent-dot { flex: none; width: 16px; height: 16px; margin-top: 3px; border-radius: 50%; border: 2px solid var(--ink); background: var(--c); }
+.onb-agent b { font-size: 16px; }
+.onb-agent p { margin: 2px 0 0; font-size: 14px; line-height: 1.5; color: var(--ink-2); }
+
+.onb-connect { background: var(--grey-8); border-radius: 26px; padding: 20px; }
+.onb-added { display: flex; align-items: center; gap: 14px; padding: 18px; border-radius: 22px; background: var(--mint); }
+.onb-added-tick { width: 42px; height: 42px; flex: none; border-radius: 50%; background: var(--reviewer); border: 2px solid var(--ink); display: grid; place-items: center; }
+.onb-added p { margin: 2px 0 0; }
+.onb-note { margin: 14px 0 0; }
+
+.onb-nav { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding-top: 6px; }
+.onb-next { min-width: 180px; }
+
+@media (max-width: 900px) {
+  .onb { grid-template-columns: minmax(0, 1fr); }
+  .onb .bellows--pane { left: 0; }
+  .onb-rail { position: sticky; top: 0; z-index: 10; height: auto; flex-direction: row; align-items: center; gap: 12px; padding: 12px 16px; border-right: 0; border-bottom: 1.5px solid var(--line-soft);
+    background: rgba(249, 250, 249, 0.9); -webkit-backdrop-filter: blur(12px); backdrop-filter: blur(12px); }
+  .onb-rail .logo { font-size: 20px; }
+  .onb-rail-mid { flex-direction: row; justify-content: flex-end; }
+  .onb-kicker { display: none; }
+  .onb-steps { flex-direction: row; gap: 6px; }
+  .onb-steps li { height: auto; padding: 0; }
+  .onb-steps li > span:not(.onb-step-dot) { display: none; }
+  .onb-step-now { display: none; }
+  .onb-steps li.now .onb-step-dot { box-shadow: 0 0 0 3px var(--white), 0 0 0 5px var(--ink); }
+  .onb-rail-foot { display: none; }
+  .onb-progress { top: 61px; }
+  .onb-card { padding: 28px 18px 48px; gap: 22px; margin: 0 auto; }
+  .onb-options { grid-template-columns: minmax(0, 1fr); }
+  .onb-field input { height: 58px; font-size: 19px; }
+  .onb-nav { position: sticky; bottom: 0; padding: 14px 0 calc(14px + env(safe-area-inset-bottom)); background: linear-gradient(transparent, var(--white) 30%); }
+  .onb-next { flex: 1; }
+  .onb-agent.on { transform: none; }
+}

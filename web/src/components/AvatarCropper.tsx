@@ -1,5 +1,6 @@
 import { AnimatePresence, motion, useMotionValue, animate } from 'motion/react'
 import { useCallback, useEffect, useRef, useState, type PointerEvent as RPointerEvent } from 'react'
+import { createPortal } from 'react-dom'
 import { easeOut } from '../lib/motion'
 import { Roll } from './Roll'
 
@@ -9,10 +10,12 @@ const MAX_BYTES = 280_000 // stays well inside Firestore's per-document limit
 
 /** Pick, position and crop a profile picture. Resolves with a WebP data URL. */
 export function AvatarCropper({ file, onCancel, onSave }: { file: File | null; onCancel: () => void; onSave: (dataUrl: string) => Promise<void> }) {
-  return (
+  // rendered at the end of <body>: inside the animated page, a transformed parent would pin the dialog to the page
+  return createPortal(
     <AnimatePresence>
-      {file && <CropDialog key={file.name + file.size} file={file} onCancel={onCancel} onSave={onSave} />}
-    </AnimatePresence>
+      {file && <CropDialog key={file.name + file.size + file.lastModified} file={file} onCancel={onCancel} onSave={onSave} />}
+    </AnimatePresence>,
+    document.body,
   )
 }
 
@@ -30,13 +33,16 @@ function CropDialog({ file, onCancel, onSave }: { file: File; onCancel: () => vo
   const pinchStart = useRef<{ d: number; z: number } | null>(null)
 
   useEffect(() => {
+    let live = true
     const u = URL.createObjectURL(file)
     const im = new Image()
-    im.onload = () => setImg(im)
-    im.onerror = () => setError('That file isn’t an image this browser can read.')
+    im.decoding = 'async'
+    // only this run's image counts: a cleaned-up run revokes its URL, which makes its image fail to load
+    im.onload = () => { if (live) { setError(''); setImg(im) } }
+    im.onerror = () => { if (live) setError('That file isn’t an image this browser can read. Try a JPEG, PNG or WebP.') }
     im.src = u
     setUrl(u)
-    return () => URL.revokeObjectURL(u)
+    return () => { live = false; URL.revokeObjectURL(u) }
   }, [file])
 
   // the image's size on screen: it always covers the circle, then zoom scales it further

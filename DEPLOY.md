@@ -45,7 +45,14 @@ Trade-offs:
 
 ## Option 3: the server on a free web host
 
-`swarm server` is a normal web app, so any Docker host with a free tier can run it: Render, Koyeb or Hugging Face Spaces. Use the provided `Dockerfile` with the command `swarm server`.
+`swarm server` is a normal web app, so any Docker host with a free tier can run it. The repo ships a Render blueprint (`render.yaml`):
+
+1. Push this repo to GitHub.
+2. Render → New → Blueprint → pick the repo. It creates `swarm-server` on the free plan.
+3. Paste `FIREBASE_SERVICE_ACCOUNT_JSON` (the whole JSON) when asked. After the first deploy, set `SWARM_PUBLIC_URL` to the service's `https://…onrender.com` URL and redeploy.
+4. Build the web app with `VITE_SWARM_API_URL` set to that URL and `firebase deploy --only hosting`.
+
+It serves MCP at `/mcp`, the A2A gateway at `/a2a` (card at `/.well-known/agent-card.json`), the agents' cards at `/agents`, and passkey sign-in.
 
 - Most free web hosts sleep when idle, so the first MCP call after a quiet spell takes a few seconds.
 - They don't allow Docker inside the container, so don't run the worker there. It would fall back to the weaker local sandbox. Pair this option with Option 2 for the worker.

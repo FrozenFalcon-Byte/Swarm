@@ -6,7 +6,7 @@ import {
 import { getBytes, ref } from 'firebase/storage'
 import { db, storage } from './firebase'
 import type { GhRepo } from './github'
-import type { Activity, GithubLink, McpToken, Passkey, Profile, Repo, Run, Task, Tool, WorkerInfo } from './types'
+import type { A2AEvent, Activity, GithubLink, LabSpec, LabWave, McpToken, Onboarding, Passkey, Prefs, Profile, Repo, Run, Task, Tool, WorkerInfo } from './types'
 
 type Live<T> = { data: T; loading: boolean; error: string | null }
 
@@ -47,6 +47,13 @@ export function useTasks(repoId: string | undefined) {
 export function useActivity(repoId: string | undefined, n = 40) {
   return useLiveQuery<Activity>(() => repoId ? query(collection(db, 'repos', repoId, 'activity'), orderBy('createdAt', 'desc'), limit(n)) : null,
     (id, d) => ({ id, ...d }) as Activity, [repoId, n])
+}
+
+/** The agents' A2A traffic for one repository, oldest first. */
+export function useA2A(repoId: string | undefined, n = 400) {
+  const live = useLiveQuery<A2AEvent>(() => repoId ? query(collection(db, 'repos', repoId, 'a2a'), orderBy('createdAt', 'desc'), limit(n)) : null,
+    (id, d) => ({ id, ...d }) as A2AEvent, [repoId, n])
+  return { ...live, data: live.data.slice().reverse() }
 }
 
 export function useTools(repoId: string | undefined) {
@@ -135,7 +142,12 @@ export async function readToolCode(repoId: string, toolId: string) {
 }
 
 export function setAutoSync(repoId: string, on: boolean) {
-  return updateDoc(doc(db, 'repos', repoId), { settings: { autoSync: on } })
+  return updateDoc(doc(db, 'repos', repoId), { 'settings.autoSync': on })
+}
+
+/** Outside A2A agents the reviewer asks for a second opinion (at most three). */
+export function setSecondOpinionAgents(repoId: string, urls: string[]) {
+  return updateDoc(doc(db, 'repos', repoId), { 'settings.secondOpinionAgents': urls.slice(0, 3) })
 }
 
 export function removeRepo(repoId: string) {
@@ -150,7 +162,7 @@ export function useProfile(uid: string | undefined) {
   const [profile, setProfile] = useState<Profile | null | undefined>(undefined)
   useEffect(() => {
     if (!uid) { setProfile(null); return }
-    return onSnapshot(doc(db, 'users', uid), (s) => setProfile(s.exists() ? (s.data() as Profile) : null), () => setProfile(null))
+    return onSnapshot(doc(db, 'users', uid), (s) => setProfile(s.exists() ? (s.data({ serverTimestamps: 'estimate' }) as Profile) : null), () => setProfile(null))
   }, [uid])
   return profile
 }
@@ -185,3 +197,71 @@ export async function createMcpToken(uid: string, name: string) {
   return token
 }
 export const revokeMcpToken = (id: string) => deleteDoc(doc(db, 'mcpTokens', id))
+
+
+// -- admins and the test lab ----------------------------------------------------
+
+/** Whether this account can use the test lab (admins/{uid} exists). `undefined` while loading. */
+export function useIsAdmin(uid: string | undefined) {
+  const [admin, setAdmin] = useState<boolean | undefined>(undefined)
+  useEffect(() => {
+    if (!uid) { setAdmin(false); return }
+    return onSnapshot(doc(db, 'admins', uid), (s) => setAdmin(s.exists()), () => setAdmin(false))
+  }, [uid])
+  return admin
+}
+
+export function useLabWaves(repoId: string | undefined) {
+  return useLiveQuery<LabWave>(() => repoId ? query(collection(db, 'repos', repoId, 'lab'), orderBy('index', 'asc')) : null,
+    (_id, d) => d as LabWave, [repoId])
+}
+
+export function newLabSpec(size: LabSpec['size'], kinds: LabSpec['kinds']): LabSpec {
+  const seed = crypto.getRandomValues(new Uint32Array(1))[0] % 2147483646 + 1
+  return { seed, size, kinds: kinds && kinds.length ? kinds : null, requestedAt: new Date().toISOString() }
+}
+
+/** A brand-new made-up project. The worker invents it on its first run and names the repo after it. */
+export async function createLabProject(uid: string, spec: LabSpec) {
+  const repoRef = await addDoc(collection(db, 'repos'), {
+    fullName: 'lab/new-project', displayName: 'New test project', source: 'lab', ownerUid: uid, members: [uid],
+    status: 'queued', createdAt: serverTimestamp(), lab: { waves: [spec] },
+  })
+  await queueRun(uid, repoRef.id, 'lab')
+  return repoRef.id
+}
+
+/** Another wave of made-up bugs and issues on an existing lab project. */
+export async function addLabWave(uid: string, repo: Repo, spec: LabSpec) {
+  const waves = [...(repo.lab?.waves || []), spec].slice(0, 20)
+  await updateDoc(doc(db, 'repos', repo.id), { lab: { waves } })
+  await queueRun(uid, repo.id, 'lab')
+}
+
+// -- onboarding -------------------------------------------------------------------
+
+/** Save where someone is in onboarding, so leaving and coming back resumes there. */
+export function saveOnboarding(uid: string, patch: Onboarding, displayName?: string) {
+  const data: Record<string, unknown> = {}
+  for (const [k, v] of Object.entries(patch)) data[`onboarding.${k}`] = v
+  if (displayName !== undefined) data.displayName = displayName
+  return setDoc(doc(db, 'users', uid), unflatten(data), { merge: true })
+}
+
+export function savePrefs(uid: string, patch: Prefs) {
+  return setDoc(doc(db, 'users', uid), { prefs: patch }, { merge: true })
+}
+
+export function finishOnboarding(uid: string) {
+  return setDoc(doc(db, 'users', uid), { onboardedAt: serverTimestamp() }, { merge: true })
+}
+
+function unflatten(d: Record<string, unknown>) {
+  const out: Record<string, Record<string, unknown> | unknown> = {}
+  for (const [k, v] of Object.entries(d)) {
+    const [a, b] = k.split('.')
+    if (b) out[a] = { ...((out[a] as Record<string, unknown>) || {}), [b]: v }
+    else out[a] = v
+  }
+  return out
+}

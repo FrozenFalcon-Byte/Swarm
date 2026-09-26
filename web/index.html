@@ -9,9 +9,42 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Schibsted+Grotesk:wght@400;500;600;700&family=Geist+Mono:wght@400;500&display=swap" />
     <title>Swarm</title>
+    <style>
+      /* boot screen: on screen before any JS. Four agent dots chase each other round a square;
+         lib/boot.ts plays the exit (they gather, flood the screen in turn, and a hole opens onto the app). */
+      @property --hole { syntax: '<length>'; inherits: false; initial-value: 0px; }
+      #boot { position: fixed; inset: 0; z-index: 400; display: grid; place-items: center; background: #fff; overflow: hidden; }
+      #boot .boot-in { display: flex; flex-direction: column; align-items: center; gap: 30px; }
+      #boot .boot-dots { position: relative; width: 108px; height: 108px; }
+      #boot .boot-dot { position: absolute; left: 0; top: 0; width: 34px; height: 34px; border-radius: 50%; border: 3px solid #0f0f0f; box-sizing: border-box;
+        animation: boot-orbit 2.4s infinite; }
+      #boot .boot-dot:nth-child(1) { background: #fbe74e; }
+      #boot .boot-dot:nth-child(2) { background: #9dc4f5; animation-delay: -0.6s; }
+      #boot .boot-dot:nth-child(3) { background: #5dd36a; animation-delay: -1.2s; }
+      #boot .boot-dot:nth-child(4) { background: #ff8a7a; animation-delay: -1.8s; }
+      @keyframes boot-orbit {
+        0%, 16% { transform: translate(0, 0) scale(1); scale: 1; animation-timing-function: cubic-bezier(0.7, -0.4, 0.3, 1.4); }
+        25%, 41% { transform: translate(74px, 0) scale(1); scale: 1; animation-timing-function: cubic-bezier(0.7, -0.4, 0.3, 1.4); }
+        50%, 66% { transform: translate(74px, 74px) scale(1); scale: 1; animation-timing-function: cubic-bezier(0.7, -0.4, 0.3, 1.4); }
+        75%, 91% { transform: translate(0, 74px) scale(1); scale: 1; animation-timing-function: cubic-bezier(0.7, -0.4, 0.3, 1.4); }
+        20.5%, 45.5%, 70.5%, 95.5% { scale: 0.82; }
+        100% { transform: translate(0, 0) scale(1); scale: 1; }
+      }
+      #boot .boot-word { font: 600 15px/1 "Schibsted Grotesk", system-ui, sans-serif; letter-spacing: 0.01em; color: #8a8f8a; animation: boot-breathe 1.8s ease-in-out infinite; }
+      @keyframes boot-breathe { 0%, 100% { opacity: 0.45; } 50% { opacity: 1; } }
+      #boot .boot-wash { position: fixed; border-radius: 50%; border: 3px solid #0f0f0f; box-sizing: border-box; will-change: transform; }
+      #boot.boot--hole { -webkit-mask-image: radial-gradient(circle at 50% 50%, transparent var(--hole), #000 calc(var(--hole) + 1px)); mask-image: radial-gradient(circle at 50% 50%, transparent var(--hole), #000 calc(var(--hole) + 1px)); }
+      @media (prefers-reduced-motion: reduce) { #boot .boot-dot, #boot .boot-word { animation: none; } #boot .boot-dot:nth-child(2) { left: 74px; } #boot .boot-dot:nth-child(3) { left: 74px; top: 74px; } #boot .boot-dot:nth-child(4) { top: 74px; } }
+    </style>
   </head>
   <body>
     <div id="root"></div>
+    <div id="boot" aria-label="Loading">
+      <div class="boot-in">
+        <div class="boot-dots" aria-hidden="true"><i class="boot-dot"></i><i class="boot-dot"></i><i class="boot-dot"></i><i class="boot-dot"></i></div>
+        <span class="boot-word">Waking the swarm</span>
+      </div>
+    </div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

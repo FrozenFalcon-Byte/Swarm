@@ -1,4 +1,4 @@
-import { AnimatePresence, animate, motion, useInView, useMotionValue, useMotionValueEvent, useScroll, useSpring, useTransform, type MotionValue } from 'motion/react'
+import { AnimatePresence, animate, motion, useInView, useMotionValueEvent, useScroll, useTransform, type MotionValue } from 'motion/react'
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react'
 import { Link, useLocation } from 'react-router-dom'
 import { AgentDots } from '../../components/AgentDots'
@@ -6,10 +6,13 @@ import { Logo, Mark } from '../../components/Logo'
 import { Reveal, SplitWords } from '../../components/Reveal'
 import { SmoothScroll } from '../../components/SmoothScroll'
 import { useAuth } from '../../lib/auth'
+import { finishBoot } from '../../lib/boot'
 import { easeInOut, easeOut } from '../../lib/motion'
 import { Glyph, type GlyphName } from './glyphs'
 import './landing.css'
 import { Roll } from '../../components/Roll'
+import { HeroWorld } from './HeroWorld'
+import { Security } from './Security'
 
 let introPlayed = false // module state: resets on reload, survives in-app navigation
 
@@ -30,6 +33,7 @@ export default function Landing() {
     const id = window.setTimeout(() => document.querySelector(hash)?.scrollIntoView({ behavior: 'smooth' }), 700)
     return () => window.clearTimeout(id)
   }, [hash, phase])
+  useLayoutEffect(() => { void finishBoot(true) }, []) // the intro is the loader here
   const lift = useCallback(() => setPhase('lifting'), [])
   const landed = useCallback(() => { introPlayed = true; setPhase('done') }, [])
   return (
@@ -42,7 +46,7 @@ export default function Landing() {
       <PatternSearch />
       <VerticalList />
       <StatGrid />
-      <HorizontalList />
+      <Security />
       <Faq />
       <Footer />
     </div>
@@ -55,7 +59,9 @@ export default function Landing() {
  *  and the mark flies, above everything, to the exact place and size of the mark in the headline, which
  *  only appears once it has landed. Nothing is swapped mid-flight, so the hand-off is seamless. */
 function Intro({ lifting, onLift, onLanded }: { lifting: boolean; onLift: () => void; onLanded: () => void }) {
-  const [pct, setPct] = useState(0)
+  const [phase, setPhase] = useState(0)
+  const odo = useRef<HTMLSpanElement>(null)
+  const bar = useRef<HTMLSpanElement>(null)
   const [started, setStarted] = useState(false) // counts from the mark's first frame, so a slow first load can't outrun it
   const tile = useRef<HTMLSpanElement>(null)
   const slot = useRef<HTMLDivElement>(null)
@@ -77,7 +83,11 @@ function Intro({ lifting, onLift, onLanded }: { lifting: boolean; onLift: () => 
     if (document.fonts) document.fonts.ready.then(() => { fonts = true }); else fonts = true
     const tick = (t: number) => {
       const p = Math.min(1, (t - start) / min)
-      setPct(Math.round((1 - Math.pow(1 - p, 3)) * 100))
+      // smootherstep: slow start, glide through the middle, settle softly on 100
+      const v = p * p * p * (p * (p * 6 - 15) + 10) * 100
+      rollTo(odo.current, v)
+      if (bar.current) bar.current.style.transform = `scaleX(${v / 100})`
+      setPhase(v < 35 ? 0 : v < 60 ? 1 : v < 85 ? 2 : 3)
       if (p < 1 || !fonts) { raf = requestAnimationFrame(tick); return }
       if (finished) return
       finished = true
@@ -107,15 +117,38 @@ function Intro({ lifting, onLift, onLanded }: { lifting: boolean; onLift: () => 
           </p>
         </div>
         <div className="intro-foot mono">
-          <span>{pct < 35 ? 'Waking the triager' : pct < 60 ? 'Briefing the coder' : pct < 85 ? 'Warming up the sandbox' : 'Reviewer on duty'}</span>
-          <span className="intro-pct">{String(pct).padStart(3, '0')}</span>
+          <span className="intro-phase">
+            <AnimatePresence mode="popLayout" initial={false}>
+              <motion.span key={phase} initial={{ y: '100%', opacity: 0 }} animate={{ y: '0%', opacity: 1 }} exit={{ y: '-100%', opacity: 0 }} transition={{ duration: 0.45, ease: easeOut }}>
+                {PHASES[phase]}
+              </motion.span>
+            </AnimatePresence>
+          </span>
+          <span className="intro-pct" ref={odo} aria-label="Loading">
+            {[0, 1, 2].map((c) => <span key={c} className="odo-col"><span className="odo-strip">{ODO_DIGITS.map((d, i) => <span key={i}>{d}</span>)}</span></span>)}
+          </span>
         </div>
-        <div className="intro-bar"><span style={{ transform: `scaleX(${pct / 100})` }} /></div>
+        <div className="intro-bar"><span ref={bar} /></div>
       </motion.div>
       {/* outside the curtain, so it stays visible while the curtain lifts */}
       <span ref={tile} className="intro-tile"><IntroMark onStart={() => setStarted(true)} /></span>
     </>
   )
+}
+
+const PHASES = ['Waking the triager', 'Briefing the coder', 'Warming up the sandbox', 'Reviewer on duty']
+const ODO_DIGITS = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 0]
+
+/** An odometer: every column rolls continuously, and a column only turns over while the one to its
+ *  right passes from 9 to 0, like a mechanical counter. Written straight to the DOM each frame. */
+function rollTo(el: HTMLElement | null, v: number) {
+  if (!el) return
+  const cols = el.querySelectorAll<HTMLElement>('.odo-strip')
+  const carry = (x: number) => Math.min(1, Math.max(0, x))
+  const ones = v % 10
+  const tens = (Math.floor(v / 10) % 10) + carry(ones - 9)
+  const hundreds = Math.floor(v / 100) + carry((v % 100) - 99)
+  ;[hundreds, tens, ones].forEach((pos, i) => { if (cols[i]) cols[i].style.transform = `translate3d(0, ${-pos / 11 * 100}%, 0)` })
 }
 
 function IntroMark({ onStart }: { onStart: () => void }) {
@@ -184,12 +217,8 @@ function Hero({ ready, tileShown, fromIntro }: { ready: boolean; tileShown: bool
   const { scrollYProgress } = useScroll({ target: ref, offset: ['start start', 'end start'] })
   const titleY = useTransform(scrollYProgress, [0, 1], [0, -140])
   const titleOpacity = useTransform(scrollYProgress, [0.2, 0.75], [1, 0])
-  // pointer position across the hero, -0.5..0.5, eased so everything drifts rather than jumps
-  const px = useSpring(useMotionValue(0), { stiffness: 60, damping: 18 })
-  const py = useSpring(useMotionValue(0), { stiffness: 60, damping: 18 })
   const move = (e: ReactPointerEvent<HTMLElement>) => {
     const r = e.currentTarget.getBoundingClientRect()
-    px.set((e.clientX - r.left) / r.width - 0.5); py.set((e.clientY - r.top) / r.height - 0.5)
     e.currentTarget.style.setProperty('--mx', `${e.clientX - r.left}px`)
     e.currentTarget.style.setProperty('--my', `${e.clientY - r.top}px`)
   }
@@ -198,7 +227,7 @@ function Hero({ ready, tileShown, fromIntro }: { ready: boolean; tileShown: bool
   return (
     <section className="hero" ref={ref} onPointerMove={move}>
       <div className="hero-grid" aria-hidden="true" />
-      <HeroCursors ready={ready} px={px} py={py} />
+      <HeroWorld ready={ready} />
       <motion.div className="hero-inner" style={{ y: titleY, opacity: titleOpacity }}>
         <motion.p className="hero-kicker" initial="hidden" animate={show} variants={{ hidden: { opacity: 0, y: 12 }, show: { opacity: 1, y: 0, transition: { duration: 0.8, ease: easeOut, delay: 0.15 } } }}>
           Four AI agents for<br />tests that fail at random
@@ -220,45 +249,6 @@ function Hero({ ready, tileShown, fromIntro }: { ready: boolean; tileShown: bool
   )
 }
 
-/* Four "multiplayer" cursors, one per agent, drifting over the hero like teammates in a shared doc.
-   They lean toward your pointer, and now and then each one says what it just did. */
-const CURSORS = [
-  { agent: 'triager', x: '13%', y: '27%', depth: -36, path: { x: [0, 26, -10, 0], y: [0, -14, 12, 0] }, notes: ['labeled #214 · high', 'closed a duplicate', 'asked you about #107'] },
-  { agent: 'coder', x: '79%', y: '24%', depth: 30, path: { x: [0, -22, 8, 0], y: [0, 16, -8, 0] }, notes: ['patch v1 · 1 line', 'sorted a set', 'bounded the jitter'] },
-  { agent: 'tester', x: '80%', y: '68%', depth: -24, path: { x: [0, -18, 14, 0], y: [0, -10, 12, 0] }, notes: ['10/12 → 0/12 failing', 'wrote hashseed_sweep', 'reused a harness'] },
-  { agent: 'reviewer', x: '14%', y: '70%', depth: 40, path: { x: [0, 20, -12, 0], y: [0, 12, -14, 0] }, notes: ['5 checks passed', 'no shortcuts found', 'touches auth · asks you'] },
-] as const
-
-function HeroCursors({ ready, px, py }: { ready: boolean; px: MotionValue<number>; py: MotionValue<number> }) {
-  const [tick, setTick] = useState(0)
-  useEffect(() => { if (!ready) return; const id = window.setInterval(() => setTick((t) => t + 1), 1600); return () => window.clearInterval(id) }, [ready])
-  return (
-    <div className="hero-cursors" aria-hidden="true">
-      {CURSORS.map((c, i) => <Cursor key={c.agent} c={c} i={i} ready={ready} px={px} py={py} note={tick % 4 === i ? c.notes[Math.floor(tick / 4) % c.notes.length] : null} />)}
-    </div>
-  )
-}
-
-function Cursor({ c, i, ready, px, py, note }: { c: (typeof CURSORS)[number]; i: number; ready: boolean; px: MotionValue<number>; py: MotionValue<number>; note: string | null }) {
-  const x = useTransform(px, (v) => v * c.depth)
-  const y = useTransform(py, (v) => v * c.depth)
-  return (
-    <motion.div className="cursor" style={{ left: c.x, top: c.y, x, y }}
-      initial={{ opacity: 0, scale: 0.6 }} animate={ready ? { opacity: 1, scale: 1 } : {}} transition={{ delay: 0.9 + i * 0.12, type: 'spring', stiffness: 260, damping: 18 }}>
-      <motion.div animate={{ x: [...c.path.x], y: [...c.path.y] }} transition={{ duration: 9 + i * 1.7, repeat: Infinity, ease: 'easeInOut' }}>
-        <svg width="22" height="24" viewBox="0 0 22 24" className="cursor-arrow"><path d="M2 2l17 8.5-7.2 2.2L8.5 21z" fill={`var(--${c.agent})`} stroke="var(--ink)" strokeWidth="2" strokeLinejoin="round" /></svg>
-        <span className="cursor-tag" style={{ background: `var(--${c.agent})` }}>{c.agent}</span>
-        <AnimatePresence>
-          {note && (
-            <motion.span key={note} className="cursor-note mono" initial={{ opacity: 0, y: 6, scale: 0.9 }} animate={{ opacity: 1, y: 0, scale: 1 }}
-              exit={{ opacity: 0, y: -4, scale: 0.95 }} transition={{ type: 'spring', stiffness: 380, damping: 26 }}>{note}</motion.span>
-          )}
-        </AnimatePresence>
-      </motion.div>
-    </motion.div>
-  )
-}
-
 const EVENTS = [
   ['triager', '#101 labeled · random failure · high'], ['coder', 'task-001 · patch v1 · +1 −1'], ['tester', 'hashseed_sweep_v1 · 10/12 → 0/12'],
   ['reviewer', 'task-001 approved · 6 checks'], ['triager', '#104 duplicate of task-001'], ['coder', 'task-002 · bound the jitter'],
@@ -277,15 +267,19 @@ function Ticker({ ready }: { ready: boolean }) {
 
 /* ============================================================ sticky app screens */
 
-const SCREENS: { tag: string; glyph: GlyphName; color: string; title: string; text: string; agent: string; role: string; stats: [string, string][] }[] = [
+const SCREENS: { tag: string; glyph: GlyphName; color: string; title: string; text: string; agent: string; role: string; stats: [string, string][]; to: string; says: string; state: string }[] = [
   { tag: 'Triage', glyph: 'sort', color: 'var(--coder)', title: 'Every issue sorted in seconds.', text: 'Tests that fail at random get a label and a priority. Duplicates get closed. Anything unclear goes to you instead of being guessed at.',
-    agent: 'triager', role: 'Reads every new issue', stats: [['7', 'issues read'], ['1', 'duplicate closed'], ['1', 'asked you']] },
+    agent: 'triager', role: 'Reads every new issue', stats: [['7', 'issues read'], ['1', 'duplicate closed'], ['1', 'asked you']],
+    to: 'coder', says: 'task-001 is a random failure, high priority. Please write a fix.', state: 'completed' },
   { tag: 'Patch', glyph: 'patch', color: 'var(--triager)', title: 'Fix the cause, not the symptom.', text: 'The coder reads the failing test and the code behind it, then writes the smallest diff that removes the cause of the randomness.',
-    agent: 'coder', role: 'Writes the smallest fix', stats: [['1', 'line changed'], ['0', 'tests skipped'], ['1st', 'attempt']] },
+    agent: 'coder', role: 'Writes the smallest fix', stats: [['1', 'line changed'], ['0', 'tests skipped'], ['1st', 'attempt']],
+    to: 'tester', says: 'Patch ready for task-001 (sort-set-result). Please verify it.', state: 'completed' },
   { tag: 'Prove', glyph: 'flask', color: 'var(--pink)', title: 'One green run proves nothing.', text: 'The tester runs the test dozens of times in a sandbox, before and after the patch, until the numbers settle it.',
-    agent: 'tester', role: 'Proves it, many times over', stats: [['24', 'sandboxed runs'], ['10→0', 'failures'], ['1×', 'harness reused']] },
+    agent: 'tester', role: 'Proves it, many times over', stats: [['24', 'sandboxed runs'], ['10→0', 'failures'], ['1×', 'harness reused']],
+    to: 'reviewer', says: 'task-001 passes: 10/12 failing before, 0/12 after. Please review it.', state: 'completed' },
   { tag: 'Review', glyph: 'shield', color: 'var(--mint-strong)', title: 'A second agent says no.', text: 'Seeded RNGs, sleeps, retries and skipped tests get sent back. Anything that touches auth waits for a human.',
-    agent: 'reviewer', role: 'Looks for reasons to say no', stats: [['6', 'checks passed'], ['0', 'shortcuts'], ['you', 'click merge']] },
+    agent: 'reviewer', role: 'Looks for reasons to say no', stats: [['6', 'checks passed'], ['0', 'shortcuts'], ['you', 'click merge']],
+    to: 'you', says: 'task-001 is approved and waiting for you to merge it.', state: 'input-required' },
 ]
 
 function AppScreens() {
@@ -298,11 +292,30 @@ function AppScreens() {
   return (
     <section className="screens" id="how" ref={ref} style={{ height: `${SCREENS.length * 100 + 40}vh` }}>
       <div className="screens-sticky">
+        <div className="screens-head">
+          <div className="screens-head-copy">
+            <p className="screens-kicker mono">How a fix gets made</p>
+            <p className="screens-sub">Four agents, each its own A2A service. When one finishes, it messages the next.</p>
+          </div>
+          <HandoffRail i={i} />
+        </div>
         <div className="screens-box screens-title-box" style={{ background: s.color }}>
           <div className="screens-steps">
             <span className="screens-count mono"><AnimatePresence mode="popLayout" initial={false}><motion.span key={i} initial={{ y: 14, opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: -14, opacity: 0 }} transition={{ duration: 0.4, ease: easeOut }}>0{i + 1}</motion.span></AnimatePresence>&nbsp;/ 0{SCREENS.length}</span>
             <div className="screens-segs">{SCREENS.map((_, k) => <Seg key={k} k={k} n={SCREENS.length} progress={scrollYProgress} />)}</div>
           </div>
+          <AnimatePresence mode="wait">
+            <motion.div key={i} className="wire-msg" initial={{ opacity: 0, y: 18, rotate: 1.5 }} animate={{ opacity: 1, y: 0, rotate: 0 }} exit={{ opacity: 0, y: -10 }}
+              transition={{ type: 'spring', stiffness: 220, damping: 22, delay: 0.1 }}>
+              <div className="wire-head mono">
+                <span className="wire-env" aria-hidden="true">✉</span>
+                <span>{s.agent} → {s.to}</span>
+                <span className={`wire-state s-${s.state}`}>{s.state}</span>
+              </div>
+              <p>{s.says}</p>
+              <code className="mono">{'{ "task_id": "task-001", "from": "' + s.agent + '" }'}</code>
+            </motion.div>
+          </AnimatePresence>
           <AnimatePresence mode="wait">
             <motion.div key={i} className="screens-box-inner" initial={{ y: '100%', opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: '-60%', opacity: 0 }} transition={{ duration: 0.6, ease: easeOut }}>
               <h2 className="screens-title">{s.title}</h2>
@@ -349,6 +362,25 @@ function AppScreens() {
   )
 }
 
+const RAIL = ['triager', 'coder', 'tester', 'reviewer', 'you'] as const
+
+/** The pipeline as a rail of agents; an envelope travels from whoever is working to whoever gets the task next. */
+function HandoffRail({ i }: { i: number }) {
+  const pos = (k: number) => `${(k / (RAIL.length - 1)) * 100}%`
+  return (
+    <div className="rail" aria-hidden="true">
+      <div className="rail-line"><motion.i animate={{ width: pos(i + 1) }} transition={{ duration: 0.8, ease: easeOut }} /></div>
+      {RAIL.map((a, k) => (
+        <motion.span key={a} className={`rail-node ${k <= i + 1 ? 'on' : ''}`} style={{ left: pos(k), background: a === 'you' ? 'var(--white)' : `var(--${a})` }}
+          animate={{ scale: k === i || k === i + 1 ? 1.15 : 1 }} transition={{ type: 'spring', stiffness: 320, damping: 18 }}>
+          <b>{a === 'you' ? 'You' : a[0].toUpperCase() + a.slice(1)}</b>
+        </motion.span>
+      ))}
+      <span key={i} className="rail-env" style={{ ['--a' as string]: pos(i), ['--b' as string]: pos(i + 1) }}>✉</span>
+    </div>
+  )
+}
+
 /** One step's progress bar: fills as you scroll through that step. */
 function Seg({ k, n, progress }: { k: number; n: number; progress: MotionValue<number> }) {
   const scaleX = useTransform(progress, [k / n, (k + 1) / n], [0, 1])
@@ -388,6 +420,14 @@ function ScreenPatch() {
         <motion.span className="add" initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.6 }}>+    return sorted(set(cleaned))</motion.span>
       </div>
       <p className="scr-note">Set order depended on <b>PYTHONHASHSEED</b>. Sorting makes it deterministic. One line changed.</p>
+      <div className="scr-extra">
+      <p className="scr-head scr-head-2">Before handing it on</p>
+      {[['Applies cleanly to main', 'git apply'], ['Rest of the suite still passes', '41 / 41'], ['No test skipped or retried', '0 changes'], ['Public API unchanged', 'same signature']].map(([a, b], k) => (
+        <motion.div key={a} className="scr-check" initial={{ opacity: 0, x: -12 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.8 + k * 0.08 }}>
+          <span className="ok" style={{ background: 'var(--triager)' }}>✓</span><span>{a}</span><span className="mono scr-check-side">{b}</span>
+        </motion.div>
+      ))}
+      </div>
     </div>
   )
 }
@@ -404,6 +444,14 @@ function ScreenProve() {
       ))}
       <div className="scr-seeds" aria-hidden="true">
         {Array.from({ length: 12 }, (_, k) => <motion.span key={k} className={k < 10 ? 'bad' : ''} initial={{ scale: 0 }} animate={{ scale: 1 }} transition={{ delay: 0.5 + k * 0.04, type: 'spring', stiffness: 300 }} />)}
+      </div>
+      <div className="scr-extra">
+      <p className="scr-head scr-head-2">Inside the sandbox</p>
+      <div className="scr-limits">
+        {[['no', 'network'], ['1', 'CPU'], ['1 GB', 'memory'], ['read-only', 'filesystem']].map(([v, l], k) => (
+          <motion.div key={l} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 1 + k * 0.07 }}><b>{v}</b><span>{l}</span></motion.div>
+        ))}
+      </div>
       </div>
     </div>
   )
@@ -467,42 +515,59 @@ function PatternSearch() {
 
   const hit = q.length > 4 ? matchPattern(q) : null
   const unknown = q.length > 8 && !hit
+  const pickQuery = (w: string) => { setTouched(true); setQ(w) }
   return (
     <section className="patterns" id="patterns" ref={ref}>
-      <div className="patterns-side">
+      <div className="patterns-head">
         <Surtitle dot="var(--coder)">Pattern library</Surtitle>
         <SplitWords text="Every kind of random failure. One swarm." className="title-6" />
         <Reveal delay={0.1}><p className="text-grey">Type a failing test. Swarm matches it to a known cause and the harness that proves the fix, or writes a new one.</p></Reveal>
-        <Reveal delay={0.2} className="psearch">
+      </div>
+      <Reveal delay={0.15} className="pconsole">
+        <div className="psearch">
           <Glyph name="search" size={30} />
           <input value={q} placeholder="test_name" aria-label="Try a test name" spellCheck={false} autoComplete="off"
             onFocus={() => { if (!touched) { setTouched(true); setQ('') } }} onChange={(e) => { setTouched(true); setQ(e.target.value) }} />
-          {!touched && <span className="psearch-demo" aria-hidden="true">demo</span>}
-        </Reveal>
-        <div className="presult" aria-live="polite">
-          <AnimatePresence mode="wait" initial={false}>
-            {hit ? (
-              <motion.div key={hit.id} className="presult-card" initial={{ opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} transition={{ duration: 0.45, ease: easeOut }}>
-                <div className="presult-head"><span className="presult-icon" style={{ background: hit.color }}><Glyph name={hit.glyph as GlyphName} size={22} /></span><b>{hit.label}</b><span className="mono">{hit.harness}</span></div>
-                <RunStrip before={hit.before} />
-              </motion.div>
-            ) : unknown ? (
-              <motion.div key="new" className="presult-card presult-new" initial={{ opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} transition={{ duration: 0.45, ease: easeOut }}>
-                <div className="presult-head"><span className="presult-icon" style={{ background: 'var(--white)' }}><Glyph name="flask" size={22} /></span><b>Nothing on file</b></div>
-                <p>The tester writes a harness for this one, proves it catches the failure, and adds it to the library.</p>
-              </motion.div>
-            ) : (
-              <motion.p key="idle" className="presult-idle" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>Matches appear here.</motion.p>
-            )}
-          </AnimatePresence>
+          {!touched ? <span className="psearch-demo" aria-hidden="true">demo</span>
+            : q && <button className="psearch-clear" onClick={() => setQ('')} aria-label="Clear">✕</button>}
         </div>
-      </div>
+        <div className="pconsole-body">
+          <div className="ptry">
+            <span>Try</span>
+            {QUERIES.map((w) => (
+              <motion.button key={w} className={`ptry-chip mono ${q === w ? 'on' : ''}`} onClick={() => pickQuery(w)} whileTap={{ scale: 0.94 }}>{w}</motion.button>
+            ))}
+          </div>
+          <div className="presult" aria-live="polite">
+            <AnimatePresence mode="wait" initial={false}>
+              {hit ? (
+                <motion.div key={hit.id} className="presult-card" initial={{ opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} transition={{ duration: 0.45, ease: easeOut }}>
+                  <div className="presult-head"><span className="presult-icon" style={{ background: hit.color }}><Glyph name={hit.glyph as GlyphName} size={22} /></span><b>{hit.label}</b><span className="mono">{hit.harness}</span></div>
+                  <RunStrip before={hit.before} />
+                </motion.div>
+              ) : unknown ? (
+                <motion.div key="new" className="presult-card presult-new" initial={{ opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} transition={{ duration: 0.45, ease: easeOut }}>
+                  <div className="presult-head"><span className="presult-icon" style={{ background: 'var(--white)' }}><Glyph name="flask" size={22} /></span><b>Nothing on file</b></div>
+                  <p>The tester writes a harness for this one, proves it catches the failure, and adds it to the library.</p>
+                </motion.div>
+              ) : (
+                <motion.div key="idle" className="presult-idle" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
+                  <span className="presult-dots" aria-hidden="true"><i /><i /><i /><i /></span>Matches appear here, with the before-and-after runs.
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </div>
+        </div>
+      </Reveal>
       <div className="pgrid">
         {PATTERNS.map((p, k) => (
-          <motion.article key={p.id} className={`pcard ${hit?.id === p.id ? 'on' : ''} ${hit && hit.id !== p.id ? 'dim' : ''}`}
-            initial={{ opacity: 0, y: 40 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true, margin: '-10% 0px' }}
-            transition={{ duration: 0.8, ease: easeOut, delay: (k % 2) * 0.08 }}>
-            <span className="pcard-icon" style={{ background: p.color }}><Glyph name={p.glyph as GlyphName} size={28} /></span>
+          <motion.article key={p.id} className={`pcard ${hit?.id === p.id ? 'on' : ''} ${hit && hit.id !== p.id ? 'dim' : ''}`} style={{ ['--c' as string]: p.color }}
+            initial={{ opacity: 0, y: 30 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true, margin: '-8% 0px' }}
+            transition={{ duration: 0.7, ease: easeOut, delay: (k % 4) * 0.07 }}>
+            <div className="pcard-top">
+              <span className="pcard-icon" style={{ background: p.color }}><Glyph name={p.glyph as GlyphName} size={24} /></span>
+              <AnimatePresence>{hit?.id === p.id && <motion.span className="pcard-match" initial={{ opacity: 0, scale: 0.6 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.6 }}>match</motion.span>}</AnimatePresence>
+            </div>
             <h3>{p.label}</h3>
             <p>{p.symptom}</p>
             <span className="pcard-tool mono">{p.harness}</span>
@@ -539,9 +604,15 @@ function RunStrip({ before }: { before: number }) {
 
 function VerticalList() {
   const cards = [
-    { title: 'Tools that outlive the task', text: 'When no test can prove a fix, the tester writes one, checks it catches the bug, and saves it for the next task.', visual: <VisualHarness /> },
-    { title: 'Reviews that say no', text: 'The reviewer never sees the coder’s reasoning. Its only job is to find a reason not to merge.', visual: <VisualReview /> },
-    { title: 'Duplicates closed before you see them', text: 'The triager matches new issues against the board by text and by test name, and links the duplicate.', visual: <VisualDupes /> },
+    { title: 'Tools that outlive the task', text: 'When no test can prove a fix, the tester writes one, checks it catches the bug, and saves it for the next task.', visual: <VisualHarness />,
+      stats: [['12×', 'runs to check each tool'], ['4', 'kinds of tool it can write']],
+      agent: 'tester', points: ['Checked against the bug before it’s trusted', 'Kept in your repo’s tool shelf', 'Reused by the next task that needs it'] },
+    { title: 'Reviews that say no', text: 'The reviewer never sees the coder’s reasoning. Its only job is to find a reason not to merge.', visual: <VisualReview />,
+      stats: [['6', 'checks on every patch'], ['0', 'merges without you']],
+      agent: 'reviewer', points: ['Seeded RNGs, sleeps and retries sent back', 'Skipped tests are never a fix', 'Anything touching auth waits for you'] },
+    { title: 'Duplicates closed before you see them', text: 'The triager matches new issues against the board by text and by test name, and links the duplicate.', visual: <VisualDupes />,
+      stats: [['2', 'signals: text and test name'], ['0', 'duplicates you have to read']],
+      agent: 'triager', points: ['Compared with every open card', 'Linked to the original, with a comment', 'Anything new becomes its own task'] },
   ]
   return (
     <section className="vlist">
@@ -557,8 +628,26 @@ function VerticalList() {
         {cards.map((c, k) => (
           <div key={c.title} className="vcard-sticky" style={{ top: `calc(110px + ${k * 28}px)` }}>
             <Reveal className="vcard">
-              <div className="vcard-copy"><h3 className="title-8">{c.title}</h3><p className="text-grey">{c.text}</p></div>
-              <div className="vcard-visual">{c.visual}</div>
+              <div className="vcard-copy">
+                <div className="vcard-kicker">
+                  <span className="vcard-agent" style={{ background: `var(--${c.agent})` }}>{c.agent}</span>
+                  <span className="mono">0{k + 1} / 0{cards.length}</span>
+                </div>
+                <h3 className="title-8">{c.title}</h3>
+                <p className="text-grey">{c.text}</p>
+                <ul className="vcard-points">
+                  {c.points.map((pt, j) => (
+                    <motion.li key={pt} initial={{ opacity: 0, x: -12 }} whileInView={{ opacity: 1, x: 0 }} viewport={{ once: true, margin: '-10% 0px' }}
+                      transition={{ delay: 0.25 + j * 0.1, duration: 0.6, ease: easeOut }}>
+                      <i style={{ background: `var(--${c.agent})` }} />{pt}
+                    </motion.li>
+                  ))}
+                </ul>
+                <div className="vcard-stats">
+                  {c.stats.map(([big, small]) => <div key={small}><b>{big}</b><span>{small}</span></div>)}
+                </div>
+              </div>
+              <div className="vcard-visual" style={{ ['--c' as string]: `var(--${c.agent})` }}>{c.visual}</div>
             </Reveal>
           </div>
         ))}
@@ -596,15 +685,103 @@ function VisualReview() {
   )
 }
 
+const BOARD = [
+  { id: 'task-001', title: 'normalize_tags fails at random', test: 'test_normalize_tags', linked: 2 },
+  { id: 'task-002', title: 'retry backoff times out in CI', test: 'test_backoff_window', linked: 0 },
+  { id: 'task-003', title: 'session expiry off by a second', test: 'test_session_expiry', linked: 1 },
+]
+const INCOMING = [
+  { n: '#118', title: 'normalize_tags broke again on main', test: 'test_normalize_tags', match: 0, score: 86 },
+  { n: '#121', title: 'CI red: backoff window test timing out', test: 'test_backoff_window', match: 1, score: 79 },
+  { n: '#124', title: 'export_csv drops the header row', test: 'test_export_header', match: -1, score: 12 },
+  { n: '#127', title: 'session test fails just before midnight', test: 'test_session_expiry', match: 2, score: 74 },
+]
+
+/** The triager at work: a new issue comes in, gets read, is compared against every card on the board
+ *  (by its text and by the test it names), and is either linked and closed or becomes a new task. */
 function VisualDupes() {
+  const ref = useRef<HTMLDivElement>(null)
+  const live = useInView(ref, { margin: '-10% 0px' })
+  const [k, setK] = useState(0) // which incoming issue
+  const [stage, setStage] = useState(0) // 0 reading · 1 comparing · 2 verdict
+  const [scan, setScan] = useState(-1)
+  const [linked, setLinked] = useState(() => BOARD.map((t) => t.linked))
+  const [closed, setClosed] = useState(3)
+  const [made, setMade] = useState(0)
+  const it = INCOMING[k % INCOMING.length]
+  useEffect(() => {
+    if (!live) return
+    let alive = true
+    const at = (ms: number) => new Promise((r) => window.setTimeout(r, ms))
+    ;(async () => {
+      await at(900); if (!alive) return
+      setStage(1)
+      for (let r = 0; r < BOARD.length && alive; r++) { setScan(r); await at(380) }
+      if (!alive) return
+      setScan(-1); setStage(2)
+      if (it.match >= 0) { setLinked((l) => l.map((v, j) => (j === it.match ? v + 1 : v))); setClosed((c) => c + 1) } else setMade((m) => m + 1)
+      await at(2300); if (!alive) return
+      setStage(0); setK((v) => v + 1)
+    })()
+    return () => { alive = false }
+  }, [live, k, it])
+  const dup = it.match >= 0
+  const newId = `task-${String(BOARD.length + made).padStart(3, '0')}`
   return (
-    <div className="app-frame vis vis-stack">
-      {[['#101', 'test_normalize_tags fails intermittently in CI', 'task-001'], ['#104', 'normalize_tags failing again', 'duplicate of task-001']].map(([n, t, s], k) => (
-        <motion.div key={n} className="vis-issue" initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ delay: k * 0.2, ease: easeOut, duration: 0.6 }}>
-          <span className="mono">{n}</span><b>{t}</b><em className={`chip ${k ? '' : 'ok'}`}>{s}</em>
-        </motion.div>
-      ))}
+    <div className="app-frame vis dupes" ref={ref}>
+      <div className="vis-top">
+        <span className="dupes-live"><i />triager · new issues</span>
+        <span className="mono dupes-count"><b>{closed}</b> duplicates closed</span>
+      </div>
+      <div className="dupes-in">
+        <AnimatePresence mode="popLayout" initial={false}>
+          <motion.div key={k} className={`dupes-issue ${stage === 2 ? (dup ? 'is-dup' : 'is-new') : ''}`}
+            initial={{ opacity: 0, y: -26, scale: 0.96 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 30, scale: 0.94, filter: 'blur(4px)' }}
+            transition={{ type: 'spring', stiffness: 240, damping: 26 }}>
+            <div className="dupes-issue-head"><span className="mono">{it.n}</span><b>{it.title}</b></div>
+            <div className="dupes-issue-foot">
+              <span className="mono dupes-test">{it.test}</span>
+              <AnimatePresence mode="wait" initial={false}>
+                {stage === 0 && <motion.span key="r" className="dupes-state" {...fade}>reading<span className="dupes-dots"><i /><i /><i /></span></motion.span>}
+                {stage === 1 && <motion.span key="c" className="dupes-state" {...fade}>comparing with the board</motion.span>}
+                {stage === 2 && (dup
+                  ? <motion.em key="d" className="chip ok" {...pop}>duplicate of {BOARD[it.match].id} · closed</motion.em>
+                  : <motion.em key="n" className="chip dupes-newchip" {...pop}>new · {newId} → coder</motion.em>)}
+              </AnimatePresence>
+            </div>
+            <div className="dupes-meters">
+              <Meter label="text" value={stage === 2 ? it.score : stage === 1 ? Math.min(it.score, 20 + scan * 20) : 0} good={it.score > 50} />
+              <span className={`dupes-same ${stage === 2 ? (dup ? 'yes' : 'no') : ''}`}>{stage === 2 ? (dup ? '✓ same test' : '✗ no test in common') : 'same test?'}</span>
+            </div>
+          </motion.div>
+        </AnimatePresence>
+      </div>
+      <div className="dupes-board">
+        <p className="dupes-label">On the board</p>
+        {BOARD.map((t, j) => (
+          <div key={t.id} className={`dupes-row ${scan === j ? 'scan' : ''} ${stage === 2 && it.match === j ? 'hit' : ''}`}>
+            <span className="mono">{t.id}</span>
+            <span className="dupes-row-title">{t.title}</span>
+            <motion.span key={linked[j]} className="dupes-linked" initial={{ scale: 1.5 }} animate={{ scale: 1 }} transition={{ type: 'spring', stiffness: 500, damping: 18 }}>
+              {linked[j] ? `+${linked[j]} linked` : '—'}
+            </motion.span>
+          </div>
+        ))}
+      </div>
     </div>
+  )
+}
+
+const fade = { initial: { opacity: 0, y: 4 }, animate: { opacity: 1, y: 0 }, exit: { opacity: 0, y: -4 }, transition: { duration: 0.2 } }
+const pop = { initial: { opacity: 0, scale: 0.7 }, animate: { opacity: 1, scale: 1 }, exit: { opacity: 0 }, transition: { type: 'spring' as const, stiffness: 500, damping: 22 } }
+
+function Meter({ label, value, good }: { label: string; value: number; good: boolean }) {
+  return (
+    <span className="dupes-meter">
+      <span>{label}</span>
+      <span className="dupes-bar"><motion.i animate={{ width: `${value}%` }} transition={{ duration: 0.45, ease: easeOut }} className={good ? 'good' : ''} /></span>
+      <b className="mono">{value}%</b>
+    </span>
   )
 }
 
@@ -642,35 +819,6 @@ function StatGrid() {
 }
 
 /* ============================================================ horizontal list */
-
-const FEATURES: { title: string; text: string; glyph: GlyphName; color: string }[] = [
-  { title: 'Sandboxed', text: 'Every patch and every agent-written tool runs in a throwaway copy of your repo, with no network.', glyph: 'box', color: 'var(--coder)' },
-  { title: 'Never auto-merges', text: 'Approved means ready for you. Auth and security paths always wait for a maintainer.', glyph: 'shield', color: 'var(--mint-strong)' },
-  { title: 'Your models', text: 'Free Groq and Gemini APIs out of the box, falling back from one to the next. Bring Anthropic or a local model if you prefer.', glyph: 'chip', color: 'var(--triager)' },
-  { title: 'Remembers', text: 'Validated tools are saved per repository, so the swarm gets faster the longer it works there.', glyph: 'hash', color: 'var(--pink)' },
-  { title: 'Audit trail', text: 'Every card records who moved it, when and why, from triage to merge.', glyph: 'sort', color: 'var(--coder)' },
-]
-
-function HorizontalList() {
-  const ref = useRef<HTMLElement>(null)
-  const { scrollYProgress } = useScroll({ target: ref, offset: ['start start', 'end end'] })
-  const x = useTransform(scrollYProgress, [0.05, 0.95], ['0%', '-58%'])
-  return (
-    <section className="hlist" id="security" ref={ref}>
-      <div className="hlist-sticky">
-        <div className="hlist-head"><Surtitle dot="var(--coder)">Secure and private</Surtitle></div>
-        <motion.div className="hlist-track" style={{ x }}>
-          {FEATURES.map((f) => (
-            <article key={f.title} className="hcard">
-              <span className="hcard-icon" style={{ background: f.color }}><Glyph name={f.glyph} size={44} /></span>
-              <div><h3>{f.title}</h3><p className="text-grey">{f.text}</p></div>
-            </article>
-          ))}
-        </motion.div>
-      </div>
-    </section>
-  )
-}
 
 /* ============================================================ faq */
 

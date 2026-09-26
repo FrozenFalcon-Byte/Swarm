@@ -10,10 +10,12 @@ import { Roll } from '../../components/Roll'
 
 const FULL_NAME = /^[\w.-]+\/[\w.-]+$/
 
-export default function ConnectRepo() {
+/** `onAdded` replaces the default (open the new repository), e.g. during onboarding. */
+export default function ConnectRepo({ onAdded }: { onAdded?: (repoId: string) => void } = {}) {
   const { user, connectGitHub } = useAuth()
   const link = useGithubLink(user?.uid)
   const navigate = useNavigate()
+  const done = (id: string) => { if (onAdded) { setBusy(null); onAdded(id) } else navigate(`/app/repos/${id}`) }
   const [query, setQuery] = useState('')
   const [repos, setRepos] = useState<GhRepo[] | null>(null)
   const [busy, setBusy] = useState<string | null>(null)
@@ -39,7 +41,7 @@ export default function ConnectRepo() {
     setBusy(gh.full_name); setError('')
     try {
       const id = await connectRepo(user.uid, 'github', gh)
-      navigate(`/app/repos/${id}`)
+      done(id)
     } catch (err) {
       setError((err as Error).message.includes('permission') ? 'Your account can’t add repositories yet. Try signing out and in again.' : 'Couldn’t add the repository. Try again.')
       setBusy(null)
@@ -61,7 +63,7 @@ export default function ConnectRepo() {
   async function demo() {
     if (!user) return
     setBusy('demo'); setError('')
-    try { navigate(`/app/repos/${await connectRepo(user.uid, 'demo')}`) } catch { setError('Couldn’t set up the demo. Try again.'); setBusy(null) }
+    try { done(await connectRepo(user.uid, 'demo')) } catch { setError('Couldn’t set up the demo. Try again.'); setBusy(null) }
   }
 
   async function connect() {
