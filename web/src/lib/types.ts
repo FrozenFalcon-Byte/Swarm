@@ -33,7 +33,7 @@ export interface Task {
     tools_used?: string[]
     delivery?: string
     second_opinions?: SecondOpinion[]
-    review?: { checks: ReviewCheck[]; sensitive: boolean }
+    review?: { checks: ReviewCheck[]; sensitive: boolean; askFirst?: string[] }
     test_summary?: {
       sandbox?: string
       suite_patched?: { passed: number; failed: number; total: number }
@@ -71,10 +71,15 @@ export interface Repo {
   private?: boolean
   htmlUrl?: string
   description?: string
-  settings?: { autoSync?: boolean; secondOpinionAgents?: string[] }
+  settings?: { autoSync?: boolean; secondOpinionAgents?: string[]; rules?: HouseRule[]; schedule?: Schedule | null }
   lab?: { waves: LabSpec[] }
   labStatus?: string | null
 }
+
+/** What the owner tells the agents (settings.rules); the reviewer enforces them on every fix. */
+export interface HouseRule { id: string; kind: 'never' | 'ask' | 'size'; glob?: string; max?: number; why?: string; on: boolean }
+/** Quiet hours (settings.schedule): 168 characters, Monday 00:00 first, '1' where the swarm may start runs on its own. */
+export interface Schedule { tz: string; hours: string }
 
 export type LabKind = 'hash-order' | 'jitter' | 'clock' | 'shared-state'
 export type LabSize = 'small' | 'medium' | 'large'

@@ -1,12 +1,12 @@
 import { useEffect, useState } from 'react'
 import {
-  addDoc, collection, deleteDoc, doc, getDoc, limit, onSnapshot, orderBy, query, serverTimestamp, setDoc, updateDoc, where,
+  addDoc, collection, deleteDoc, deleteField, doc, getDoc, limit, onSnapshot, orderBy, query, serverTimestamp, setDoc, updateDoc, where,
   type DocumentData, type Query,
 } from 'firebase/firestore'
 import { getBytes, ref } from 'firebase/storage'
 import { db, storage } from './firebase'
 import type { GhRepo } from './github'
-import type { A2AEvent, Activity, GithubLink, LabSpec, LabWave, McpToken, Onboarding, Passkey, Prefs, Profile, Repo, Run, Task, Tool, WorkerInfo } from './types'
+import type { A2AEvent, Activity, GithubLink, HouseRule, Schedule, LabSpec, LabWave, McpToken, Onboarding, Passkey, Prefs, Profile, Repo, Run, Task, Tool, WorkerInfo } from './types'
 
 type Live<T> = { data: T; loading: boolean; error: string | null }
 
@@ -148,6 +148,16 @@ export function setAutoSync(repoId: string, on: boolean) {
 /** Outside A2A agents the reviewer asks for a second opinion (at most three). */
 export function setSecondOpinionAgents(repoId: string, urls: string[]) {
   return updateDoc(doc(db, 'repos', repoId), { 'settings.secondOpinionAgents': urls.slice(0, 3) })
+}
+
+/** The repository's house rules, which the reviewer checks every fix against. */
+export function setHouseRules(repoId: string, rules: HouseRule[]) {
+  return updateDoc(doc(db, 'repos', repoId), { 'settings.rules': JSON.parse(JSON.stringify(rules.slice(0, 30))) })
+}
+
+/** Quiet hours for automatic runs; null means any time. */
+export function setSchedule(repoId: string, schedule: Schedule | null) {
+  return updateDoc(doc(db, 'repos', repoId), { 'settings.schedule': schedule ?? deleteField() })
 }
 
 export function removeRepo(repoId: string) {

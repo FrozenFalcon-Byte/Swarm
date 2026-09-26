@@ -6,7 +6,7 @@ import { Logo, Mark } from '../../components/Logo'
 import { Reveal, SplitWords } from '../../components/Reveal'
 import { SmoothScroll } from '../../components/SmoothScroll'
 import { useAuth } from '../../lib/auth'
-import { finishBoot } from '../../lib/boot'
+import { finishBoot, takeOverBoot, type BootDot } from '../../lib/boot'
 import { easeInOut, easeOut } from '../../lib/motion'
 import { Glyph, type GlyphName } from './glyphs'
 import './landing.css'
@@ -15,12 +15,16 @@ import { HeroWorld } from './HeroWorld'
 import { Security } from './Security'
 
 let introPlayed = false // module state: resets on reload, survives in-app navigation
+const reducedMotion = () => window.matchMedia('(prefers-reduced-motion: reduce)').matches || document.documentElement.classList.contains('less-motion')
 
 export default function Landing() {
   const { hash } = useLocation()
   // intro → lifting (the curtain rises and the logo flies into the headline) → done.
   // It plays on every fresh page load, not when you come back to this page inside the app.
-  const [phase, setPhase] = useState<'intro' | 'lifting' | 'done'>(() => (introPlayed ? 'done' : 'intro'))
+  // Only when this is the page you loaded: arriving here from inside the app (the boot screen long gone)
+  // just plays the page transition and the hero's own entrance.
+  const [from] = useState(() => (introPlayed || reducedMotion() ? null : takeOverBoot()))
+  const [phase, setPhase] = useState<'intro' | 'lifting' | 'done'>(from ? 'intro' : 'done')
   const [fromIntro] = useState(phase === 'intro')
   useEffect(() => {
     if (phase === 'done') return
@@ -35,12 +39,12 @@ export default function Landing() {
     const id = window.setTimeout(() => document.querySelector(hash)?.scrollIntoView({ behavior: 'smooth' }), 700)
     return () => window.clearTimeout(id)
   }, [hash, phase])
-  useLayoutEffect(() => { void finishBoot(true) }, []) // the intro is the loader here
+  useLayoutEffect(() => { if (!from) void finishBoot(true) }, [from]) // otherwise the intro is the loader here
   const lift = useCallback(() => setPhase('lifting'), [])
   const landed = useCallback(() => { introPlayed = true; setPhase('done') }, [])
   return (
     <div className="landing">
-      {phase !== 'done' && <Intro lifting={phase === 'lifting'} onLift={lift} onLanded={landed} />}
+      {phase !== 'done' && from && <Intro from={from} lifting={phase === 'lifting'} onLift={lift} onLanded={landed} />}
       <SmoothScroll />
       <Nav />
       <Hero ready={phase !== 'intro'} tileShown={phase === 'done'} fromIntro={fromIntro} />
@@ -55,115 +59,74 @@ export default function Landing() {
   )
 }
 
-/* ============================================================ intro loader */
+/* ============================================================ intro */
 
-/** The mark assembles itself (one agent at a time) while a counter runs to 100. Then the curtain lifts
- *  and the mark flies, above everything, to the exact place and size of the mark in the headline, which
- *  only appears once it has landed. Nothing is swapped mid-flight, so the hand-off is seamless. */
-function Intro({ lifting, onLift, onLanded }: { lifting: boolean; onLift: () => void; onLanded: () => void }) {
-  const [phase, setPhase] = useState(0)
-  const odo = useRef<HTMLSpanElement>(null)
-  const bar = useRef<HTMLSpanElement>(null)
-  const [started, setStarted] = useState(false) // counts from the mark's first frame, so a slow first load can't outrun it
-  const tile = useRef<HTMLSpanElement>(null)
-  const slot = useRef<HTMLDivElement>(null)
-  // sit exactly over the slot in the centred column, before the first paint and on resize
+// the mark's four dots, as in <Mark>: centre (in a 32-unit tile) and colour; boot dot k becomes MARK[BOOT_TO_MARK[k]]
+const MARK = [{ x: 11, y: 11, c: 'var(--triager)' }, { x: 21, y: 11, c: 'var(--coder)' }, { x: 11, y: 21, c: 'var(--tester)' }, { x: 21, y: 21, c: 'var(--reviewer)' }]
+const BOOT_TO_MARK = [0, 1, 3, 2] // the boot screen goes yellow, sky, green, coral round the square
+const TILE = 120
+
+/** One continuous move from the boot screen to the hero. The four dots that were chasing each other
+ *  glide from wherever they are into the mark's grid while the dark tile grows behind them; then the
+ *  white lifts away and the mark flies into the gap in the headline as the words rise around it. The
+ *  headline's own mark only appears once this one has landed on it, so nothing is swapped in view. */
+function Intro({ from, lifting, onLift, onLanded }: { from: BootDot[]; lifting: boolean; onLift: () => void; onLanded: () => void }) {
+  const tile = useRef<HTMLDivElement>(null)
+  const [origin] = useState(() => ({ left: window.innerWidth / 2 - TILE / 2, top: window.innerHeight / 2 - TILE / 2 }))
+  const dot = (TILE * 4) / 32 // the dots' radius: 4 of 32
+  // where each mark dot starts: on top of the boot dot it continues from
+  const starts = MARK.map((m, i) => {
+    const b = from[BOOT_TO_MARK.indexOf(i)]
+    const hx = origin.left + (m.x / 32) * TILE, hy = origin.top + (m.y / 32) * TILE
+    return b ? { x: b.x - hx, y: b.y - hy, scale: b.size / (dot * 2) } : { x: 0, y: -40, scale: 0 }
+  })
+  const ink = useRef<HTMLElement>(null)
+  const dots = useRef<(HTMLElement | null)[]>([])
+  // the gather runs on the compositor (Web Animations), starting from exactly what the first frame shows
   useLayoutEffect(() => {
-    const place = () => {
-      const r = slot.current?.getBoundingClientRect()
-      if (r && tile.current) { tile.current.style.left = `${r.left}px`; tile.current.style.top = `${r.top}px` }
-    }
-    place()
-    window.addEventListener('resize', place)
-    return () => window.removeEventListener('resize', place)
-  }, [])
-  useEffect(() => { const id = window.setTimeout(() => setStarted(true), 600); return () => window.clearTimeout(id) }, []) // never wait on it forever
+    const spring = 'cubic-bezier(0.34, 1.45, 0.5, 1)'
+    const anims = dots.current.map((el, i) => el?.animate(
+      [{ transform: `translate(${starts[i].x}px, ${starts[i].y}px) scale(${starts[i].scale})`, boxShadow: 'inset 0 0 0 3px #0f0f0f' },
+        { transform: 'translate(0, 0) scale(1)', boxShadow: 'inset 0 0 0 0px #0f0f0f' }],
+      { duration: 820, delay: 40 + i * 70, easing: spring, fill: 'forwards' }))
+    anims.push(ink.current?.animate([{ transform: 'scale(0)', borderRadius: '50%' }, { transform: 'scale(1.06)', borderRadius: '28%', offset: 0.7 }, { transform: 'scale(1)', borderRadius: '25%' }],
+      { duration: 760, delay: 260, easing: 'cubic-bezier(0.22, 1, 0.36, 1)', fill: 'forwards' }))
+    return () => anims.forEach((a) => a?.cancel())
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
-    if (!started) return
-    let raf = 0, fonts = false, finished = false
-    const start = performance.now(), min = 1900
-    if (document.fonts) document.fonts.ready.then(() => { fonts = true }); else fonts = true
-    const tick = (t: number) => {
-      const p = Math.min(1, (t - start) / min)
-      // smootherstep: slow start, glide through the middle, settle softly on 100
-      const v = p * p * p * (p * (p * 6 - 15) + 10) * 100
-      rollTo(odo.current, v)
-      if (bar.current) bar.current.style.transform = `scaleX(${v / 100})`
-      setPhase(v < 35 ? 0 : v < 60 ? 1 : v < 85 ? 2 : 3)
-      if (p < 1 || !fonts) { raf = requestAnimationFrame(tick); return }
-      if (finished) return
-      finished = true
-      const from = tile.current?.getBoundingClientRect()
+    let cancelled = false
+    const fonts = document.fonts ? Promise.race([document.fonts.ready, new Promise((r) => setTimeout(r, 1400))]) : null
+    const assembled = new Promise((r) => setTimeout(r, 1050))
+    Promise.all([fonts, assembled]).then(() => {
+      if (cancelled) return
       const to = document.querySelector('.hero-tile')?.getBoundingClientRect()
       onLift()
-      if (!tile.current || !from || !to || !to.width) { onLanded(); return }
-      // transform only (GPU): move the tile's top-left corner onto the target's and scale to its size
-      animate(tile.current, { x: to.left - from.left, y: to.top - from.top, scale: to.width / from.width },
-        { duration: 1.05, ease: [0.76, 0, 0.24, 1] }).then(onLanded)
-    }
-    raf = requestAnimationFrame(tick)
-    return () => cancelAnimationFrame(raf)
-  }, [started, onLift, onLanded])
+      if (!tile.current || !to || !to.width) { onLanded(); return }
+      animate(tile.current, { x: to.left - origin.left, y: to.top - origin.top, scale: to.width / TILE },
+        { duration: 1.15, ease: [0.83, 0, 0.17, 1] }).then(() => { if (!cancelled) onLanded() })
+    })
+    return () => { cancelled = true }
+  }, [onLift, onLanded, origin])
   return (
     <>
-      <motion.div className="intro" initial={false}
-        animate={lifting ? { clipPath: 'inset(0% 0% 100% 0% round 0px 0px 56px 56px)' } : { clipPath: 'inset(0% 0% 0% 0% round 0px 0px 0px 0px)' }}
-        transition={{ duration: 0.95, ease: easeInOut }}>
-        <div className="intro-center">
-          <div className="intro-slot" ref={slot} />
-          <p className="intro-word" aria-label="Swarm">
-            {'Swarm'.split('').map((c, i) => (
-              <span key={i} className="word-mask"><motion.span className="word" initial={{ y: '110%' }} animate={{ y: lifting ? '-110%' : '0%' }}
-                transition={{ duration: 0.7, ease: easeOut, delay: lifting ? i * 0.025 : 0.75 + i * 0.05 }}>{c}</motion.span></span>
-            ))}
-          </p>
-        </div>
-        <div className="intro-foot mono">
-          <span className="intro-phase">
-            <AnimatePresence mode="popLayout" initial={false}>
-              <motion.span key={phase} initial={{ y: '100%', opacity: 0 }} animate={{ y: '0%', opacity: 1 }} exit={{ y: '-100%', opacity: 0 }} transition={{ duration: 0.45, ease: easeOut }}>
-                {PHASES[phase]}
-              </motion.span>
-            </AnimatePresence>
-          </span>
-          <span className="intro-pct" ref={odo} aria-label="Loading">
-            {[0, 1, 2].map((c) => <span key={c} className="odo-col"><span className="odo-strip">{ODO_DIGITS.map((d, i) => <span key={i}>{d}</span>)}</span></span>)}
-          </span>
-        </div>
-        <div className="intro-bar"><span ref={bar} /></div>
+      <motion.div className="intro" initial={false} animate={{ opacity: lifting ? 0 : 1 }} transition={{ duration: 0.9, ease: easeInOut, delay: lifting ? 0.15 : 0 }}>
+        <p className="intro-word" aria-label="Swarm" style={{ top: origin.top + TILE + 34 }}>
+          {'Swarm'.split('').map((c, i) => (
+            <span key={i} className="word-mask"><motion.span className="word" initial={{ y: '110%' }} animate={{ y: lifting ? '-110%' : '0%' }}
+              transition={{ duration: 0.7, ease: easeOut, delay: lifting ? i * 0.03 : 0.55 + i * 0.045 }}>{c}</motion.span></span>
+          ))}
+        </p>
       </motion.div>
-      {/* outside the curtain, so it stays visible while the curtain lifts */}
-      <span ref={tile} className="intro-tile"><IntroMark onStart={() => setStarted(true)} /></span>
+      {/* above the white, so it stays in view the whole way into the headline */}
+      <div ref={tile} className="intro-tile" style={{ left: origin.left, top: origin.top, width: TILE, height: TILE }}>
+        <i className="intro-ink" ref={ink} style={{ transform: 'scale(0)', borderRadius: '50%' }} />
+        {MARK.map((m, i) => (
+          <i key={i} className="intro-dot" ref={(el) => { dots.current[i] = el }}
+            style={{ left: (m.x / 32) * TILE - dot, top: (m.y / 32) * TILE - dot, width: dot * 2, height: dot * 2, background: m.c,
+              transform: `translate(${starts[i].x}px, ${starts[i].y}px) scale(${starts[i].scale})`, boxShadow: 'inset 0 0 0 3px #0f0f0f' }} />
+        ))}
+      </div>
     </>
-  )
-}
-
-const PHASES = ['Waking the triager', 'Briefing the coder', 'Warming up the sandbox', 'Reviewer on duty']
-const ODO_DIGITS = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 0]
-
-/** An odometer: every column rolls continuously, and a column only turns over while the one to its
- *  right passes from 9 to 0, like a mechanical counter. Written straight to the DOM each frame. */
-function rollTo(el: HTMLElement | null, v: number) {
-  if (!el) return
-  const cols = el.querySelectorAll<HTMLElement>('.odo-strip')
-  const carry = (x: number) => Math.min(1, Math.max(0, x))
-  const ones = v % 10
-  const tens = (Math.floor(v / 10) % 10) + carry(ones - 9)
-  const hundreds = Math.floor(v / 100) + carry((v % 100) - 99)
-  ;[hundreds, tens, ones].forEach((pos, i) => { if (cols[i]) cols[i].style.transform = `translate3d(0, ${-pos / 11 * 100}%, 0)` })
-}
-
-function IntroMark({ onStart }: { onStart: () => void }) {
-  const dots = [[11, 11, 'var(--triager)'], [21, 11, 'var(--coder)'], [11, 21, 'var(--tester)'], [21, 21, 'var(--reviewer)']] as const
-  return (
-    <svg viewBox="0 0 32 32" width="100%" height="100%" aria-hidden="true">
-      <motion.rect width="32" height="32" rx="8" fill="var(--ink)" initial={{ scale: 0.4, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} onAnimationStart={onStart}
-        transition={{ type: 'spring', stiffness: 220, damping: 18 }} style={{ transformOrigin: '16px 16px' }} />
-      {dots.map(([cx, cy, fill], i) => (
-        <motion.circle key={i} cx={cx} cy={cy} r="4" fill={fill} initial={{ y: -26, opacity: 0, scale: 0.4 }} animate={{ y: 0, opacity: 1, scale: 1 }}
-          transition={{ type: 'spring', stiffness: 420, damping: 15, delay: 0.25 + i * 0.16 }} style={{ transformOrigin: `${cx}px ${cy}px` }} />
-      ))}
-    </svg>
   )
 }
 
@@ -182,7 +145,8 @@ export function Nav() {
   const [menu, setMenu] = useState(false)
   useMotionValueEvent(scrollY, 'change', (y) => setHidden(y > (scrollY.getPrevious() ?? 0) && y > 300 && !menu))
   // separate pages only; sections of the landing page are reached by scrolling it
-  const links = [['/playground', 'Playground'], ['/cost', 'Cost calculator'], ['/docs/mcp', 'MCP docs']]
+  // plus Home whenever you're anywhere else
+  const links = [...(path === '/' ? [] : [['/', 'Home']]), ['/playground', 'Playground'], ['/cost', 'Cost calculator'], ['/docs/mcp', 'MCP docs']]
   return (
     <motion.header className="nav" animate={{ y: hidden ? -120 : 0 }} transition={{ duration: 0.5, ease: easeOut }}>
       <div className="nav-inner">
@@ -202,7 +166,6 @@ export function Nav() {
       <AnimatePresence>
         {menu && (
           <motion.nav className="nav-sheet" initial={{ opacity: 0, y: -16 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -16 }} transition={{ duration: 0.4, ease: easeOut }}>
-            {path !== '/' && <Link to="/" onClick={() => setMenu(false)}>Home</Link>}
             {links.map(([href, label]) => <Link key={href} to={href} onClick={() => setMenu(false)}>{label}</Link>)}
             {!user && <Link to="/signin">Sign in</Link>}
           </motion.nav>

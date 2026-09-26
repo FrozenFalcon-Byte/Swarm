@@ -63,3 +63,5 @@ class Settings:
 
     # An LLM critique from a small local model is advisory unless this is set.
     llm_review_blocking: bool = field(default_factory=lambda: _bool("SWARM_LLM_REVIEW_BLOCKING"))
+    # The repository owner's house rules (see houserules.py); the worker fills them in per repository.
+    house_rules: list = field(default_factory=list)

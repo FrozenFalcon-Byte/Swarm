@@ -12,6 +12,7 @@ import re
 from dataclasses import dataclass
 
 from ..board import Task, TaskState
+from ..houserules import evaluate as house_rules
 from ..llm import LLMError
 from ..patching import changed_files, diff_stats, parse_diff
 from ..retrieval import RepoIndex
@@ -47,6 +48,7 @@ class ReviewerAgent(Agent):
 
     def __init__(self, *args, sandbox: Sandbox | None = None, **kw):
         super().__init__(*args, **kw)
+        self.ask_first: list[str] = []
         self.sandbox = sandbox or Sandbox(self.settings)
 
     def review(self, task: Task) -> tuple[list[Check], bool]:
@@ -102,6 +104,12 @@ class ReviewerAgent(Agent):
         if self.llm.available:
             checks.append(self._llm_check(task, diff))
 
+        self.ask_first = []
+        if self.settings.house_rules:
+            verdict = house_rules(self.settings.house_rules, files, n)
+            checks.append(Check("house-rules", verdict.ok, "; ".join(verdict.blocked) or "keeps to the repository's house rules"))
+            self.ask_first = verdict.ask
+
         sensitive = [f for f in files if SENSITIVE.search(f)]
         return checks, bool(sensitive)
 
@@ -133,6 +141,13 @@ class ReviewerAgent(Agent):
                                   note=f"Reviewer: {reason}", assigned_agent=None,
                                   artifacts={"review": review, "rejected_strategies": rejected, "rejected_diffs": rejected_diffs})
             self.say(f"requested changes: {reason[:120]}", task)
+        elif self.ask_first:
+            review["askFirst"] = self.ask_first
+            self.board.transition(task.task_id, TaskState.HUMAN_REVIEW, self.name,
+                                  "all checks pass, but a house rule says to ask you first",
+                                  note="House rule: " + "; ".join(self.ask_first)[:400], assigned_agent=None,
+                                  artifacts={"review": review})
+            self.say("checks pass; a house rule asks for a person, escalated", task)
         elif sensitive:
             self.board.transition(task.task_id, TaskState.HUMAN_REVIEW, self.name,
                                   "all checks pass, but the diff touches security-sensitive code — escalated",

@@ -17,7 +17,7 @@ const pages = {
   overview: () => import('./Overview'), repos: () => import('./Repos'), repo: () => import('./RepoView'),
   tools: () => import('./ToolsPage'), settings: () => import('./Settings'), profile: () => import('./Profile'),
   help: () => import('./Help'), agents: () => import('./Agents'), lab: () => import('./Lab'),
-  tests: () => import('./Tests'), insights: () => import('./Insights'),
+  rules: () => import('./Rules'), quiet: () => import('./QuietHours'),
 }
 const Overview = lazy(pages.overview)
 const Repos = lazy(pages.repos)
@@ -28,8 +28,8 @@ const Profile = lazy(pages.profile)
 const Help = lazy(pages.help)
 const Agents = lazy(pages.agents)
 const Lab = lazy(pages.lab)
-const Tests = lazy(pages.tests)
-const Insights = lazy(pages.insights)
+const Rules = lazy(pages.rules)
+const QuietHours = lazy(pages.quiet)
 
 let startHandled = false // once per page load: later visits to /app are deliberate
 
@@ -194,8 +194,8 @@ export default function AppShell() {
                 <Route path="help" element={<Help />} />
                 <Route path="agents" element={<Agents />} />
                 <Route path="lab" element={admin ? <Lab /> : <Overview />} />
-                <Route path="tests" element={<Tests />} />
-                <Route path="insights" element={<Insights />} />
+                <Route path="rules" element={<Rules />} />
+                <Route path="quiet-hours" element={<QuietHours />} />
               </Routes>
             </Suspense>
           </PageTransition>
@@ -207,16 +207,16 @@ export default function AppShell() {
 }
 
 const NAV = [
-  { to: '/app', label: 'Overview', icon: 'overview' }, { to: '/app/tests', label: 'Tests', icon: 'tests' },
-  { to: '/app/repos', label: 'Repositories', icon: 'repos' }, { to: '/app/insights', label: 'Insights', icon: 'insights' },
+  { to: '/app', label: 'Overview', icon: 'overview' }, { to: '/app/repos', label: 'Repositories', icon: 'repos' },
   { to: '/app/agents', label: 'Agents', icon: 'agents' }, { to: '/app/tools', label: 'Tools', icon: 'tools' },
   { to: '/app/lab', label: 'Test lab', icon: 'lab', admin: true },
+  { to: '/app/rules', label: 'House rules', icon: 'rules' }, { to: '/app/quiet-hours', label: 'Quiet hours', icon: 'quiet' },
   { to: '/app/settings', label: 'Settings', icon: 'settings' }, { to: '/app/help', label: 'Help', icon: 'help' },
 ]
 
 const ICONS: Record<string, string> = {
-  tests: 'M9 11l2 2 4-4 M4 4h16v16H4z',
-  insights: 'M4 20V10 M10 20V4 M16 20v-7 M22 20H2',
+  rules: 'M12 3l8 3v6c0 4.5-3.4 8-8 9-4.6-1-8-4.5-8-9V6z M9 12l2 2 4-4',
+  quiet: 'M20 14.5A8 8 0 1 1 9.5 4a6.5 6.5 0 0 0 10.5 10.5z',
   lab: 'M9 3h6 M10 3v6L4.5 18.5A1.7 1.7 0 006 21h12a1.7 1.7 0 001.5-2.5L14 9V3 M7.5 14h9',
   overview: 'M3 13h8V3H3v10zm0 8h8v-6H3v6zm10 0h8V11h-8v10zm0-18v6h8V3h-8z',
   repos: 'M4 4h11l5 5v11H4z M15 4v5h5',

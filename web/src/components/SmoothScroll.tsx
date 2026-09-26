@@ -5,7 +5,7 @@ import Lenis from 'lenis'
 export function SmoothScroll() {
   useEffect(() => {
     if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return
-    const lenis = new Lenis({ duration: 1.15, easing: (t) => 1 - Math.pow(1 - t, 4), smoothWheel: true })
+    const lenis = new Lenis({ duration: 1.15, easing: (t) => 1 - Math.pow(1 - t, 4), smoothWheel: true, allowNestedScroll: true })
     let raf = 0
     const loop = (time: number) => { lenis.raf(time); raf = requestAnimationFrame(loop) }
     raf = requestAnimationFrame(loop)

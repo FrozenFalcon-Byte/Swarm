@@ -26,7 +26,7 @@ from google.cloud import firestore as gfs
 from ..board import InvalidTransition, TaskState
 from ..board.models import utcnow
 from ..config import Settings
-from .. import lab
+from .. import houserules, lab
 from ..issues import Issue, from_file, from_github
 from ..orchestrator import Swarm
 from . import firebase
@@ -68,6 +68,7 @@ class Worker:
         s = copy.copy(self.settings)
         s.home = self.settings.home / "repos" / repo_id
         s.repo_path = s.home / "checkout"
+        s.house_rules = houserules.clean((repo.get("settings") or {}).get("rules"))
         s.ensure_dirs()
         board = FirestoreTaskBoard(self.db, repo_id)
         registry = FirestoreToolRegistry(self.db, self.bucket, repo_id, s.tools_dir, s.use_embeddings)
@@ -246,6 +247,8 @@ class Worker:
             repo = snap.to_dict()
             if repo.get("paused") or (repo.get("settings") or {}).get("autoSync") is False:
                 continue
+            if not houserules.schedule_allows((repo.get("settings") or {}).get("schedule")):
+                continue  # quiet hours: picked up when the next window opens
             if repo.get("status") in ("queued", "running") or not repo.get("lastSyncedAt"):
                 continue  # busy, or never run: the connect run covers it
             try:

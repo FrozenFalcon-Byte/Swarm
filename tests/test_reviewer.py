@@ -31,3 +31,21 @@ def test_approves_bounded_jitter(settings):
     t = _task_in_review(board, settings, "        delays.append(step + random.uniform(0, step))\n")
     ReviewerAgent(board, settings).step()
     assert board.get(t.task_id).state == TaskState.APPROVED
+
+
+def test_house_rule_never_sends_the_fix_back(settings):
+    board = TaskBoard(":memory:")
+    t = _task_in_review(board, settings, "        delays.append(step + random.uniform(0, step))\n")
+    settings.house_rules = [{"kind": "never", "glob": "tagkit/retry.py", "why": "frozen for the release", "on": True}]
+    ReviewerAgent(board, settings).step()
+    t = board.get(t.task_id)
+    assert t.state == TaskState.REJECTED and "never touch tagkit/retry.py" in t.note
+
+
+def test_house_rule_ask_first_waits_for_a_person(settings):
+    board = TaskBoard(":memory:")
+    t = _task_in_review(board, settings, "        delays.append(step + random.uniform(0, step))\n")
+    settings.house_rules = [{"kind": "ask", "glob": "retry.py", "on": True}, {"kind": "never", "glob": "docs/", "on": True}]
+    ReviewerAgent(board, settings).step()
+    t = board.get(t.task_id)
+    assert t.state == TaskState.HUMAN_REVIEW and "ask me first" in t.note

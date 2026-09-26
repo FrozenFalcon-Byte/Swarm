@@ -46,6 +46,36 @@ export async function finishBoot(instant = false) {
   }
 }
 
+export interface BootDot { x: number; y: number; size: number }
+let handed: BootDot[] | null | undefined
+
+/** The landing page's intro carries on from the boot screen instead of replacing it: this hides the
+ *  boot dots and returns where each one is right now (centre and size, in boot-screen order: yellow,
+ *  sky, green, coral), so the intro can draw its own dots in exactly those places in the same frame.
+ *  null when the app had already booted (you came here from inside the app). Safe to call twice. */
+export function takeOverBoot(): BootDot[] | null {
+  if (handed !== undefined) return handed
+  if (done) return (handed = null)
+  done = true
+  window.clearTimeout(timer)
+  const boot = el()
+  handed = boot ? [...boot.querySelectorAll<HTMLElement>('.boot-dot')].map((d) => {
+    const r = d.getBoundingClientRect()
+    d.style.visibility = 'hidden'
+    return { x: r.left + r.width / 2, y: r.top + r.height / 2, size: r.width }
+  }) : []
+  if (boot) {
+    // the intro underneath is the same white, so the boot screen can simply let go
+    boot.style.background = 'transparent'
+    boot.style.pointerEvents = 'none'
+    const word = boot.querySelector<HTMLElement>('.boot-word')
+    word?.animate([{ opacity: getComputedStyle(word).opacity, transform: 'none' }, { opacity: 0, transform: 'translateY(10px)' }], { duration: 320, easing: 'ease-out', fill: 'forwards' })
+    window.setTimeout(() => boot.remove(), 360)
+  }
+  listeners.forEach((f) => f())
+  return handed
+}
+
 const sleep = (ms: number) => new Promise<void>((r) => window.setTimeout(r, ms))
 const EASE = 'cubic-bezier(0.65, 0, 0.35, 1)'
 
