@@ -104,8 +104,16 @@ function Bellows({ scope, label }: { scope: Scope; label: string }) {
 }
 
 /** Wrap one routed page. Give it a `key` in an <AnimatePresence mode="wait" initial={false}>. */
-export function PageTransition({ scope = 'viewport', label, children }: { scope?: Scope; label: string; children: ReactNode }) {
+export function PageTransition({ scope = 'viewport', label, children, style = 'bellows' }: { scope?: Scope; label: string; children: ReactNode; style?: 'bellows' | 'fade' | 'none' }) {
   const reduced = useReducedMotion()
+  if (style === 'none') return <div>{children}</div>
+  if (style === 'fade' && !reduced) {
+    // the old page sinks and fades, the new one rises out of a soft blur
+    return (
+      <motion.div initial={{ opacity: 0, y: 18, filter: 'blur(6px)' }} animate={{ opacity: 1, y: 0, filter: 'blur(0px)', transition: { duration: 0.5, ease: easeOut } }}
+        exit={{ opacity: 0, y: -10, filter: 'blur(4px)', transition: { duration: 0.22, ease: easeInOut } }}>{children}</motion.div>
+    )
+  }
   if (reduced) {
     return (
       <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.2 }}>{children}</motion.div>

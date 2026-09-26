@@ -89,7 +89,7 @@ function Row({ repo: r, i, mine }: { repo: Repo; i: number; mine: boolean }) {
         </div>
         <div className="rp-board" title={total ? parts.map(([, v, l]) => `${v} ${l}`).join(', ') : 'No tasks yet'}>
           <div className="stack-bar">{total ? parts.map(([c, v], k) => v ? <motion.span key={k} style={{ background: c }} initial={{ width: 0 }} animate={{ width: `${(v / total) * 100}%` }} transition={{ duration: 0.9, ease: easeOut, delay: 0.3 + i * 0.05 }} /> : null) : null}</div>
-          <span>{r.source === 'demo' ? 'Demo' : 'GitHub'} · {r.lastRunAt ? `ran ${timeAgo(r.lastRunAt)}` : 'never run'}</span>
+          <span>{total ? `${total} task${total === 1 ? '' : 's'}` : 'No tasks yet'} · {r.lastRunAt ? `ran ${timeAgo(r.lastRunAt)}` : 'never run'}</span>
         </div>
         <div className="rp-act">
           {mine && <button className="btn btn-line btn-sm" onClick={run} disabled={working}><Roll>{r.status === 'running' ? 'Running…' : r.status === 'queued' ? 'Queued' : 'Run now'}</Roll></button>}

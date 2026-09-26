@@ -1,107 +1,143 @@
-import { AnimatePresence, motion } from 'motion/react'
-import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from 'react'
+import { AnimatePresence, motion, type Variants } from 'motion/react'
+import { createContext, useCallback, useContext, useMemo, useRef, useState, type ReactNode } from 'react'
 
 /*
- * Notifications that behave like the iPhone's Dynamic Island: a small black pill drops in at the top,
- * springs open to show the message, then folds back into a pill and slips away. A new message while
- * one is showing morphs the open island to the new content instead of stacking.
+ * Toasts as stickers. Each one arrives as its agent's dot, which rolls in from the corner, bursts open into
+ * a white card with an ink outline, and presses up off its hard shadow. The words rise into place, a thin
+ * fuse along the bottom burns down while it's up (hover to hold it), and on the way out the card folds
+ * back into the dot, which drops away. A success throws a little confetti of agent colours; an error
+ * shakes its head. Up to three stack in the corner; a "working…" note turns into whatever comes next.
  */
 
 type Tone = 'ok' | 'error' | 'info' | 'work'
-export interface Toast { id: number; tone: Tone; title: string; body?: string; duration: number }
+export interface Toast { id: number; slot: number; tone: Tone; title: string; body?: string; duration: number }
 type Push = (t: { tone?: Tone; title: string; body?: string; duration?: number }) => number
 interface ToastApi { push: Push; ok(title: string, body?: string): number; error(title: string, body?: string): number; info(title: string, body?: string): number; work(title: string, body?: string): number; dismiss(id?: number): void }
 
 const Ctx = createContext<ToastApi | null>(null)
-const spring = { type: 'spring', stiffness: 420, damping: 32, mass: 0.9 } as const
+const MAX = 3
+const EASE = [0.65, 0, 0.35, 1] as const
+const COLOR: Record<Tone, string> = { ok: 'var(--reviewer)', error: 'var(--tester)', info: 'var(--coder)', work: 'var(--triager)' }
+const AGENTS = ['var(--triager)', 'var(--coder)', 'var(--tester)', 'var(--reviewer)']
 
 export function IslandProvider({ children }: { children: ReactNode }) {
-  const [toast, setToast] = useState<Toast | null>(null)
-  const [phase, setPhase] = useState<'pill' | 'open' | 'fold'>('pill')
-  const timers = useRef<number[]>([])
-  const paused = useRef(false)
+  const [toasts, setToasts] = useState<Toast[]>([])
   const seq = useRef(0)
-  const clear = () => { timers.current.forEach(clearTimeout); timers.current = [] }
-  const later = (ms: number, fn: () => void) => timers.current.push(window.setTimeout(fn, ms))
-
-  const current = useRef<Toast | null>(null)
-
-  const close = useCallback(() => {
-    clear()
-    setPhase('fold')
-    later(260, () => { current.current = null; setToast(null) })
-  }, [])
-
-  const schedule = useCallback((t: Toast) => {
-    clear()
-    if (t.duration > 0) later(t.duration, function tick() { if (paused.current) later(600, tick); else close() })
-  }, [close])
+  const close = useCallback((id?: number) => setToasts((ts) => (id === undefined ? ts.slice(0, -1) : ts.filter((t) => t.id !== id))), [])
 
   const push = useCallback<Push>(({ tone = 'info', title, body, duration }) => {
-    const t: Toast = { id: ++seq.current, tone, title, body, duration: duration ?? (tone === 'work' ? 0 : tone === 'error' ? 5200 : 3200) }
-    const wasShowing = !!current.current
-    current.current = t
-    setToast(t)
-    schedule(t)
-    if (wasShowing) setPhase('open') // already there: morph to the new message
-    else { setPhase('pill'); later(170, () => setPhase('open')) } // drop in as a pill, then open
-    return t.id
-  }, [schedule])
+    const id = ++seq.current
+    const t: Toast = { id, slot: id, tone, title, body, duration: duration ?? (tone === 'work' ? 0 : tone === 'error' ? 5600 : 3600) }
+    setToasts((ts) => {
+      // a "working on it" note becomes the answer, in the same card, rather than a second card
+      const w = ts.findIndex((x) => x.tone === 'work')
+      if (w >= 0) { const next = [...ts]; next[w] = { ...t, slot: ts[w].slot }; return next }
+      return [...ts, t].slice(-MAX)
+    })
+    return id
+  }, [])
 
-  const api: ToastApi = {
+  const api = useMemo<ToastApi>(() => ({
     push,
     ok: (title, body) => push({ tone: 'ok', title, body }),
     error: (title, body) => push({ tone: 'error', title, body }),
     info: (title, body) => push({ tone: 'info', title, body }),
     work: (title, body) => push({ tone: 'work', title, body }),
-    dismiss: (id) => { if (current.current && (id === undefined || current.current.id === id)) close() },
-  }
-  useEffect(() => () => clear(), [])
+    dismiss: (id) => close(id),
+  }), [push, close])
 
   return (
     <Ctx.Provider value={api}>
       {children}
-      <div className="island-wrap" aria-live="polite" aria-atomic="true">
-        <AnimatePresence>
-          {toast && (
-            <motion.div key="island" className={`island island--${toast.tone}`} layout transition={spring}
-              initial={{ opacity: 0, y: -22, scale: 0.5 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: -18, scale: 0.55, transition: { duration: 0.28, ease: [0.65, 0, 0.35, 1] } }}
-              style={{ borderRadius: 999 }}
-              onMouseEnter={() => { paused.current = true }} onMouseLeave={() => { paused.current = false }}
-              onClick={() => close()} role="status">
-              {phase === 'open' ? (
-                <AnimatePresence mode="popLayout" initial={false}>
-                  <motion.div key={toast.id} className="island-body" layout="position"
-                    initial={{ opacity: 0, filter: 'blur(6px)', y: 6 }} animate={{ opacity: 1, filter: 'blur(0px)', y: 0, transition: { delay: 0.08, duration: 0.3 } }}
-                    exit={{ opacity: 0, filter: 'blur(6px)', y: -6, transition: { duration: 0.15 } }}>
-                    <Glyph tone={toast.tone} />
-                    <div className="island-text"><b>{toast.title}</b>{toast.body && <span>{toast.body}</span>}</div>
-                    {toast.tone === 'work' ? <span className="island-wave" aria-hidden="true"><i /><i /><i /><i /></span> : null}
-                  </motion.div>
-                </AnimatePresence>
-              ) : (
-                <motion.div key="pill" className="island-pill" layout="position" initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
-                  <span className="island-cam" />
-                </motion.div>
-              )}
-            </motion.div>
-          )}
+      <ol className="toasts" aria-live="polite">
+        <AnimatePresence initial={false}>
+          {toasts.map((t, i) => <Sticker key={t.slot} t={t} depth={toasts.length - 1 - i} onClose={() => close(t.id)} />)}
         </AnimatePresence>
-      </div>
+      </ol>
     </Ctx.Provider>
   )
 }
 
-function Glyph({ tone }: { tone: Tone }) {
-  const draw = { initial: { pathLength: 0 }, animate: { pathLength: 1 }, transition: { delay: 0.18, duration: 0.45, ease: [0.165, 0.84, 0.44, 1] as const } }
+const card: Variants = {
+  // the card is the dot, opened up: a circle over the glyph that grows past the corners
+  hidden: { clipPath: 'circle(21px at 33px 50%)' },
+  show: { clipPath: 'circle(160% at 33px 50%)', transition: { delay: 0.32, duration: 0.6, ease: [0.76, 0, 0.24, 1] } },
+  gone: { clipPath: 'circle(21px at 33px 50%)', transition: { duration: 0.34, ease: EASE } },
+}
+const wrap: Variants = {
+  hidden: { x: 140, y: 30, rotate: 14, opacity: 0 },
+  show: { x: 0, y: 0, rotate: 0, opacity: 1, transition: { type: 'spring', stiffness: 320, damping: 24, mass: 0.9 } },
+  gone: { y: 70, x: 20, rotate: -30, scale: 0.4, opacity: 0, transition: { when: 'afterChildren', duration: 0.38, ease: [0.5, 0, 0.75, 0] } },
+}
+
+function Sticker({ t, depth, onClose }: { t: Toast; depth: number; onClose: () => void }) {
+  const [held, setHeld] = useState(false)
+  const words = t.title.split(' ')
   return (
-    <motion.span className={`island-glyph g-${tone}`} initial={{ scale: 0.4, rotate: -30 }} animate={{ scale: 1, rotate: 0 }} transition={{ ...spring, delay: 0.05 }}>
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
-        {tone === 'ok' && <motion.path d="M5 12.5l4.5 4.5L19 7.5" {...draw} />}
-        {tone === 'error' && <><motion.path d="M12 6v8" {...draw} /><motion.path d="M12 18.5v.01" {...draw} /></>}
-        {tone === 'info' && <><motion.path d="M12 11v7" {...draw} /><motion.path d="M12 6.5v.01" {...draw} /></>}
-        {tone === 'work' && <motion.circle cx="12" cy="12" r="7" strokeDasharray="30 14" animate={{ rotate: 360 }} transition={{ repeat: Infinity, duration: 0.9, ease: 'linear' }} style={{ originX: '50%', originY: '50%' }} />}
-      </svg>
+    <motion.li layout className={`toast toast--${t.tone}`} variants={wrap} initial="hidden" animate="show" exit="gone"
+      style={{ zIndex: 10 - depth }} transition={{ layout: { type: 'spring', stiffness: 380, damping: 32 } }}
+      onMouseEnter={() => setHeld(true)} onMouseLeave={() => setHeld(false)} role="status">
+      <motion.span className="toast-shadow" aria-hidden="true" initial={{ x: 0, y: 0, opacity: 0 }} animate={{ x: 6, y: 6, opacity: 1 }}
+        exit={{ x: 0, y: 0, opacity: 0, transition: { duration: 0.15 } }} transition={{ delay: 0.72, type: 'spring', stiffness: 500, damping: 20 }} />
+      <motion.div className="toast-card" variants={card} onClick={onClose}>
+        <AnimatePresence mode="popLayout" initial={false}>
+          <motion.div key={t.id} className="toast-in" initial={{ opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -14 }} transition={{ duration: 0.35, ease: EASE }}>
+            <Glyph tone={t.tone} />
+            <div className="toast-text">
+              <b aria-label={t.title}>
+                {words.map((w, k) => (
+                  <span key={k} className="toast-mask" aria-hidden="true">
+                    <motion.span initial={{ y: '110%', rotate: 8 }} animate={{ y: '0%', rotate: 0 }} transition={{ delay: 0.5 + k * 0.05, duration: 0.55, ease: [0.22, 1, 0.36, 1] }}>{w}</motion.span>
+                  </span>
+                ))}
+              </b>
+              {t.body && <motion.span initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.62 + words.length * 0.04, duration: 0.45 }}>{t.body}</motion.span>}
+            </div>
+            <button className="toast-x" onClick={(e) => { e.stopPropagation(); onClose() }} aria-label="Dismiss">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round"><path d="M6 6l12 12M18 6L6 18" /></svg>
+            </button>
+          </motion.div>
+        </AnimatePresence>
+        {t.duration > 0
+          ? <i key={`fuse-${t.id}`} className="toast-fuse" style={{ animationDuration: `${t.duration}ms`, animationPlayState: held ? 'paused' : 'running', background: COLOR[t.tone] }} onAnimationEnd={onClose} />
+          : <i className="toast-fuse toast-fuse--work" />}
+      </motion.div>
+      {t.tone === 'ok' && <Confetti key={`c-${t.id}`} />}
+    </motion.li>
+  )
+}
+
+/** Eight dots in the agents' colours, thrown out of the glyph as the card opens. */
+function Confetti() {
+  const bits = useMemo(() => Array.from({ length: 8 }, (_, i) => {
+    const a = (-150 + i * (300 / 7)) * (Math.PI / 180) - Math.PI / 2
+    const d = 46 + Math.random() * 30
+    return { x: Math.cos(a) * d * 1.3, y: Math.sin(a) * d, c: AGENTS[i % 4], s: 6 + Math.random() * 5, r: Math.random() * 360 }
+  }), [])
+  return (
+    <span className="toast-confetti" aria-hidden="true">
+      {bits.map((b, i) => (
+        <motion.i key={i} style={{ background: b.c, width: b.s, height: b.s, borderRadius: i % 3 ? '50%' : 3 }}
+          initial={{ x: 0, y: 0, scale: 0, rotate: 0 }} animate={{ x: [0, b.x, b.x * 1.1], y: [0, b.y, b.y + 40], scale: [0, 1.2, 0], rotate: b.r }}
+          transition={{ delay: 0.36, duration: 1.1, times: [0, 0.4, 1], ease: 'easeOut' }} />
+      ))}
+    </span>
+  )
+}
+
+function Glyph({ tone }: { tone: Tone }) {
+  const draw = { initial: { pathLength: 0 }, animate: { pathLength: 1 }, transition: { delay: 0.55, duration: 0.45, ease: [0.165, 0.84, 0.44, 1] as const } }
+  const shake = tone === 'error' ? { rotate: [0, -16, 13, -9, 6, 0] } : { rotate: 0 }
+  return (
+    <motion.span className="toast-glyph" style={{ background: COLOR[tone] }} initial={{ scale: 0.3, rotate: -200 }} animate={{ scale: 1, ...shake }}
+      transition={tone === 'error' ? { scale: { type: 'spring', stiffness: 400, damping: 16 }, rotate: { delay: 0.7, duration: 0.6 } } : { type: 'spring', stiffness: 300, damping: 14 }}>
+      {tone === 'work'
+        ? <span className="toast-orbit">{AGENTS.map((c, i) => <i key={i} style={{ background: c, animationDelay: `${-i * 0.25}s` }} />)}</span>
+        : <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+            {tone === 'ok' && <motion.path d="M5 12.5l4.5 4.5L19 7.5" {...draw} />}
+            {tone === 'error' && <><motion.path d="M12 6v8" {...draw} /><motion.path d="M12 18.5v.01" {...draw} /></>}
+            {tone === 'info' && <><motion.path d="M12 11v7" {...draw} /><motion.path d="M12 6.5v.01" {...draw} /></>}
+          </svg>}
     </motion.span>
   )
 }

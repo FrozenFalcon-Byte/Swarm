@@ -5,6 +5,7 @@ import { Select } from '../../components/Select'
 import { useAuth } from '../../lib/auth'
 import { savePrefs, useProfile, useRepos } from '../../lib/data'
 import type { Prefs } from '../../lib/types'
+import { pop } from '../../lib/sound'
 import { NAV } from './nav'
 import { PrefRow, Seg } from './ProfileExtras'
 import { Section } from './ui'
@@ -16,13 +17,21 @@ const ACCENTS: [NonNullable<Prefs['accent']>, string, string][] = [
   ['green', 'Mint', 'var(--green)'], ['sky', 'Sky', 'var(--coder)'], ['pink', 'Blush', 'var(--lab)'],
   ['yellow', 'Sun', 'var(--triager)'], ['coral', 'Coral', 'var(--tester)'], ['ink', 'Ink', 'var(--ink)'],
 ]
-const CARDS: [string, string][] = [
-  ['crew', 'The crew'], ['waiting', 'Waiting for you'], ['stats', 'Numbers'], ['repos', 'Repositories'],
-  ['pipeline', 'Pipeline'], ['who', 'Who did what'], ['evidence', 'Before and after'], ['moves', 'Latest moves'],
+// whole looks in one click: each sets the colour, canvas, typeface and corners together
+const THEMES: { id: string; name: string; look: Prefs; bg: string; dot: string; font: string; r: number }[] = [
+  { id: 'swarm', name: 'Swarm', look: { accent: 'green', canvas: 'white', font: 'grotesk', corners: 'round' }, bg: '#ffffff', dot: 'var(--green)', font: 'var(--font-sans)', r: 14 },
+  { id: 'studio', name: 'Studio', look: { accent: 'ink', canvas: 'mist', font: 'mono', corners: 'sharp' }, bg: '#f6f8fa', dot: 'var(--ink)', font: 'var(--font-mono)', r: 4 },
+  { id: 'paper', name: 'Paper', look: { accent: 'coral', canvas: 'paper', font: 'grotesk', corners: 'soft' }, bg: '#fbf8f1', dot: 'var(--tester)', font: 'var(--font-sans)', r: 9 },
+  { id: 'candy', name: 'Candy', look: { accent: 'pink', canvas: 'white', font: 'rounded', corners: 'round' }, bg: '#ffffff', dot: 'var(--lab)', font: 'ui-rounded, "SF Pro Rounded", system-ui', r: 14 },
+  { id: 'harbour', name: 'Harbour', look: { accent: 'sky', canvas: 'mist', font: 'system', corners: 'soft' }, bg: '#f6f8fa', dot: 'var(--coder)', font: 'system-ui', r: 9 },
+  { id: 'sunny', name: 'Sunny', look: { accent: 'yellow', canvas: 'paper', font: 'rounded', corners: 'round' }, bg: '#fbf8f1', dot: 'var(--triager)', font: 'ui-rounded, "SF Pro Rounded", system-ui', r: 14 },
+]
+const VOICES: [NonNullable<Prefs['voice']>, string, string][] = [
+  ['friendly', 'Friendly', 'Morning, Sam.'], ['pirate', 'Pirate', 'Ahoy, Cap’n Sam!'], ['robot', 'Robot', 'HELLO, SAM.'], ['bard', 'Bard', 'Well met, Sam.'],
 ]
 const DEFAULTS: Prefs = {
   accent: 'green', canvas: 'white', font: 'grotesk', corners: 'round', textSize: 'default', density: 'comfortable',
-  sidebar: 'full', hideGuardrails: false, hideRepos: false, pins: [], overviewHide: [], motion: 'system', clock: '24h', weekStart: 'mon',
+  sidebar: 'full', logo: 'alive', toasts: 'br', cursor: 'plain', sounds: 'off', celebrate: 'confetti', voice: 'friendly', pins: [], motion: 'system', clock: '24h', weekStart: 'mon',
 }
 
 export function Appearance() {
@@ -36,7 +45,6 @@ export function Appearance() {
   const [hex, setHex] = useState(prefs.accentHex || '#7c5cff')
   useEffect(() => { if (prefs.accentHex) setHex(prefs.accentHex) }, [prefs.accentHex])
   const pins = prefs.pins ?? []
-  const hidden = new Set(prefs.overviewHide ?? [])
   const pinnable = [
     ...NAV.filter((n) => !n.admin).map((n) => ({ value: n.to, label: n.label, hint: 'Page' })),
     ...repos.map((r) => ({ value: `/app/repos/${r.id}`, label: r.displayName || r.fullName, hint: 'Repository' })),
@@ -49,6 +57,25 @@ export function Appearance() {
       <Section title="Look" action={<button className="link" onClick={reset}>Reset everything</button>}>
         <Preview prefs={{ ...prefs, accentHex: accent === 'custom' ? hex : prefs.accentHex }} />
         <div className="prefs">
+          <div className="pref pref--stack">
+            <div className="pref-copy"><b>Themes</b><span>A whole look in one click. Fine-tune any part of it below.</span></div>
+            <div className="ap-themes" role="radiogroup" aria-label="Theme">
+              {THEMES.map((t) => {
+                const on = (Object.keys(t.look) as (keyof Prefs)[]).every((k) => (prefs[k] ?? DEFAULTS[k]) === t.look[k])
+                return (
+                  <motion.button key={t.id} role="radio" aria-checked={on} className={`ap-theme ${on ? 'on' : ''}`} whileTap={{ scale: 0.95 }}
+                    onClick={() => { save(t.look); if (!on) toast.ok(`${t.name} it is`, 'Colour, canvas, type and corners changed together.') }}>
+                    <span className="ap-theme-face" style={{ background: t.bg, borderRadius: t.r + 4 }}>
+                      <b style={{ fontFamily: t.font }}>Aa</b>
+                      <i style={{ background: t.dot, borderRadius: t.r > 6 ? '50%' : 3 }} />
+                      <em style={{ borderRadius: t.r / 2 }} /><em style={{ borderRadius: t.r / 2, width: '44%' }} />
+                    </span>
+                    <span className="ap-theme-name">{on && <motion.span layoutId="theme-tick" className="ap-theme-tick">✓</motion.span>}{t.name}</span>
+                  </motion.button>
+                )
+              })}
+            </div>
+          </div>
           <PrefRow title="Highlight colour" text="Marks where you are in the sidebar, the Overview card’s shadow and selected text. Or pick your own.">
             <div className="swatches" role="radiogroup" aria-label="Highlight colour">
               {ACCENTS.map(([id, label, color]) => (
@@ -77,9 +104,6 @@ export function Appearance() {
           <PrefRow title="Text size" text="Scales every page of the dashboard. The sidebar stays as it is.">
             <Seg id="ap-size" value={prefs.textSize ?? 'default'} onPick={(v) => save({ textSize: v })} options={[['small', 'Smaller'], ['default', 'Default'], ['large', 'Larger']]} />
           </PrefRow>
-          <PrefRow title="Density" text="Compact fits more task cards and sections on screen.">
-            <Seg id="ap-density" value={prefs.density ?? 'comfortable'} onPick={(v) => save({ density: v })} options={[['comfortable', 'Comfortable'], ['compact', 'Compact']]} />
-          </PrefRow>
         </div>
       </Section>
 
@@ -88,10 +112,10 @@ export function Appearance() {
           <PrefRow title="Sidebar" text="Icons only gives the pages more room. Point at an icon to see its name.">
             <Seg id="ap-side" value={prefs.sidebar ?? 'full'} onPick={(v) => save({ sidebar: v })} options={[['full', 'Full'], ['icons', 'Icons only']]} />
           </PrefRow>
-          <PrefRow title="Sidebar groups" text="Hide the groups you don’t use. Everything stays reachable from ⌘K.">
-            <div className="ap-toggles">
-              <Toggle on={!prefs.hideGuardrails} label="Guardrails" onChange={(on) => save({ hideGuardrails: !on })} />
-              <Toggle on={!prefs.hideRepos} label="Your repos" onChange={(on) => save({ hideRepos: !on })} />
+          <PrefRow title="Notifications" text="Where they drop in: bottom right, bottom left, or the top.">
+            <div className="ap-inline">
+              <Seg id="ap-toasts" value={prefs.toasts ?? 'br'} onPick={(v) => save({ toasts: v })} options={[['br', 'Right'], ['bl', 'Left'], ['top', 'Top']]} />
+              <button className="btn btn-line btn-sm" onClick={() => toast.ok('Looking good', 'This is how notifications arrive.')}>Try one</button>
             </div>
           </PrefRow>
           <div className="pref pref--stack">
@@ -111,20 +135,32 @@ export function Appearance() {
               )}
             </div>
           </div>
-          <div className="pref pref--stack">
-            <div className="pref-copy"><b>Overview cards</b><span>Choose what your Overview shows. The rest of the grid fills the space.</span></div>
-            <div className="ap-chips">
-              {CARDS.map(([id, label]) => {
-                const on = !hidden.has(id)
+        </div>
+      </Section>
+
+      <Section title="Little touches" action={<span className="muted">just for fun</span>}>
+        <div className="prefs">
+          <PrefRow title="Greeting voice" text="How the Overview says hello and tells you what’s waiting.">
+            <div className="ap-voices" role="radiogroup" aria-label="Greeting voice">
+              {VOICES.map(([id, label, sample]) => {
+                const on = (prefs.voice ?? 'friendly') === id
                 return (
-                  <motion.button key={id} className={`ap-chip ${on ? 'on' : ''}`} whileTap={{ scale: 0.94 }} aria-pressed={on}
-                    onClick={() => save({ overviewHide: on ? [...hidden, id] : [...hidden].filter((h) => h !== id) })}>
-                    <i>{on ? '✓' : ''}</i>{label}
+                  <motion.button key={id} role="radio" aria-checked={on} className={`ap-voice ${on ? 'on' : ''}`} whileTap={{ scale: 0.95 }} onClick={() => save({ voice: id })}>
+                    <b>{label}</b><span>{sample}</span>
                   </motion.button>
                 )
               })}
             </div>
-          </div>
+          </PrefRow>
+          <PrefRow title="Cursor swarm" text="The four agents tag along behind your pointer, and scatter when you stop.">
+            <Seg id="ap-cursor" value={prefs.cursor ?? 'plain'} onPick={(v) => save({ cursor: v })} options={[['plain', 'Just me'], ['swarm', 'Bring the swarm']]} />
+          </PrefRow>
+          <PrefRow title="Click sounds" text="A soft pop when you press a button. Quiet enough for an office.">
+            <Seg id="ap-sounds" value={prefs.sounds ?? 'off'} onPick={(v) => { save({ sounds: v }); if (v === 'pops') pop(1.2) }} options={[['off', 'Silent'], ['pops', 'Pops']]} />
+          </PrefRow>
+          <PrefRow title="Celebrations" text="Confetti in the agents’ colours when something goes right.">
+            <Seg id="ap-celebrate" value={prefs.celebrate ?? 'confetti'} onPick={(v) => save({ celebrate: v })} options={[['confetti', 'Confetti'], ['quiet', 'Keep it calm']]} />
+          </PrefRow>
         </div>
       </Section>
 
@@ -132,6 +168,9 @@ export function Appearance() {
         <div className="prefs">
           <PrefRow title="Motion" text="How much the interface animates. “Match my device” follows your system’s reduce-motion setting.">
             <Seg id="ap-motion" value={prefs.motion ?? 'system'} onPick={(v) => save({ motion: v })} options={[['system', 'Match my device'], ['less', 'Less'], ['full', 'Full']]} />
+          </PrefRow>
+          <PrefRow title="Logo" text="The four agents in the sidebar logo chase round their tile, faster while one is working.">
+            <Seg id="ap-logo" value={prefs.logo ?? 'alive'} onPick={(v) => save({ logo: v })} options={[['alive', 'Alive'], ['still', 'Still']]} />
           </PrefRow>
           <PrefRow title="Clock" text="How hours are written on Quiet hours.">
             <Seg id="ap-clock" value={prefs.clock ?? '24h'} onPick={(v) => save({ clock: v })} options={[['24h', '24-hour'], ['12h', '12-hour']]} />
@@ -142,16 +181,6 @@ export function Appearance() {
         </div>
       </Section>
     </div>
-  )
-}
-
-function Toggle({ on, label, onChange }: { on: boolean; label: string; onChange: (on: boolean) => void }) {
-  return (
-    <label className="toggle">
-      <input type="checkbox" checked={on} onChange={(e) => onChange(e.target.checked)} />
-      <span className="toggle-track"><span className="toggle-thumb" /></span>
-      <span>{label}</span>
-    </label>
   )
 }
 

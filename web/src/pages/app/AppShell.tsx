@@ -2,7 +2,7 @@ import { AnimatePresence, motion } from 'motion/react'
 import { lazy, Suspense, useEffect, useRef, useState } from 'react'
 import { PageTransition, routeLabel } from '../../components/PageTransition'
 import { Link, NavLink, Route, Routes, useLocation, useNavigate } from 'react-router-dom'
-import { Logo } from '../../components/Logo'
+import { LiveLogo, Logo } from '../../components/Logo'
 import { useAuth } from '../../lib/auth'
 import { wakeHub } from '../../lib/api'
 import { savePrefs, useAllTasks, useIsAdmin, useProfile, useRepos } from '../../lib/data'
@@ -12,6 +12,8 @@ import { easeOut } from '../../lib/motion'
 import { Splash } from '../../components/Splash'
 import { useBootHold } from '../../lib/boot'
 import { CommandBar, useCommandBar } from './CommandBar'
+import { CursorSwarm } from './CursorSwarm'
+import { pop } from '../../lib/sound'
 import { ICONS, NAV } from './nav'
 import './app.css'
 
@@ -100,6 +102,18 @@ export default function AppShell() {
   }).filter((p): p is NonNullable<typeof p> => !!p)
   useNeedsYouAlerts(repos, !!prefs?.notify)
   useEffect(() => { setMenu(false) }, [location.pathname])
+  useEffect(() => {
+    const d = document.documentElement.dataset
+    d.toasts = prefs?.toasts ?? 'br'
+    d.celebrate = prefs?.celebrate ?? 'confetti'
+  }, [prefs?.toasts, prefs?.celebrate])
+  // a soft pop on every press, if you asked for sounds
+  useEffect(() => {
+    if (prefs?.sounds !== 'pops') return
+    const down = (e: PointerEvent) => { const el = (e.target as Element).closest?.('button, a, [role=radio], label'); if (el) pop(el.matches('.btn-dark, .btn-green') ? 0.8 : 1) }
+    window.addEventListener('pointerdown', down)
+    return () => window.removeEventListener('pointerdown', down)
+  }, [prefs?.sounds])
   useEffect(() => { wakeHub() }, []) // the server may be asleep on a free host; opening the dashboard wakes it
   // leave first, then sign out, so the dashboard's guard never bounces you to /signin on the way out
   const signOut = () => { navigate('/', { replace: true }); void logOut() }
@@ -112,7 +126,7 @@ export default function AppShell() {
   }, [])
 
   return (
-    <div className={`shell ${prefs?.density === 'compact' ? 'density-compact' : ''} ${rail ? 'side-rail' : ''} text-${prefs?.textSize ?? 'default'} canvas-${prefs?.canvas ?? 'white'} font-${prefs?.font ?? 'grotesk'} corners-${prefs?.corners ?? 'round'}`}
+    <div className={`shell ${rail ? 'side-rail' : ''} text-${prefs?.textSize ?? 'default'} canvas-${prefs?.canvas ?? 'white'} font-${prefs?.font ?? 'grotesk'} corners-${prefs?.corners ?? 'round'}`}
       data-accent={prefs?.accent ?? 'green'} style={accentStyle(prefs?.accent, prefs?.accentHex)}>
       <header className="mtop">
         <Logo to="/app" />
@@ -157,7 +171,10 @@ export default function AppShell() {
       </AnimatePresence>
       <aside className="side">
         <div className="side-top">
-          <Logo to="/app" />
+          <LiveLogo to="/" busy={repos.some((r) => r.status === 'running')} still={prefs?.logo === 'still'} folded={rail} />
+          <button className="side-fold" onClick={toggleRail} data-tip={rail ? 'Expand sidebar' : 'Collapse sidebar'} aria-label={rail ? 'Expand the sidebar' : 'Collapse the sidebar'}>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><rect x="3.5" y="4.5" width="17" height="15" rx="3" /><path d="M9.5 4.5v15M16 10l-2 2 2 2" /></svg>
+          </button>
         </div>
         <button className="side-search" onClick={() => setCmdOpen(true)} title="Search or jump to (⌘K)">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><circle cx="11" cy="11" r="7" /><path d="M20 20l-3.5-3.5" /></svg>
@@ -173,12 +190,12 @@ export default function AppShell() {
         )}
         <nav className="side-nav" aria-label="Main">
           {nav.filter((n) => n.group === 'main').map((n) => <SideLink key={n.to} to={n.to} end={n.to === '/app'} icon={n.icon} count={n.to === '/app' ? needsYou : 0}>{n.label}</SideLink>)}
-          {!prefs?.hideGuardrails && <>
+          {<>
             <p className="side-label">Guardrails</p>
             {nav.filter((n) => n.group === 'guard').map((n) => <SideLink key={n.to} to={n.to} icon={n.icon}>{n.label}</SideLink>)}
           </>}
         </nav>
-        {repos.length > 0 && !prefs?.hideRepos && (
+        {repos.length > 0 && (
           <div className="side-repos">
             <p className="side-label">Your repos</p>
             <div className="side-repos-list" data-lenis-prevent>
@@ -195,18 +212,13 @@ export default function AppShell() {
         <div className="side-foot">
           <nav className="side-nav" aria-label="More">
             {nav.filter((n) => n.group === 'foot').map((n) => <SideLink key={n.to} to={n.to} icon={n.icon}>{n.label}</SideLink>)}
-            <button className="side-link side-fold" onClick={toggleRail} data-tip={rail ? 'Expand sidebar' : 'Collapse sidebar'} aria-label={rail ? 'Expand the sidebar' : 'Collapse the sidebar'}>
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><rect x="3.5" y="4.5" width="17" height="15" rx="3" /><path d="M9.5 4.5v15M16 10l-2 2 2 2" /></svg>
-              <span>Collapse</span>
-            </button>
-            <Link to="/" className="side-link side-home" data-tip="Swarm home">
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M15 18l-6-6 6-6" /></svg>
-              <span>Swarm home</span>
-            </Link>
           </nav>
           <div className={`side-user ${location.pathname.startsWith('/app/profile') ? 'active' : ''}`}>
             <NavLink to="/app/profile" className="side-user-link" title="Your profile">
-              <Avatar size={36} />
+              <span className="side-avatar">
+                <Avatar size={36} />
+                <span className="side-orbit" aria-hidden="true">{['triager', 'coder', 'tester', 'reviewer'].map((a, k) => <i key={a} style={{ background: `var(--${a})`, ['--k' as string]: k }} />)}</span>
+              </span>
               <span className="side-user-text"><b>{user?.displayName || 'You'}</b><span>{user?.email}</span></span>
             </NavLink>
             <button className="icon-btn" onClick={signOut} aria-label="Sign out" title="Sign out">
@@ -237,6 +249,7 @@ export default function AppShell() {
           </PageTransition>
         </AnimatePresence>
       </main>
+      {prefs?.cursor === 'swarm' && <CursorSwarm />}
       <CommandBar open={cmdOpen} onClose={() => setCmdOpen(false)} repos={repos} pages={nav} onSignOut={signOut} />
     </div>
   )

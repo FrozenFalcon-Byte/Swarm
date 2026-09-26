@@ -143,22 +143,35 @@ img, svg { display: block; max-width: 100%; }
 .bellows--pane .bellows-label { font-size: 20px; padding: 9px 18px 9px 10px; }
 @media (max-width: 900px) { .bellows--pane { left: 0; } }
 
-/* ---------- Dynamic Island toasts */
-.island-wrap { position: fixed; top: 12px; left: 0; right: 0; z-index: 200; display: flex; justify-content: center; pointer-events: none; padding: 0 12px; }
-.island { pointer-events: auto; background: #050505; color: #fff; overflow: hidden; cursor: pointer; max-width: min(460px, 100%);
-  box-shadow: 0 18px 40px -18px rgba(0, 0, 0, 0.6), inset 0 0 0 1px rgba(255, 255, 255, 0.06); }
-.island-pill { width: 124px; height: 36px; display: flex; align-items: center; justify-content: flex-end; padding-right: 14px; }
-.island-cam { width: 10px; height: 10px; border-radius: 50%; background: radial-gradient(circle at 35% 35%, #2b3140, #0b0d12 70%); box-shadow: inset 0 0 0 1.5px #151821; }
-.island-body { display: flex; align-items: center; gap: 12px; padding: 10px 18px 10px 10px; min-height: 52px; }
-.island-glyph { width: 32px; height: 32px; border-radius: 50%; display: grid; place-items: center; color: var(--ink); flex: none; }
-.island-glyph.g-ok { background: var(--reviewer); } .island-glyph.g-error { background: var(--tester); }
-.island-glyph.g-info { background: var(--coder); } .island-glyph.g-work { background: var(--triager); }
-.island-text { display: flex; flex-direction: column; min-width: 0; line-height: 1.25; }
-.island-text b { font-size: 14.5px; font-weight: 600; letter-spacing: -0.01em; }
-.island-text span { font-size: 13px; color: rgba(255, 255, 255, 0.62); overflow-wrap: anywhere; }
-.island-wave { display: inline-flex; align-items: center; gap: 3px; height: 18px; margin-left: 6px; }
-.island-wave i { width: 3px; height: 100%; border-radius: 2px; background: var(--triager); animation: wave 0.9s var(--ease-in-out) infinite; }
-.island-wave i:nth-child(2) { animation-delay: 0.12s; background: var(--coder); } .island-wave i:nth-child(3) { animation-delay: 0.24s; background: var(--tester); } .island-wave i:nth-child(4) { animation-delay: 0.36s; background: var(--reviewer); }
+/* ---------- toasts: stickers that roll in from the corner (components/Island.tsx) */
+.toasts { position: fixed; right: 22px; bottom: 22px; z-index: 250; display: flex; flex-direction: column; align-items: flex-end; gap: 14px; margin: 0; padding: 0; list-style: none; pointer-events: none; }
+.toast { position: relative; pointer-events: auto; width: min(380px, calc(100vw - 32px)); }
+.toast-shadow { position: absolute; inset: 0; border-radius: 22px; background: var(--ink); }
+.toast-card { position: relative; background: var(--white, #fff); color: var(--ink); border: 2px solid var(--ink); border-radius: 22px; overflow: hidden; cursor: pointer; }
+.toast-in { display: flex; align-items: center; gap: 12px; padding: 12px 12px 14px 10px; min-height: 64px; }
+.toast-glyph { width: 42px; height: 42px; flex: none; border-radius: 50%; border: 2px solid var(--ink); display: grid; place-items: center; color: var(--ink); }
+.toast-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; line-height: 1.25; }
+.toast-text b { font-size: 15.5px; font-weight: 600; letter-spacing: -0.02em; display: flex; flex-wrap: wrap; column-gap: 0.26em; }
+.toast-mask { display: inline-flex; overflow: hidden; padding-bottom: 0.08em; margin-bottom: -0.08em; }
+.toast-mask > span { display: inline-block; transform-origin: 0 100%; }
+.toast-text > span { font-size: 13px; color: var(--ink-3); overflow-wrap: anywhere; }
+.toast-x { width: 28px; height: 28px; flex: none; align-self: flex-start; border-radius: 50%; display: grid; place-items: center; color: var(--ink-3); opacity: 0; transition: opacity var(--t-fast), background-color var(--t-fast), color var(--t-fast), transform 0.4s var(--spring); }
+.toast:hover .toast-x { opacity: 1; }
+.toast-x:hover { background: var(--grey-8); color: var(--ink); transform: rotate(90deg); }
+.toast-fuse { position: absolute; left: 0; right: 0; bottom: 0; height: 4px; transform-origin: 0 50%; animation: toast-fuse linear forwards; border-top: 1.5px solid var(--ink); }
+.toast-fuse--work { background: repeating-linear-gradient(90deg, var(--triager) 0 14px, var(--coder) 14px 28px, var(--tester) 28px 42px, var(--reviewer) 42px 56px); background-size: 56px 100%; animation: toast-crawl 0.8s linear infinite; }
+@keyframes toast-fuse { from { transform: scaleX(1); } to { transform: scaleX(0); } }
+@keyframes toast-crawl { to { background-position: 56px 0; } }
+.toast-orbit { position: relative; width: 22px; height: 22px; }
+.toast-orbit i { position: absolute; left: 7px; top: 7px; width: 8px; height: 8px; border-radius: 50%; border: 1.5px solid var(--ink); animation: toast-orbit 1s var(--ease-in-out) infinite; }
+@keyframes toast-orbit { 0%, 100% { transform: translate(-6px, -6px); } 25% { transform: translate(6px, -6px); } 50% { transform: translate(6px, 6px); } 75% { transform: translate(-6px, 6px); } }
+.toast-confetti { position: absolute; left: 33px; top: 50%; width: 0; height: 0; pointer-events: none; z-index: 2; }
+.toast-confetti i { position: absolute; left: -5px; top: -5px; border: 1.5px solid var(--ink); }
+html[data-toasts="bl"] .toasts { right: auto; left: 22px; align-items: flex-start; }
+html[data-toasts="top"] .toasts { top: 18px; bottom: auto; left: 0; right: 0; align-items: center; flex-direction: column-reverse; }
+html[data-celebrate="quiet"] .toast-confetti { display: none; }
+.cursor-dot { position: fixed; left: -4px; top: -4px; z-index: 260; width: 8px; height: 8px; border-radius: 50%; border: 1.5px solid var(--ink); pointer-events: none; opacity: 0; transition: opacity 0.4s var(--ease-out); will-change: transform; }
+@media (max-width: 640px) { .toasts { left: 16px; right: 16px; bottom: 16px; align-items: stretch; } .toast { width: auto; } }
 @keyframes wave { 0%, 100% { transform: scaleY(0.3); } 50% { transform: scaleY(1); } }
 
 /* ---------- the Swarm logo (used everywhere, so it lives here) */

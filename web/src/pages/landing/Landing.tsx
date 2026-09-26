@@ -61,70 +61,141 @@ export default function Landing() {
 
 /* ============================================================ intro */
 
-// the mark's four dots, as in <Mark>: centre (in a 32-unit tile) and colour; boot dot k becomes MARK[BOOT_TO_MARK[k]]
-const MARK = [{ x: 11, y: 11, c: 'var(--triager)' }, { x: 21, y: 11, c: 'var(--coder)' }, { x: 11, y: 21, c: 'var(--tester)' }, { x: 21, y: 21, c: 'var(--reviewer)' }]
+// the mark's four dots, as in <Mark>: centre (in a 32-unit tile), colour, who it is and what it's thinking
+const MARK = [
+  { x: 11, y: 11, c: 'var(--triager)', who: 'triager', thought: 'Issue #101 fails 10 runs in 12. That’s chance, not code: high priority.' },
+  { x: 21, y: 11, c: 'var(--coder)', who: 'coder', thought: 'The result comes out of a set, so the order is luck. One line: sort it.' },
+  { x: 11, y: 21, c: 'var(--tester)', who: 'tester', thought: '24 runs in a sandbox. Before: 10 of 12 fail. After: 0 of 12.' },
+  { x: 21, y: 21, c: 'var(--reviewer)', who: 'reviewer', thought: 'No sleeps, no retries, no skipped tests. Approved; over to you.' },
+]
 const BOOT_TO_MARK = [0, 1, 3, 2] // the boot screen goes yellow, sky, green, coral round the square
-const TILE = 120
+// the timeline, in ms: gather into a row, pass the task along, fold into the mark, then fly into the headline
+const T_ROW = 700, T_RELAY = 560, T_STEP = 470, T_FOLD = T_RELAY + 4 * T_STEP + 40, T_LIFT = T_FOLD + 1050
+const SHADOW = (px: number) => `inset 0 0 0 ${px}px #0f0f0f`
 
-/** One continuous move from the boot screen to the hero. The four dots that were chasing each other
- *  glide from wherever they are into the mark's grid while the dark tile grows behind them; then the
- *  white lifts away and the mark flies into the gap in the headline as the words rise around it. The
- *  headline's own mark only appears once this one has landed on it, so nothing is swapped in view. */
+/** The headline's size, read off the stylesheet, so the intro builds the very headline it lands in. */
+function heroFont() {
+  const probe = document.createElement('h1')
+  probe.className = 'hero-title'
+  probe.style.cssText = 'position:fixed;visibility:hidden;pointer-events:none'
+  document.body.appendChild(probe)
+  const f = parseFloat(getComputedStyle(probe).fontSize) || 120
+  probe.remove()
+  return f
+}
+
+/** One continuous piece from the boot screen to the hero. The dots that were chasing each other line up
+ *  and pass one bug down the line, each saying what it thinks as it takes its turn, while a thread fills
+ *  behind them. Then they fold into the mark, "Green" and "builds." rise on either side of it, and the
+ *  whole headline glides into the hero, which is the same headline, so nothing is ever swapped in view. */
 function Intro({ from, lifting, onLift, onLanded }: { from: BootDot[]; lifting: boolean; onLift: () => void; onLanded: () => void }) {
-  const tile = useRef<HTMLDivElement>(null)
-  const [origin] = useState(() => ({ left: window.innerWidth / 2 - TILE / 2, top: window.innerHeight / 2 - TILE / 2 }))
-  const dot = (TILE * 4) / 32 // the dots' radius: 4 of 32
-  // where each mark dot starts: on top of the boot dot it continues from
-  const starts = MARK.map((m, i) => {
-    const b = from[BOOT_TO_MARK.indexOf(i)]
-    const hx = origin.left + (m.x / 32) * TILE, hy = origin.top + (m.y / 32) * TILE
-    return b ? { x: b.x - hx, y: b.y - hy, scale: b.size / (dot * 2) } : { x: 0, y: -40, scale: 0 }
+  const [geo] = useState(() => {
+    const vw = window.innerWidth, vh = window.innerHeight
+    const font = heroFont(), tile = font * 0.8
+    const cx = vw / 2, cy = vh / 2
+    const base = tile / 4 // the dots' diameter in the mark
+    const spacing = Math.min(84, (vw - 64) / 4), size = Math.min(30, spacing * 0.42)
+    return { vw, vh, font, tile, cx, cy, base, spacing, size, left: cx - tile / 2, top: cy - tile / 2 }
   })
+  const { tile, base, cx, cy, spacing, size, left, top } = geo
+  const markAt = (m: typeof MARK[number]) => ({ x: left + (m.x / 32) * tile, y: top + (m.y / 32) * tile })
+  const rowAt = (i: number) => ({ x: cx + (i - 1.5) * spacing, y: cy - 8 })
+  const rowScale = size / base
+  // where each dot starts: on top of the boot dot it continues from
+  const starts = MARK.map((m, i) => {
+    const b = from[BOOT_TO_MARK.indexOf(i)], h = markAt(m)
+    return b ? { x: b.x - h.x, y: b.y - h.y, scale: b.size / base } : { x: rowAt(i).x - h.x, y: rowAt(i).y - h.y - 40, scale: 0 }
+  })
+  const rows = MARK.map((m, i) => { const h = markAt(m), r = rowAt(i); return { x: r.x - h.x, y: r.y - h.y } })
+  const [step, setStep] = useState(-1) // -1 gathering, 0–3 whose turn it is, 4 folded into the mark
+  const stage = useRef<HTMLDivElement>(null)
   const ink = useRef<HTMLElement>(null)
+  const fill = useRef<HTMLElement>(null)
   const dots = useRef<(HTMLElement | null)[]>([])
-  // the gather runs on the compositor (Web Animations), starting from exactly what the first frame shows
+  const pings = useRef<(HTMLElement | null)[]>([])
+
   useLayoutEffect(() => {
-    const spring = 'cubic-bezier(0.34, 1.45, 0.5, 1)'
-    const anims = dots.current.map((el, i) => el?.animate(
-      [{ transform: `translate(${starts[i].x}px, ${starts[i].y}px) scale(${starts[i].scale})`, boxShadow: 'inset 0 0 0 3px #0f0f0f' },
-        { transform: 'translate(0, 0) scale(1)', boxShadow: 'inset 0 0 0 0px #0f0f0f' }],
-      { duration: 820, delay: 40 + i * 70, easing: spring, fill: 'forwards' }))
-    anims.push(ink.current?.animate([{ transform: 'scale(0)', borderRadius: '50%' }, { transform: 'scale(1.06)', borderRadius: '28%', offset: 0.7 }, { transform: 'scale(1)', borderRadius: '25%' }],
-      { duration: 760, delay: 260, easing: 'cubic-bezier(0.22, 1, 0.36, 1)', fill: 'forwards' }))
-    return () => anims.forEach((a) => a?.cancel())
+    const anims: Animation[] = []
+    const timers: number[] = []
+    const at = (ms: number, fn: () => void) => timers.push(window.setTimeout(fn, ms))
+    const run = (el: Element | null | undefined, k: Keyframe[], o: KeyframeAnimationOptions) => { const a = el?.animate(k, { fill: 'forwards', ...o }); if (a) anims.push(a) }
+    const inRow = (i: number, s = rowScale) => ({ transform: `translate(${rows[i].x}px, ${rows[i].y}px) scale(${s})`, boxShadow: SHADOW(2.5 / s) })
+    // 1. the chase becomes a line
+    dots.current.forEach((el, i) => run(el, [{ transform: `translate(${starts[i].x}px, ${starts[i].y}px) scale(${starts[i].scale})`, boxShadow: SHADOW(3 / Math.max(starts[i].scale, 0.01)) }, inRow(i)],
+      { duration: T_ROW, delay: i * 50, easing: 'cubic-bezier(0.34, 1.3, 0.5, 1)' }))
+    run(fill.current, [{ transform: 'scaleX(0)' }, { transform: 'scaleX(1)' }], { duration: 3 * T_STEP + 200, delay: T_RELAY, easing: 'cubic-bezier(0.45, 0, 0.25, 1)' })
+    // 2. each takes its turn: a hop and a ring going out
+    MARK.forEach((_, i) => at(T_RELAY + i * T_STEP, () => {
+      setStep(i)
+      run(dots.current[i], [inRow(i), { ...inRow(i, rowScale * 1.45), offset: 0.35 }, inRow(i)], { duration: 520, easing: 'cubic-bezier(0.34, 1.5, 0.5, 1)' })
+      run(pings.current[i], [{ transform: 'scale(1)', opacity: 0.55 }, { transform: 'scale(3.2)', opacity: 0 }], { duration: 900, easing: 'cubic-bezier(0.2, 0.6, 0.3, 1)', fill: 'none' })
+    }))
+    // 3. fold into the mark
+    at(T_FOLD, () => {
+      setStep(4)
+      dots.current.forEach((el, i) => run(el, [inRow(i), { transform: 'translate(0, 0) scale(1)', boxShadow: SHADOW(0) }],
+        { duration: 820, delay: i * 60, easing: 'cubic-bezier(0.34, 1.35, 0.5, 1)' }))
+      run(ink.current, [{ transform: 'scale(0)', borderRadius: '50%' }, { transform: 'scale(1.06)', borderRadius: '28%', offset: 0.7 }, { transform: 'scale(1)', borderRadius: '25%' }],
+        { duration: 760, delay: 140, easing: 'cubic-bezier(0.22, 1, 0.36, 1)' })
+    })
+    return () => { timers.forEach(clearTimeout); anims.forEach((a) => a.cancel()) }
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // 4. into the hero: the same headline, so it only has to move
   useEffect(() => {
     let cancelled = false
-    const fonts = document.fonts ? Promise.race([document.fonts.ready, new Promise((r) => setTimeout(r, 1400))]) : null
-    const assembled = new Promise((r) => setTimeout(r, 1050))
-    Promise.all([fonts, assembled]).then(() => {
+    const fonts = document.fonts ? Promise.race([document.fonts.ready, new Promise((r) => setTimeout(r, 1800))]) : null
+    Promise.all([fonts, new Promise((r) => setTimeout(r, T_LIFT))]).then(() => {
       if (cancelled) return
       const to = document.querySelector('.hero-tile')?.getBoundingClientRect()
       onLift()
-      if (!tile.current || !to || !to.width) { onLanded(); return }
-      animate(tile.current, { x: to.left - origin.left, y: to.top - origin.top, scale: to.width / TILE },
-        { duration: 1.15, ease: [0.83, 0, 0.17, 1] }).then(() => { if (!cancelled) onLanded() })
+      if (!stage.current || !to || !to.width) { onLanded(); return }
+      animate(stage.current, { x: to.left - left, y: to.top - top, scale: to.width / tile }, { duration: 1.05, ease: [0.83, 0, 0.17, 1] })
+        .then(() => { if (!cancelled) onLanded() })
     })
     return () => { cancelled = true }
-  }, [onLift, onLanded, origin])
+  }, [onLift, onLanded, left, top, tile])
+
+  const now = step >= 0 && step < 4 ? MARK[step] : null
   return (
     <>
-      <motion.div className="intro" initial={false} animate={{ opacity: lifting ? 0 : 1 }} transition={{ duration: 0.9, ease: easeInOut, delay: lifting ? 0.15 : 0 }}>
-        <p className="intro-word" aria-label="Swarm" style={{ top: origin.top + TILE + 34 }}>
-          {'Swarm'.split('').map((c, i) => (
-            <span key={i} className="word-mask"><motion.span className="word" initial={{ y: '110%' }} animate={{ y: lifting ? '-110%' : '0%' }}
-              transition={{ duration: 0.7, ease: easeOut, delay: lifting ? i * 0.03 : 0.55 + i * 0.045 }}>{c}</motion.span></span>
-          ))}
-        </p>
-      </motion.div>
-      {/* above the white, so it stays in view the whole way into the headline */}
-      <div ref={tile} className="intro-tile" style={{ left: origin.left, top: origin.top, width: TILE, height: TILE }}>
-        <i className="intro-ink" ref={ink} style={{ transform: 'scale(0)', borderRadius: '50%' }} />
+      <motion.div className="intro" initial={false} animate={{ opacity: lifting ? 0 : 1 }} transition={{ duration: 0.8, ease: easeInOut, delay: lifting ? 0.2 : 0 }}>
+        <motion.p className="intro-kicker mono" style={{ top: cy - 74 }} initial={{ opacity: 0, y: 8 }} animate={{ opacity: step < 4 ? 1 : 0, y: step < 4 ? 0 : -8 }} transition={{ duration: 0.5, delay: step < 0 ? 0.35 : 0 }}>
+          one test that fails at random · four agents
+        </motion.p>
+        <div className="intro-thread" style={{ left: cx - 1.5 * spacing, width: 3 * spacing, top: cy - 9 }}>
+          <motion.span className="intro-thread-bg" initial={{ scaleX: 0 }} animate={{ scaleX: step < 4 ? 1 : 0, opacity: step < 4 ? 1 : 0 }} transition={{ duration: 0.6, ease: easeOut, delay: step < 0 ? 0.3 : 0 }} />
+          <i ref={fill} style={{ transform: 'scaleX(0)', opacity: step < 4 ? 1 : 0 }} />
+        </div>
         {MARK.map((m, i) => (
-          <i key={i} className="intro-dot" ref={(el) => { dots.current[i] = el }}
-            style={{ left: (m.x / 32) * TILE - dot, top: (m.y / 32) * TILE - dot, width: dot * 2, height: dot * 2, background: m.c,
-              transform: `translate(${starts[i].x}px, ${starts[i].y}px) scale(${starts[i].scale})`, boxShadow: 'inset 0 0 0 3px #0f0f0f' }} />
+          <i key={i} className="intro-ping" ref={(el) => { pings.current[i] = el }} style={{ left: rowAt(i).x - size / 2, top: rowAt(i).y - size / 2, width: size, height: size, background: m.c }} />
         ))}
+        <div className="intro-thought" style={{ top: cy + 30 }}>
+          <AnimatePresence mode="wait" initial={false}>
+            {now && (
+              <motion.p key={now.who} initial={{ opacity: 0, y: 18 }} animate={{ opacity: 1, y: 0, transition: { duration: 0.4, ease: easeOut, delay: 0.14 } }} exit={{ opacity: 0, y: -12, transition: { duration: 0.14 } }}>
+                <span className="intro-who" style={{ ['--c' as string]: now.c }}>{now.who}</span>
+                <span className="intro-says">{now.thought}</span>
+              </motion.p>
+            )}
+          </AnimatePresence>
+        </div>
+      </motion.div>
+      {/* the headline itself, above the white so it stays in view the whole way into the hero */}
+      <div ref={stage} className="intro-stage" style={{ transformOrigin: `${left}px ${top}px` }}>
+        <div className="hero-title intro-title" style={{ top: cy - tile / 2, height: tile }} aria-hidden="true">
+          <span className="word-mask"><motion.span className="word" initial={{ y: '140%' }} animate={{ y: step === 4 ? '0%' : '140%' }} transition={{ duration: 0.8, ease: easeOut, delay: 0.3 }}>Green</motion.span></span>
+          <span style={{ width: tile }} />
+          <span className="word-mask"><motion.span className="word" initial={{ y: '140%' }} animate={{ y: step === 4 ? '0%' : '140%' }} transition={{ duration: 0.8, ease: easeOut, delay: 0.4 }}>builds.</motion.span></span>
+        </div>
+        <div className="intro-tile" style={{ left, top, width: tile, height: tile }}>
+          <i className="intro-ink" ref={ink} style={{ transform: 'scale(0)', borderRadius: '50%' }} />
+          {MARK.map((m, i) => (
+            <i key={i} className="intro-dot" ref={(el) => { dots.current[i] = el }}
+              style={{ left: (m.x / 32) * tile - base / 2, top: (m.y / 32) * tile - base / 2, width: base, height: base, background: m.c,
+                transform: `translate(${starts[i].x}px, ${starts[i].y}px) scale(${starts[i].scale})`, boxShadow: SHADOW(3 / Math.max(starts[i].scale, 0.01)) }} />
+          ))}
+        </div>
       </div>
     </>
   )
@@ -198,12 +269,16 @@ function Hero({ ready, tileShown, fromIntro }: { ready: boolean; tileShown: bool
           Four AI agents for<br />tests that fail at random
         </motion.p>
         <h1 className="hero-title" aria-label="Green builds.">
-          <span className="word-mask"><motion.span className="word" {...rise(0.2)}>Green</motion.span></span>
+          {fromIntro
+            ? <span className="word-mask"><span className="word" style={{ visibility: tileShown ? 'visible' : 'hidden' }}>Green</span></span>
+            : <span className="word-mask"><motion.span className="word" {...rise(0.2)}>Green</motion.span></span>}
           {fromIntro
             ? <span className="hero-tile" aria-hidden="true" style={{ visibility: tileShown ? 'visible' : 'hidden' }}><Mark size={120} animated={tileShown} /></span>
             : <motion.span className="hero-tile" aria-hidden="true" initial={{ scale: 0, rotate: -90 }} animate={{ scale: 1, rotate: 0 }}
                 transition={{ type: 'spring', stiffness: 160, damping: 16, delay: 0.45 }}><Mark size={120} animated /></motion.span>}
-          <span className="word-mask"><motion.span className="word" {...rise(0.32)}>builds.</motion.span></span>
+          {fromIntro
+            ? <span className="word-mask"><span className="word" style={{ visibility: tileShown ? 'visible' : 'hidden' }}>builds.</span></span>
+            : <span className="word-mask"><motion.span className="word" {...rise(0.32)}>builds.</motion.span></span>}
         </h1>
         <motion.div initial="hidden" animate={show} variants={{ hidden: { opacity: 0, y: 20 }, show: { opacity: 1, y: 0, transition: { duration: 0.9, ease: easeOut, delay: 0.7 } } }}>
           <Link to="/signup" className="btn btn-green btn-xl"><AgentDots size={22} /> <Roll>Connect a repo</Roll></Link>
