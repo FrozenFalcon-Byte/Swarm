@@ -159,6 +159,25 @@ export interface Prefs {
   /** 'focus' folds empty lanes and Closed; 'all' keeps every lane open */
   lanes?: 'focus' | 'all'
   density?: 'comfortable' | 'compact'
+  /** the dashboard's highlight colour: the sidebar's active pill, selections, the save chip */
+  accent?: 'green' | 'sky' | 'pink' | 'yellow' | 'coral' | 'ink' | 'custom'
+  /** the colour picked when accent is 'custom', as #rrggbb */
+  accentHex?: string
+  /** the ground behind every page */
+  canvas?: 'white' | 'paper' | 'mist'
+  font?: 'grotesk' | 'system' | 'rounded' | 'mono'
+  corners?: 'round' | 'soft' | 'sharp'
+  /** sidebar groups you've switched off */
+  hideGuardrails?: boolean
+  hideRepos?: boolean
+  /** pages and repositories pinned to the top of the sidebar, as /app paths */
+  pins?: string[]
+  /** Overview cards you've switched off */
+  overviewHide?: string[]
+  textSize?: 'small' | 'default' | 'large'
+  sidebar?: 'full' | 'icons'
+  clock?: '24h' | '12h'
+  weekStart?: 'mon' | 'sun'
 }
 export interface Profile { displayName?: string; email?: string; avatar?: string | null; githubLogin?: string | null; createdAt?: Stamp
   onboarding?: Onboarding; onboardedAt?: Stamp | null; prefs?: Prefs }

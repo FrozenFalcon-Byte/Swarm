@@ -3,6 +3,7 @@ import { useMemo, useRef, useState } from 'react'
 import { useToast } from '../../components/Island'
 import { Roll } from '../../components/Roll'
 import { useAuth } from '../../lib/auth'
+import { Link } from 'react-router-dom'
 import { savePrefs } from '../../lib/data'
 import { easeOut } from '../../lib/motion'
 import { AGENTS, type Prefs, type Profile, type Repo, type Task } from '../../lib/types'
@@ -120,15 +121,12 @@ export function Workspace({ prefs }: { prefs: Prefs }) {
         <PrefRow title="Board lanes" text="Focus folds empty lanes and Closed into slim strips. All keeps every lane open.">
           <Seg id="ws-lanes" value={prefs.lanes ?? 'focus'} onPick={(v) => save({ lanes: v })} options={[['focus', 'Focus'], ['all', 'All open']]} />
         </PrefRow>
-        <PrefRow title="Density" text="Compact fits more task cards and sections on screen.">
-          <Seg id="ws-density" value={prefs.density ?? 'comfortable'} onPick={(v) => save({ density: v })} options={[['comfortable', 'Comfortable'], ['compact', 'Compact']]} />
-        </PrefRow>
       </div>
     </Section>
   )
 }
 
-function Seg<T extends string>({ id, value, onPick, options }: { id: string; value: T; onPick: (v: T) => void; options: readonly (readonly [T, string])[] }) {
+export function Seg<T extends string>({ id, value, onPick, options }: { id: string; value: T; onPick: (v: T) => void; options: readonly (readonly [T, string])[] }) {
   return (
     <div className="seg">
       {options.map(([v, label]) => (
@@ -161,26 +159,15 @@ export function Preferences({ prefs }: { prefs: Prefs }) {
     await save({ notify: on }, on ? 'Notifications on' : 'Notifications off')
     if (on) new Notification('Swarm', { body: 'You’ll hear from us when a fix is waiting for you.', icon: '/favicon.svg' })
   }
-  const motionPref = prefs.motion ?? 'system'
   const start = prefs.startPage ?? 'overview'
   return (
-    <Section title="Preferences" action={<span className="muted">saved to your account</span>}>
+    <Section title="Preferences" action={<Link to="/app/settings?tab=appearance" className="link">Looks and motion are in Settings → Appearance</Link>}>
       <div className="prefs">
         <PrefRow title="Notify me when something needs me" text="A browser notification when a fix is approved or a task asks for you, while Swarm is open in a background tab.">
           <label className="toggle">
             <input type="checkbox" checked={!!prefs.notify && perm === 'granted'} onChange={(e) => void toggleNotify(e.target.checked)} />
             <span className="toggle-track"><span className="toggle-thumb" /></span>
           </label>
-        </PrefRow>
-        <PrefRow title="Motion" text="How much the interface animates. “Match my device” follows your system’s reduce-motion setting.">
-          <div className="seg">
-            {([['system', 'Match my device'], ['less', 'Less'], ['full', 'Full']] as const).map(([id, label]) => (
-              <button key={id} className={`seg-btn ${motionPref === id ? 'on' : ''}`} onClick={() => save({ motion: id })}>
-                {motionPref === id && <motion.span layoutId="motion-pill" className="seg-pill" transition={{ type: 'spring', stiffness: 420, damping: 34 }} />}
-                <span>{label}</span>
-              </button>
-            ))}
-          </div>
         </PrefRow>
         <PrefRow title="Open on" text="Where the dashboard takes you when you sign in.">
           <div className="seg">
@@ -197,7 +184,7 @@ export function Preferences({ prefs }: { prefs: Prefs }) {
   )
 }
 
-function PrefRow({ title, text, children }: { title: string; text: string; children: React.ReactNode }) {
+export function PrefRow({ title, text, children }: { title: string; text: string; children: React.ReactNode }) {
   return (
     <div className="pref">
       <div className="pref-copy"><b>{title}</b><span>{text}</span></div>

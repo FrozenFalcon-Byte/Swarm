@@ -11,13 +11,15 @@ import { PanelLayout, usePanel, type PanelItem } from '../../components/PanelLay
 import { firebaseInfo } from '../../lib/firebase'
 import { MCP_CLIENTS, MCP_TOOLS, TOKEN_PLACEHOLDER } from '../../lib/mcpClients'
 import { easeInOut, easeOut } from '../../lib/motion'
+import { Appearance } from './Appearance'
 import { PageHead } from './Overview'
 import { Section, timeAgo } from './ui'
 
 const SECTIONS: PanelItem[] = [
+  { id: 'appearance', label: 'Appearance', hint: 'Colour, type, layout, pins', color: 'var(--lab)' },
   { id: 'connections', label: 'Connections', hint: 'Firebase, GitHub, worker, models', color: 'var(--coder)' },
   { id: 'repos', label: 'Repositories', hint: 'Watching, runs, removal', color: 'var(--reviewer)' },
-  { id: 'ai', label: 'Claude & AI tools', hint: 'MCP server and access tokens', color: 'var(--lab)' },
+  { id: 'ai', label: 'Claude & AI tools', hint: 'MCP server and access tokens', color: 'var(--tester)' },
   { id: 'workers', label: 'Workers', hint: 'Where the agents run', color: 'var(--triager)' },
 ]
 
@@ -68,6 +70,7 @@ export default function Settings() {
             </div>
           </Section>
         )}
+        {tab === 'appearance' && <Appearance />}
         {tab === 'repos' && <RepoSettings repos={repos} />}
         {tab === 'ai' && <Section title="Use from Claude and other AI tools" action={<span className="pill tone-work">MCP</span>}><McpSetup /></Section>}
         {tab === 'workers' && <Workers workers={workers} />}

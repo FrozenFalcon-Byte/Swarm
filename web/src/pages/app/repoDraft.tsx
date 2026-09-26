@@ -1,6 +1,9 @@
 import { AnimatePresence, motion } from 'motion/react'
 import { useEffect, useRef, useState } from 'react'
+import { Select } from '../../components/Select'
 import type { Repo } from '../../lib/types'
+
+const STATUS_DOT = { idle: 'var(--reviewer)', queued: 'var(--triager)', running: 'var(--triager)', error: 'var(--bad)' }
 
 /* Shared by House rules and Quiet hours: which repository you're editing (remembered between visits),
    and a local copy of its setting that saves itself a moment after you stop changing it. */
@@ -51,9 +54,8 @@ export function SaveChip({ state, readOnly }: { state: SaveState; readOnly?: boo
 export function RepoSelect({ repos, value, onChange }: { repos: Repo[]; value: string; onChange: (id: string) => void }) {
   if (repos.length < 2) return null
   return (
-    <select className="selectbox" value={value} onChange={(e) => onChange(e.target.value)} aria-label="Repository">
-      {repos.map((r) => <option key={r.id} value={r.id}>{r.displayName || r.fullName}</option>)}
-    </select>
+    <Select value={value} onChange={onChange} label="Repository" align="right"
+      options={repos.map((r) => ({ value: r.id, label: r.displayName || r.fullName, hint: r.fullName !== r.displayName ? r.fullName : undefined, dot: STATUS_DOT[r.status || 'idle'] }))} />
   )
 }
 

@@ -4,13 +4,14 @@ import { PageTransition, routeLabel } from '../../components/PageTransition'
 import { Link, NavLink, Route, Routes, useLocation, useNavigate } from 'react-router-dom'
 import { Logo } from '../../components/Logo'
 import { useAuth } from '../../lib/auth'
-import { useAllTasks, useIsAdmin, useProfile, useRepos } from '../../lib/data'
+import { savePrefs, useAllTasks, useIsAdmin, useProfile, useRepos } from '../../lib/data'
 import { Avatar } from '../../components/Avatar'
 import { usingEmulators } from '../../lib/firebase'
 import { easeOut } from '../../lib/motion'
 import { Splash } from '../../components/Splash'
 import { useBootHold } from '../../lib/boot'
 import { CommandBar, useCommandBar } from './CommandBar'
+import { ICONS, NAV } from './nav'
 import './app.css'
 
 const pages = {
@@ -86,7 +87,16 @@ export default function AppShell() {
   const needsYou = repos.reduce((n, r) => n + (r.stats?.needsYou || 0), 0)
   const nav = NAV.filter((n) => !n.admin || admin)
   const prefs = useProfile(user?.uid)?.prefs
+  // the sidebar folds the moment you ask; the saved preference catches up behind it
+  const [rail, setRail] = useState(prefs?.sidebar === 'icons')
+  useEffect(() => { setRail(prefs?.sidebar === 'icons') }, [prefs?.sidebar])
+  const toggleRail = () => { const next = !rail; setRail(next); if (user) void savePrefs(user.uid, { sidebar: next ? 'icons' : 'full' }).catch(() => setRail(!next)) }
   useStartPage(prefs?.startPage)
+  const pins = (prefs?.pins ?? []).map((to) => {
+    const repo = to.startsWith('/app/repos/') ? repos.find((r) => `/app/repos/${r.id}` === to) : undefined
+    const page = NAV.find((n) => n.to === to)
+    return repo ? { to, label: repo.displayName || repo.fullName, repo, icon: '' } : page ? { to, label: page.label, icon: page.icon, repo: undefined } : null
+  }).filter((p): p is NonNullable<typeof p> => !!p)
   useNeedsYouAlerts(repos, !!prefs?.notify)
   useEffect(() => { setMenu(false) }, [location.pathname])
   // leave first, then sign out, so the dashboard's guard never bounces you to /signin on the way out
@@ -100,7 +110,8 @@ export default function AppShell() {
   }, [])
 
   return (
-    <div className={`shell ${prefs?.density === 'compact' ? 'density-compact' : ''}`}>
+    <div className={`shell ${prefs?.density === 'compact' ? 'density-compact' : ''} ${rail ? 'side-rail' : ''} text-${prefs?.textSize ?? 'default'} canvas-${prefs?.canvas ?? 'white'} font-${prefs?.font ?? 'grotesk'} corners-${prefs?.corners ?? 'round'}`}
+      data-accent={prefs?.accent ?? 'green'} style={accentStyle(prefs?.accent, prefs?.accentHex)}>
       <header className="mtop">
         <Logo to="/app" />
         <span className="mtop-where">{routeLabel(key, (id) => repos.find((r) => r.id === id)?.displayName)}</span>
@@ -143,19 +154,33 @@ export default function AppShell() {
         )}
       </AnimatePresence>
       <aside className="side">
-        <Logo to="/app" />
-        <button className="side-search" onClick={() => setCmdOpen(true)}>
+        <div className="side-top">
+          <Logo to="/app" />
+        </div>
+        <button className="side-search" onClick={() => setCmdOpen(true)} title="Search or jump to (⌘K)">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><circle cx="11" cy="11" r="7" /><path d="M20 20l-3.5-3.5" /></svg>
           <span>Search or jump to…</span><kbd>⌘K</kbd>
         </button>
+        {pins.length > 0 && (
+          <nav className="side-nav" aria-label="Pinned">
+            <p className="side-label side-label--top">Pinned</p>
+            {pins.map((p) => p.repo
+              ? <NavLink key={p.to} to={p.to} className="side-repo" data-tip={p.label}><span className={`status-dot s-${p.repo.status || 'idle'}`} /><span className="side-repo-name">{p.label}</span></NavLink>
+              : <SideLink key={p.to} to={p.to} end={p.to === '/app'} icon={p.icon}>{p.label}</SideLink>)}
+          </nav>
+        )}
         <nav className="side-nav" aria-label="Main">
-          {nav.map((n) => <SideLink key={n.to} to={n.to} end={n.to === '/app'} icon={n.icon} count={n.to === '/app' ? needsYou : 0}>{n.label}</SideLink>)}
+          {nav.filter((n) => n.group === 'main').map((n) => <SideLink key={n.to} to={n.to} end={n.to === '/app'} icon={n.icon} count={n.to === '/app' ? needsYou : 0}>{n.label}</SideLink>)}
+          {!prefs?.hideGuardrails && <>
+            <p className="side-label">Guardrails</p>
+            {nav.filter((n) => n.group === 'guard').map((n) => <SideLink key={n.to} to={n.to} icon={n.icon}>{n.label}</SideLink>)}
+          </>}
         </nav>
-        {repos.length > 0 && (
+        {repos.length > 0 && !prefs?.hideRepos && (
           <div className="side-repos">
             <p className="side-label">Your repos</p>
             {repos.map((r) => (
-              <NavLink key={r.id} to={`/app/repos/${r.id}`} className="side-repo">
+              <NavLink key={r.id} to={`/app/repos/${r.id}`} className="side-repo" data-tip={r.displayName || r.fullName}>
                 <span className={`status-dot s-${r.status || 'idle'}`} />
                 <span className="side-repo-name">{r.displayName || r.fullName}</span>
                 {!!r.stats?.needsYou && <span className="side-count">{r.stats.needsYou}</span>}
@@ -164,17 +189,24 @@ export default function AppShell() {
           </div>
         )}
         <div className="side-foot">
-          <Link to="/" className="side-home">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M15 18l-6-6 6-6" /></svg>
-            <span>Swarm home</span>
-          </Link>
+          <nav className="side-nav" aria-label="More">
+            {nav.filter((n) => n.group === 'foot').map((n) => <SideLink key={n.to} to={n.to} icon={n.icon}>{n.label}</SideLink>)}
+            <button className="side-link side-fold" onClick={toggleRail} data-tip={rail ? 'Expand sidebar' : 'Collapse sidebar'} aria-label={rail ? 'Expand the sidebar' : 'Collapse the sidebar'}>
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><rect x="3.5" y="4.5" width="17" height="15" rx="3" /><path d="M9.5 4.5v15M16 10l-2 2 2 2" /></svg>
+              <span>Collapse</span>
+            </button>
+            <Link to="/" className="side-link side-home" data-tip="Swarm home">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M15 18l-6-6 6-6" /></svg>
+              <span>Swarm home</span>
+            </Link>
+          </nav>
           <div className={`side-user ${location.pathname.startsWith('/app/profile') ? 'active' : ''}`}>
             <NavLink to="/app/profile" className="side-user-link" title="Your profile">
-              <Avatar size={38} />
+              <Avatar size={36} />
               <span className="side-user-text"><b>{user?.displayName || 'You'}</b><span>{user?.email}</span></span>
             </NavLink>
             <button className="icon-btn" onClick={signOut} aria-label="Sign out" title="Sign out">
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M15 17l5-5-5-5M20 12H9M12 21H5a2 2 0 01-2-2V5a2 2 0 012-2h7" /></svg>
+              <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M15 17l5-5-5-5M20 12H9M12 21H5a2 2 0 01-2-2V5a2 2 0 012-2h7" /></svg>
             </button>
           </div>
           {usingEmulators && <p className="emu-note mono">local emulators</p>}
@@ -206,29 +238,15 @@ export default function AppShell() {
   )
 }
 
-const NAV = [
-  { to: '/app', label: 'Overview', icon: 'overview' }, { to: '/app/repos', label: 'Repositories', icon: 'repos' },
-  { to: '/app/agents', label: 'Agents', icon: 'agents' }, { to: '/app/tools', label: 'Tools', icon: 'tools' },
-  { to: '/app/lab', label: 'Test lab', icon: 'lab', admin: true },
-  { to: '/app/rules', label: 'House rules', icon: 'rules' }, { to: '/app/quiet-hours', label: 'Quiet hours', icon: 'quiet' },
-  { to: '/app/settings', label: 'Settings', icon: 'settings' }, { to: '/app/help', label: 'Help', icon: 'help' },
-]
-
-const ICONS: Record<string, string> = {
-  rules: 'M12 3l8 3v6c0 4.5-3.4 8-8 9-4.6-1-8-4.5-8-9V6z M9 12l2 2 4-4',
-  quiet: 'M20 14.5A8 8 0 1 1 9.5 4a6.5 6.5 0 0 0 10.5 10.5z',
-  lab: 'M9 3h6 M10 3v6L4.5 18.5A1.7 1.7 0 006 21h12a1.7 1.7 0 001.5-2.5L14 9V3 M7.5 14h9',
-  overview: 'M3 13h8V3H3v10zm0 8h8v-6H3v6zm10 0h8V11h-8v10zm0-18v6h8V3h-8z',
-  repos: 'M4 4h11l5 5v11H4z M15 4v5h5',
-  agents: 'M8 12a3 3 0 100-6 3 3 0 000 6z M16 18a3 3 0 100-6 3 3 0 000 6z M10.6 10.5l2.8 2.9 M5 20a3 3 0 016 0',
-  help: 'M12 22a10 10 0 100-20 10 10 0 000 20z M9.1 9a3 3 0 015.8 1c0 2-3 3-3 3 M12 17h.01',
-  tools: 'M14.7 6.3a4 4 0 00-5.4 5.4L3 18l3 3 6.3-6.3a4 4 0 005.4-5.4l-2.5 2.5-2.4-.6-.6-2.4z',
-  settings: 'M12 15a3 3 0 100-6 3 3 0 000 6z M19.4 15a1.7 1.7 0 00.3 1.8l.1.1a2 2 0 11-2.8 2.8l-.1-.1a1.7 1.7 0 00-1.8-.3 1.7 1.7 0 00-1 1.5V21a2 2 0 11-4 0v-.1a1.7 1.7 0 00-1.1-1.5 1.7 1.7 0 00-1.8.3l-.1.1a2 2 0 11-2.8-2.8l.1-.1a1.7 1.7 0 00.3-1.8 1.7 1.7 0 00-1.5-1H3a2 2 0 110-4h.1a1.7 1.7 0 001.5-1.1 1.7 1.7 0 00-.3-1.8l-.1-.1a2 2 0 112.8-2.8l.1.1a1.7 1.7 0 001.8.3H9a1.7 1.7 0 001-1.5V3a2 2 0 114 0v.1a1.7 1.7 0 001 1.5 1.7 1.7 0 001.8-.3l.1-.1a2 2 0 112.8 2.8l-.1.1a1.7 1.7 0 00-.3 1.8V9a1.7 1.7 0 001.5 1H21a2 2 0 110 4h-.1a1.7 1.7 0 00-1.5 1z',
+/** Your own highlight colour: the accent itself, a pale wash of it, and a middling line. */
+function accentStyle(accent?: string, hex?: string): React.CSSProperties | undefined {
+  if (accent !== 'custom' || !hex) return undefined
+  return { ['--accent' as string]: hex, ['--accent-soft' as string]: `color-mix(in srgb, ${hex} 22%, white)`, ['--accent-line' as string]: `color-mix(in srgb, ${hex} 55%, transparent)` }
 }
 
 function SideLink({ to, end, icon, count = 0, children }: { to: string; end?: boolean; icon: string; count?: number; children: string }) {
   return (
-    <NavLink to={to} end={end} className="side-link">
+    <NavLink to={to} end={end} className="side-link" data-tip={children}>
       {({ isActive }) => (
         <>
           {isActive && <motion.span layoutId="side-active" className="side-active" transition={{ duration: 0.45, ease: easeOut }} />}

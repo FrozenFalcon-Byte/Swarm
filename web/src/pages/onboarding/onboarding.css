@@ -96,3 +96,4 @@
   .onb-next { flex: 1; }
   .onb-agent.on { transform: none; }
 }
+.onb-connect .cx { grid-template-columns: minmax(0, 1fr); } .onb-connect .cx-steps { display: none; }

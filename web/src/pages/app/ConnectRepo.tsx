@@ -7,11 +7,12 @@ import { cleanRepoName, listRepos, lookupRepo, type GhRepo } from '../../lib/git
 import { easeOut } from '../../lib/motion'
 import { timeAgo } from './ui'
 import { Roll } from '../../components/Roll'
+import './app.css'
 
 const FULL_NAME = /^[\w.-]+\/[\w.-]+$/
 
 /** `onAdded` replaces the default (open the new repository), e.g. during onboarding. */
-export default function ConnectRepo({ onAdded }: { onAdded?: (repoId: string) => void } = {}) {
+export default function ConnectRepo({ onAdded, connected = [] }: { onAdded?: (repoId: string) => void; connected?: string[] } = {}) {
   const { user, connectGitHub } = useAuth()
   const link = useGithubLink(user?.uid)
   const navigate = useNavigate()
@@ -32,7 +33,7 @@ export default function ConnectRepo({ onAdded }: { onAdded?: (repoId: string) =>
   const matches = useMemo(() => {
     if (!repos) return []
     const q = typed.toLowerCase()
-    return repos.filter((r) => !q || r.full_name.toLowerCase().includes(q)).slice(0, 8)
+    return repos.filter((r) => !q || r.full_name.toLowerCase().includes(q)).slice(0, 30)
   }, [repos, typed])
   const exact = repos?.some((r) => r.full_name.toLowerCase() === typed.toLowerCase())
 
@@ -71,46 +72,85 @@ export default function ConnectRepo({ onAdded }: { onAdded?: (repoId: string) =>
     try { await connectGitHub() } catch (err) { setError(friendlyAuthError(err)) } finally { setBusy(null) }
   }
 
+  const taken = new Set(connected.map((c) => c.toLowerCase()))
   return (
-    <div className="connect">
-      <form className="connect-card connect-gh" onSubmit={addTyped}>
-        <h4>A GitHub repository</h4>
-        <p>{link ? <>Pick one of <b>@{link.login}</b>’s repositories, or type any owner/name.</> : 'Type a public repository, or connect GitHub to pick from yours (private ones too).'}</p>
-        <input id="repo-name" className="connect-input" placeholder={link ? 'Search your repositories' : 'owner/name'} value={query}
-          onChange={(e) => { setQuery(e.target.value); setError('') }} aria-label="Repository" autoComplete="off" />
-        {link && (
-          <div className="gh-list" role="listbox" aria-label="Your repositories">
-            {repos === null && <p className="gh-empty">Loading your repositories…</p>}
-            <AnimatePresence initial={false}>
-              {matches.map((r) => (
-                <motion.button type="button" layout key={r.full_name} className="gh-row" onClick={() => add(r)} disabled={!!busy}
-                  initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} transition={{ duration: 0.3, ease: easeOut }}>
-                  <img src={r.owner.avatar_url} alt="" width={22} height={22} />
-                  <span className="gh-row-name">{r.full_name}</span>
-                  {r.private && <span className="gh-lock" title="Private">private</span>}
-                  <span className="gh-row-meta">{busy === r.full_name ? 'Adding…' : timeAgo(r.pushed_at)}</span>
-                </motion.button>
-              ))}
+    <div className="cx">
+      <form className="cx-gh" onSubmit={addTyped}>
+        <header>
+          <span className="cx-mark" aria-hidden="true"><svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><path d="M12 .5a11.5 11.5 0 00-3.6 22.4c.6.1.8-.3.8-.6v-2c-3.2.7-3.9-1.5-3.9-1.5-.5-1.3-1.3-1.7-1.3-1.7-1-.7.1-.7.1-.7 1.2.1 1.8 1.2 1.8 1.2 1 1.8 2.8 1.3 3.5 1 .1-.8.4-1.3.7-1.6-2.6-.3-5.3-1.3-5.3-5.7 0-1.3.5-2.3 1.2-3.1-.1-.3-.5-1.5.1-3.1 0 0 1-.3 3.2 1.2a11 11 0 015.8 0C17.3 4.3 18.3 4.6 18.3 4.6c.6 1.6.2 2.8.1 3.1.8.8 1.2 1.9 1.2 3.1 0 4.4-2.7 5.4-5.3 5.7.4.4.8 1.1.8 2.2v3.3c0 .3.2.7.8.6A11.5 11.5 0 0012 .5z" /></svg></span>
+          <div>
+            <h4>From GitHub</h4>
+            <p>{link ? <>Signed in as <b>@{link.login}</b>. Pick a repository, or type any owner/name.</> : 'Type a public repository as owner/name, or connect GitHub to pick from yours, private ones too.'}</p>
+          </div>
+          {!link && link !== undefined && (
+            <button type="button" className="btn btn-line btn-sm" onClick={connect} disabled={!!busy}><Roll>{busy === 'github-link' ? 'Opening GitHub…' : 'Connect GitHub'}</Roll></button>
+          )}
+        </header>
+        <label className="cx-search">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7" /><path d="M20 20l-3.5-3.5" /></svg>
+          <input id="repo-name" placeholder={link ? 'Search your repositories, or type owner/name' : 'owner/name, for example pallets/flask'} value={query}
+            onChange={(e) => { setQuery(e.target.value); setError('') }} aria-label="Repository" autoComplete="off" spellCheck={false} />
+          <AnimatePresence>
+            {FULL_NAME.test(typed) && !exact && (
+              <motion.button key="add" type="submit" className="btn btn-dark btn-sm" disabled={!!busy} initial={{ opacity: 0, scale: 0.8 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.8 }}>
+                <Roll>{busy === typed ? 'Checking…' : 'Add'}</Roll>
+              </motion.button>
+            )}
+          </AnimatePresence>
+        </label>
+        <AnimatePresence>{error && <motion.p className="form-error" role="alert" initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}>{error}</motion.p>}</AnimatePresence>
+        {link ? (
+          <div className="cx-list" role="listbox" aria-label="Your repositories" data-lenis-prevent>
+            {repos === null && Array.from({ length: 4 }, (_, k) => <span key={k} className="cx-skel" style={{ animationDelay: `${k * 0.1}s` }} />)}
+            <AnimatePresence initial={false} mode="popLayout">
+              {matches.map((r, i) => {
+                const have = taken.has(r.full_name.toLowerCase())
+                const [owner, name] = r.full_name.split('/')
+                return (
+                  <motion.button type="button" layout key={r.full_name} className={`cx-row ${have ? 'have' : ''}`} onClick={() => !have && add(r)} disabled={!!busy || have}
+                    initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0, transition: { duration: 0.35, ease: easeOut, delay: i * 0.03 } }} exit={{ opacity: 0, transition: { duration: 0.12 } }}>
+                    <img src={r.owner.avatar_url} alt="" width={34} height={34} />
+                    <span className="cx-row-main">
+                      <b><small>{owner}/</small>{name}</b>
+                      <span>{r.description || 'No description'}</span>
+                    </span>
+                    <span className="cx-row-meta">
+                      {r.private && <em>private</em>}
+                      <span>{r.open_issues_count} issue{r.open_issues_count === 1 ? '' : 's'} · {timeAgo(r.pushed_at)}</span>
+                    </span>
+                    <span className={`cx-row-go ${busy === r.full_name ? 'busy' : ''}`}>{have ? 'Connected' : busy === r.full_name ? 'Adding…' : 'Add'}</span>
+                  </motion.button>
+                )
+              })}
             </AnimatePresence>
-            {repos && matches.length === 0 && <p className="gh-empty">No repository of yours matches.</p>}
+            {repos && matches.length === 0 && <p className="cx-empty">{FULL_NAME.test(typed) ? <>Not one of yours. Press <b>Add</b> to connect <code>{typed}</code> anyway.</> : 'No repository of yours matches.'}</p>}
+          </div>
+        ) : (
+          <div className="cx-hint">
+            <span className="hr-k">Public ones to try</span>
+            <div className="cx-try">
+              {['pallets/click', 'psf/requests', 'encode/httpx', 'tiangolo/typer'].map((n) => (
+                <button type="button" key={n} onClick={() => { setQuery(n); setError('') }}><code>{n}</code></button>
+              ))}
+            </div>
+            <p>Swarm reads the repository’s open issues and runs its tests in a sandbox. It never pushes to your default branch: every fix waits for your OK.</p>
           </div>
         )}
-        {error && <p className="form-error" role="alert">{error}</p>}
-        <div className="connect-actions">
-          {(!link || (FULL_NAME.test(typed) && !exact)) && (
-            <button className="btn btn-dark" type="submit" disabled={!!busy || !typed}><Roll>{busy === typed ? 'Checking…' : link ? `Add ${typed}` : 'Connect repository'}</Roll></button>
-          )}
-          {!link && link !== undefined && (
-            <button type="button" className="btn btn-line" onClick={connect} disabled={!!busy}><Roll>{busy === 'github-link' ? 'Opening GitHub…' : 'Connect GitHub'}</Roll></button>
-          )}
-        </div>
       </form>
-      <div className="connect-card connect-demo">
-        <h4>The demo repository</h4>
-        <p>A small library with seven real issues: three tests that fail at random, a duplicate, a question, a bug and a vague report.</p>
-        <div style={{ flex: 1 }} />
-        <button className="btn btn-green" onClick={demo} disabled={!!busy}><Roll>{busy === 'demo' ? 'Setting it up…' : 'Try the demo repo'}</Roll></button>
-      </div>
+
+      <aside className="cx-side">
+        <div className="cx-demo">
+          <span className="cx-demo-art" aria-hidden="true">{['triager', 'coder', 'tester', 'reviewer'].map((a, i) => <i key={a} style={{ background: `var(--${a})`, animationDelay: `${i * 0.15}s` }} />)}</span>
+          <h4>Or try the demo</h4>
+          <p>A small library with seven real issues: three tests that fail at random, a duplicate, a question, a bug and a vague report.</p>
+          <button className="btn btn-dark" onClick={demo} disabled={!!busy}><Roll>{busy === 'demo' ? 'Setting it up…' : 'Try the demo repo'}</Roll></button>
+        </div>
+        <ol className="cx-steps">
+          <li><b>1</b><span>Pick a repository. Nothing runs until you do.</span></li>
+          <li><b>2</b><span>The triager reads its open issues and picks the ones worth fixing.</span></li>
+          <li><b>3</b><span>Fixes are proven in a sandbox, then wait for you to approve.</span></li>
+        </ol>
+      </aside>
     </div>
   )
 }

@@ -33,6 +33,7 @@ export function IdentityCard({ uid, name, sub, chips, photo, onPhoto, onRemove, 
     <motion.header className="idc" initial={{ opacity: 0, y: 18, scale: 0.985 }} animate={{ opacity: 1, y: 0, scale: 1 }} transition={{ duration: 0.8, ease: easeOut }}
       style={{ ['--hue' as string]: p.color, ['--spin' as string]: `${p.angle}deg`, ['--speed' as string]: `${p.speed}s` }}>
       <div className="idc-bg" aria-hidden="true"><i /><i /><i /><i /></div>
+      <SwarmField />
       <button type="button" className={`idc-photo ${dragging ? 'is-drop' : ''}`} onClick={onPhoto} aria-label="Change profile picture" {...dropProps}>
         {photo}
         <span className="idc-photo-cta"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M4 8h3l2-3h6l2 3h3v11H4z" /><circle cx="12" cy="13" r="3.5" /></svg>Change</span>
@@ -54,6 +55,103 @@ export function IdentityCard({ uid, name, sub, chips, photo, onPhoto, onRemove, 
       </div>
     </motion.header>
   )
+}
+
+/* The live backdrop: a grid of dots and the four agents flying over it. The dots bulge away from your
+   pointer and take the colour of the nearest agent; the agents wander, then follow you when you're over the
+   card; a click sends a ripple through the grid and scatters them. Paused off screen, still for reduced motion. */
+const AGENT_COLORS = ['#fbe74e', '#9dc4f5', '#ff8a7a', '#5dd36a']
+
+function SwarmField() {
+  const canvas = useRef<HTMLCanvasElement>(null)
+  useEffect(() => {
+    const cv = canvas.current, host = cv?.parentElement
+    if (!cv || !host) return
+    const ctx = cv.getContext('2d')
+    if (!ctx) return
+    const calm = window.matchMedia('(prefers-reduced-motion: reduce)').matches || document.documentElement.classList.contains('less-motion')
+    const GAP = 20
+    let w = 0, h = 0, dpr = 1, raf = 0, visible = true, last = performance.now()
+    const pointer = { x: -9999, y: -9999, in: false }
+    const ripples: { x: number; y: number; t: number }[] = []
+    const agents = AGENT_COLORS.map((c, i) => ({ c, x: 0, y: 0, vx: 0, vy: 0, seed: i * 1.7, trail: [] as { x: number; y: number }[] }))
+    const size = () => {
+      const r = host.getBoundingClientRect()
+      dpr = Math.min(2, window.devicePixelRatio || 1); w = r.width; h = r.height
+      cv.width = w * dpr; cv.height = h * dpr; cv.style.width = `${w}px`; cv.style.height = `${h}px`
+      agents.forEach((a, i) => { if (!a.x) { a.x = w * (0.55 + i * 0.1); a.y = h * (0.3 + (i % 2) * 0.4) } })
+    }
+    const frame = (now: number) => {
+      const dt = Math.min(0.05, (now - last) / 1000); last = now
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
+      ctx.clearRect(0, 0, w, h)
+      // agents: wander on their own, or gather loosely around the pointer
+      const t = now / 1000
+      for (const [i, a] of agents.entries()) {
+        const ang = t * 0.5 + a.seed + i * (Math.PI / 2)
+        const tx = pointer.in ? pointer.x + Math.cos(ang * 2) * 46 : w * 0.5 + Math.cos(ang * 0.7 + a.seed) * w * 0.42
+        const ty = pointer.in ? pointer.y + Math.sin(ang * 2) * 34 : h * 0.5 + Math.sin(ang * 1.1 + a.seed) * h * 0.36
+        a.vx += ((tx - a.x) * (pointer.in ? 7 : 1.4) - a.vx * (pointer.in ? 3.2 : 1.6)) * dt
+        a.vy += ((ty - a.y) * (pointer.in ? 7 : 1.4) - a.vy * (pointer.in ? 3.2 : 1.6)) * dt
+        for (const b of agents) if (b !== a) { const dx = a.x - b.x, dy = a.y - b.y, d2 = dx * dx + dy * dy + 1; if (d2 < 900) { a.vx += (dx / d2) * 900 * dt; a.vy += (dy / d2) * 900 * dt } }
+        a.x += a.vx * dt; a.y += a.vy * dt
+        a.trail.push({ x: a.x, y: a.y }); if (a.trail.length > 14) a.trail.shift()
+      }
+      for (let i = ripples.length - 1; i >= 0; i--) if (t - ripples[i].t > 1.6) ripples.splice(i, 1)
+      // the grid
+      for (let gy = GAP / 2; gy < h; gy += GAP) for (let gx = GAP / 2; gx < w; gx += GAP) {
+        let x = gx, y = gy, r = 1.1, col = 'rgba(15,15,15,0.2)'
+        const dx = gx - pointer.x, dy = gy - pointer.y, d = Math.hypot(dx, dy)
+        if (pointer.in && d < 130) {
+          const f = 1 - d / 130
+          x += (dx / (d || 1)) * f * 14; y += (dy / (d || 1)) * f * 14; r += f * 2.6
+          let best = 0, bd = Infinity
+          agents.forEach((a, k) => { const ad = Math.hypot(a.x - gx, a.y - gy); if (ad < bd) { bd = ad; best = k } })
+          col = AGENT_COLORS[best]
+        }
+        for (const rp of ripples) {
+          const rad = (t - rp.t) * 520, rd = Math.abs(Math.hypot(gx - rp.x, gy - rp.y) - rad)
+          if (rd < 26) { const f = (1 - rd / 26) * (1 - (t - rp.t) / 1.6); r += f * 3; col = AGENT_COLORS[Math.floor(rad / 60) % 4] }
+        }
+        ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fillStyle = col; ctx.fill()
+      }
+      // the agents, with a fading trail
+      for (const a of agents) {
+        a.trail.forEach((p, k) => { ctx.beginPath(); ctx.arc(p.x, p.y, 2 + k * 0.25, 0, Math.PI * 2); ctx.fillStyle = a.c; ctx.globalAlpha = (k / a.trail.length) * 0.5; ctx.fill() })
+        ctx.globalAlpha = 1
+        ctx.beginPath(); ctx.arc(a.x, a.y, 6.5, 0, Math.PI * 2); ctx.fillStyle = a.c; ctx.fill(); ctx.lineWidth = 2; ctx.strokeStyle = '#0f0f0f'; ctx.stroke()
+      }
+      if (!calm && visible && !document.hidden) raf = requestAnimationFrame(frame)
+    }
+    const start = () => { cancelAnimationFrame(raf); last = performance.now(); raf = requestAnimationFrame(frame) }
+    const at = (e: PointerEvent) => { const r = host.getBoundingClientRect(); return { x: e.clientX - r.left, y: e.clientY - r.top } }
+    const move = (e: PointerEvent) => {
+      const p = at(e); pointer.x = p.x; pointer.y = p.y; pointer.in = true
+      host.style.setProperty('--mx', String(p.x / w - 0.5)); host.style.setProperty('--my', String(p.y / h - 0.5))
+      if (calm) start()
+    }
+    const leave = () => { pointer.in = false; host.style.setProperty('--mx', '0'); host.style.setProperty('--my', '0'); if (calm) start() }
+    const down = (e: PointerEvent) => {
+      const p = at(e); ripples.push({ ...p, t: performance.now() / 1000 })
+      for (const a of agents) { const dx = a.x - p.x, dy = a.y - p.y, d = Math.hypot(dx, dy) || 1; a.vx += (dx / d) * 700; a.vy += (dy / d) * 700 }
+      if (calm) start()
+    }
+    size()
+    const ro = new ResizeObserver(() => { size(); start() })
+    ro.observe(host)
+    const io = new IntersectionObserver(([e]) => { visible = e.isIntersecting; if (visible) start() })
+    io.observe(host)
+    const vis = () => { if (!document.hidden) start() }
+    host.addEventListener('pointermove', move); host.addEventListener('pointerleave', leave); host.addEventListener('pointerdown', down)
+    document.addEventListener('visibilitychange', vis)
+    start()
+    return () => {
+      cancelAnimationFrame(raf); ro.disconnect(); io.disconnect()
+      host.removeEventListener('pointermove', move); host.removeEventListener('pointerleave', leave); host.removeEventListener('pointerdown', down)
+      document.removeEventListener('visibilitychange', vis)
+    }
+  }, [])
+  return <canvas ref={canvas} className="idc-field" aria-hidden="true" />
 }
 
 /** The profile picture, which changes by opening the new one from the centre over the old. */

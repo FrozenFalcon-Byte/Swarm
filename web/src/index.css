@@ -164,3 +164,26 @@ img, svg { display: block; max-width: 100%; }
 /* ---------- the Swarm logo (used everywhere, so it lives here) */
 .logo { display: inline-flex; align-items: center; gap: 10px; font-weight: 600; font-size: 26px; letter-spacing: -0.04em; justify-self: start; }
 .logo .mark { width: 34px; height: 34px; }
+
+/* ---------- our dropdown (components/Select.tsx) */
+.sel { position: relative; display: inline-flex; }
+.sel-btn { display: inline-flex; align-items: center; gap: 10px; height: 46px; max-width: 260px; padding: 0 14px 0 16px; border-radius: var(--pill); border: 2px solid var(--line-soft); background: var(--white); font-size: 14px; font-weight: 600; color: var(--ink); cursor: pointer; transition: border-color var(--t-fast); }
+.sel-btn > span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: left; }
+.sel-btn svg { flex: none; transition: transform 0.35s var(--spring); }
+.sel-btn:hover:not(:disabled), .sel.open .sel-btn { border-color: var(--ink); }
+.sel.open .sel-btn svg { transform: rotate(180deg); }
+.sel-btn:disabled { cursor: default; opacity: 0.6; }
+.sel-dot { flex: none; width: 10px; height: 10px; border-radius: 50%; border: 1.5px solid var(--ink); }
+.sel-pop { z-index: 200; width: max-content; max-width: min(340px, calc(100vw - 32px)); padding: 6px; border-radius: 20px;
+  background: var(--white); border: 2px solid var(--ink); box-shadow: 6px 6px 0 var(--ink); display: flex; flex-direction: column; gap: 6px; }
+.sel-search { height: 40px; border-radius: 14px; border: 1.5px solid var(--line-soft); background: var(--grey-8); padding: 0 12px; font-size: 14px; outline: none; }
+.sel-search:focus { border-color: var(--ink); background: var(--white); }
+.sel-pop ul { position: relative; list-style: none; margin: 0; padding: 0; max-height: 300px; overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin; scrollbar-color: var(--line) transparent; }
+.sel-pop li { display: flex; align-items: center; gap: 10px; min-height: 40px; padding: 8px 12px; border-radius: 12px; font-size: 14px; font-weight: 500; cursor: pointer; }
+.sel-pop li > span { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.sel-pop li small { font-size: 12px; color: var(--ink-3); font-weight: 500; }
+.sel-pop li.at { background: var(--grey-6); }
+.sel-pop li.on { font-weight: 700; }
+.sel-pop li svg { flex: none; }
+.sel-pop li.sel-none { color: var(--ink-3); cursor: default; background: none; }
+@media (max-width: 860px) { .toolbar-side .sel { flex: 1; } .toolbar-side .sel-btn { width: 100%; max-width: none; } }

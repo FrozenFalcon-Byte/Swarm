@@ -58,52 +58,112 @@ export default function Rules() {
   const add = (r: Omit<HouseRule, 'id' | 'on'>, id = newId()) => { if (mine && !rules.some((x) => same(r, x))) setRules((rs) => [{ ...r, id, on: true }, ...rs].slice(0, 30)) }
   const change = (id: string, patch: Partial<HouseRule>) => setRules((rs) => rs.map((r) => (r.id === id ? { ...r, ...patch } : r)))
   const remove = (id: string) => setRules((rs) => rs.filter((r) => r.id !== id))
+  // what you're typing; `id` is the id the next rule will have, so its preview card becomes the real one
+  const [draft, setDraftState] = useState({ id: newId(), kind: 'never' as Kind, glob: '', max: 20, why: '' })
+  const setDraft = (patch: Partial<typeof draft>) => setDraftState((d) => ({ ...d, ...patch }))
 
   if (!loading && repos.length === 0) {
     return <div className="page"><PageHead title="House rules" /><EmptyState title="No repository yet" text="Connect one and you can tell the agents what’s off limits in it."><Link to="/app" className="btn btn-dark">Connect a repository</Link></EmptyState></div>
   }
 
+  const kinds = Object.keys(RULE_KINDS) as Kind[]
+  const ready = draft.kind === 'size' ? draft.max > 0 : !!draft.glob.trim()
+  const submit = (e: FormEvent) => {
+    e.preventDefault()
+    if (!ready || !mine) return
+    add(draft.kind === 'size' ? { kind: 'size', max: draft.max, why: draft.why.trim() } : { kind: draft.kind, glob: draft.glob.trim(), why: draft.why.trim() }, draft.id)
+    setDraftState((d) => ({ ...d, id: newId(), glob: '', why: '' }))
+  }
+  const hits = draft.kind === 'size' || !draft.glob.trim() ? null : touched.filter((p) => matches(draft.glob, p))
+  const on = rules.filter((r) => r.on).length
+
   return (
-    <div className="page fit">
+    <div className="page fit hr-page">
       <PageHead title="House rules" sub="What the agents may not touch. The reviewer holds every fix to these.">
         <div className="toolbar-side"><RepoSelect repos={repos} value={repoId} onChange={setRepoId} /><SaveChip state={saveState} readOnly={!mine} /></div>
       </PageHead>
 
-      <div className="hr-grid">
-        <div className="hr-col">
-          <Composer disabled={!mine} onAdd={add} paths={touched} />
-          <motion.div className="hr-suggest" {...rise(2)}>
-            <span className="hr-k">Common ones</span>
-            <div>
-              {SUGGESTIONS.map((s) => {
-                const have = rules.some((r) => same(s, r))
-                return (
-                  <motion.button key={`${s.kind}${s.glob ?? s.max}`} className={`hr-sug ${have ? 'have' : ''}`} disabled={!mine || have} onClick={() => add(s)}
-                    style={{ ['--c' as string]: RULE_KINDS[s.kind].color }} whileTap={{ scale: 0.94 }}>
-                    <i />{s.kind === 'size' ? `Under ${s.max} lines` : <><span>{RULE_KINDS[s.kind].label}</span> <code>{s.glob}</code></>}
-                    {have && <b aria-hidden="true">✓</b>}
-                  </motion.button>
-                )
-              })}
-            </div>
-          </motion.div>
-
-          <motion.section className="hr-book" aria-label="Rules" {...rise(3)}>
-            <header><h2>The rulebook</h2><span className="hr-k">{rules.filter((r) => r.on).length} on</span></header>
-            <ul>
-              <AnimatePresence mode="popLayout" initial={false}>
-                {rules.map((r) => <RuleCard key={r.id} rule={r} caught={caught(r)} total={fixes.length} disabled={!mine} onChange={(p) => change(r.id, p)} onRemove={() => remove(r.id)} />)}
-                {rules.length === 0 && (
-                  <motion.li key="none" className="hr-none" initial={{ opacity: 0, scale: 0.97 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.97 }}>
-                    <span className="hr-none-art" aria-hidden="true">{(['never', 'ask', 'size'] as Kind[]).map((k, i) => <motion.i key={k} style={{ background: RULE_KINDS[k].color }} animate={{ rotate: [0, -8, 0] }} transition={{ duration: 1.6, repeat: Infinity, delay: i * 0.2 }} />)}</span>
-                    <b>No rules yet</b>
-                    <p>Right now a fix may touch any file it needs, and the usual checks decide. Add a rule above, or start from a common one.</p>
-                  </motion.li>
-                )}
-              </AnimatePresence>
-            </ul>
-          </motion.section>
+      <motion.form className="hr-compose" onSubmit={submit} {...rise(0)} style={{ ['--c' as string]: RULE_KINDS[draft.kind].color, ['--soft' as string]: RULE_KINDS[draft.kind].soft }}>
+        <LayoutGroup id="hr-kind">
+          <div className="hr-kinds" role="radiogroup" aria-label="Kind of rule">
+            {kinds.map((k) => (
+              <button type="button" key={k} role="radio" aria-checked={draft.kind === k} className={draft.kind === k ? 'on' : ''} onClick={() => setDraft({ kind: k })} style={{ ['--k' as string]: RULE_KINDS[k].color }}>
+                {draft.kind === k && <motion.span layoutId="hr-kind-on" className="hr-kind-on" transition={{ type: 'spring', stiffness: 460, damping: 36 }} />}
+                <span><i />{RULE_KINDS[k].label}</span>
+              </button>
+            ))}
+          </div>
+        </LayoutGroup>
+        <div className="hr-field">
+          <AnimatePresence mode="popLayout" initial={false}>
+            {draft.kind === 'size' ? (
+              <motion.label key="size" className="hr-size" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }} transition={{ duration: 0.2 }}>
+                <input type="range" min={5} max={100} step={5} value={draft.max} onChange={(e) => setDraft({ max: Number(e.target.value) })} disabled={!mine} aria-label="Most lines a fix may change"
+                  style={{ ['--p' as string]: `${((draft.max - 5) / 95) * 100}%` }} />
+                <b>{draft.max} lines</b>
+              </motion.label>
+            ) : (
+              <motion.label key="glob" className="hr-glob" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }} transition={{ duration: 0.2 }}>
+                <input value={draft.glob} onChange={(e) => setDraft({ glob: e.target.value })} disabled={!mine}
+                  placeholder={draft.kind === 'never' ? 'migrations/' : '*.lock'} aria-label="Files, as a pattern" spellCheck={false} autoCapitalize="off" />
+                <AnimatePresence>{hits && <motion.em initial={{ opacity: 0, scale: 0.7 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.7 }} title="Files the agents have touched that this matches">{hits.length} match{hits.length === 1 ? '' : 'es'}</motion.em>}</AnimatePresence>
+              </motion.label>
+            )}
+          </AnimatePresence>
         </div>
+        <input className="hr-why" value={draft.why} onChange={(e) => setDraft({ why: e.target.value })} placeholder="Why? (optional)" disabled={!mine} aria-label="Reason" maxLength={200} />
+        <motion.button type="submit" className="btn btn-dark" disabled={!ready || !mine} whileTap={{ scale: 0.96 }}>Add rule</motion.button>
+      </motion.form>
+
+      <motion.div className="hr-suggest" {...rise(1)}>
+        <span className="hr-k">Start from</span>
+        <div>
+          {SUGGESTIONS.map((s) => {
+            const have = rules.some((r) => same(s, r))
+            return (
+              <motion.button key={`${s.kind}${s.glob ?? s.max}`} className={`hr-sug ${have ? 'have' : ''}`} disabled={!mine || have} onClick={() => add(s)}
+                style={{ ['--c' as string]: RULE_KINDS[s.kind].color }} whileTap={{ scale: 0.94 }}>
+                <i />{s.kind === 'size' ? `Under ${s.max} lines` : <><span>{RULE_KINDS[s.kind].label}</span> <code>{s.glob}</code></>}
+                {have && <b aria-hidden="true">✓</b>}
+              </motion.button>
+            )
+          })}
+        </div>
+      </motion.div>
+
+      <div className="hr-grid">
+        <motion.section className="hr-book" aria-label="Rules" {...rise(2)}>
+          <header><h2>The rulebook</h2><span className="hr-k">{rules.length ? `${on} of ${rules.length} on` : 'empty'}</span></header>
+          <div className="hr-lanes">
+            {kinds.map((k) => {
+              const mineK = rules.filter((r) => r.kind === k)
+              const ghost = ready && mine && draft.kind === k
+              return (
+                <div key={k} className={`hr-lane ${draft.kind === k ? 'aim' : ''}`} style={{ ['--c' as string]: RULE_KINDS[k].color, ['--soft' as string]: RULE_KINDS[k].soft }}>
+                  <header><i /><b>{RULE_KINDS[k].label}</b><span>{mineK.length}</span></header>
+                  <p>{RULE_KINDS[k].says}</p>
+                  <ul>
+                    <AnimatePresence mode="popLayout" initial={false}>
+                      {ghost && (
+                        <motion.li key={`ghost-${draft.id}`} layoutId={`rule-${draft.id}`} className="hr-rule ghost" initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.9 }}
+                          transition={{ type: 'spring', stiffness: 420, damping: 34 }}>
+                          <div className="hr-rule-top">{k === 'size' ? <b>{draft.max} changed lines</b> : <code>{draft.glob.trim()}</code>}</div>
+                          <span className="hr-rule-why">{draft.why.trim() || 'Press Add rule to keep it'}</span>
+                        </motion.li>
+                      )}
+                      {mineK.map((r) => <RuleCard key={r.id} rule={r} caught={caught(r)} total={fixes.length} disabled={!mine} onChange={(p) => change(r.id, p)} onRemove={() => remove(r.id)} />)}
+                      {!ghost && mineK.length === 0 && (
+                        <motion.li key="none" className="hr-none" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0, transition: { duration: 0.1 } }}>
+                          {k === 'size' ? 'No limit on how big a fix may be.' : 'Nothing here yet.'}
+                        </motion.li>
+                      )}
+                    </AnimatePresence>
+                  </ul>
+                </div>
+              )
+            })}
+          </div>
+        </motion.section>
 
         <div className="hr-col">
           <Replay verdicts={verdicts} repoId={repoId} sig={JSON.stringify(rules)} />
@@ -114,103 +174,40 @@ export default function Rules() {
   )
 }
 
-function Composer({ disabled, onAdd, paths }: { disabled: boolean; onAdd: (r: Omit<HouseRule, 'id' | 'on'>, id: string) => void; paths: string[] }) {
-  const [pending, setPending] = useState(newId) // the id the next rule will have: its ticket here becomes its card below
-  const [kind, setKind] = useState<Kind>('never')
-  const [glob, setGlob] = useState('')
-  const [max, setMax] = useState(20)
-  const [why, setWhy] = useState('')
-  const hits = kind === 'size' || !glob.trim() ? null : paths.filter((p) => matches(glob, p))
-  const ready = kind === 'size' ? max > 0 : !!glob.trim()
-  const submit = (e: FormEvent) => {
-    e.preventDefault()
-    if (!ready || disabled) return
-    onAdd(kind === 'size' ? { kind, max, why: why.trim() } : { kind, glob: glob.trim(), why: why.trim() }, pending)
-    setPending(newId()); setGlob(''); setWhy('')
-  }
-  return (
-    <motion.form className="hr-compose" onSubmit={submit} {...rise(0)} style={{ ['--c' as string]: RULE_KINDS[kind].color, ['--soft' as string]: RULE_KINDS[kind].soft }}>
-      <LayoutGroup id="hr-kind">
-        <div className="hr-kinds" role="radiogroup" aria-label="Kind of rule">
-          {(Object.keys(RULE_KINDS) as Kind[]).map((k) => (
-            <button type="button" key={k} role="radio" aria-checked={kind === k} className={kind === k ? 'on' : ''} onClick={() => setKind(k)} style={{ ['--k' as string]: RULE_KINDS[k].color }}>
-              {kind === k && <motion.span layoutId="hr-kind-on" className="hr-kind-on" transition={{ type: 'spring', stiffness: 460, damping: 36 }} />}
-              <span><i />{RULE_KINDS[k].label}</span>
-            </button>
-          ))}
-        </div>
-      </LayoutGroup>
-      <div className="hr-sentence">
-        <AnimatePresence mode="popLayout" initial={false}>
-          {kind === 'size' ? (
-            <motion.label key="size" className="hr-size" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.18 }}>
-              <input type="range" min={5} max={100} step={5} value={max} onChange={(e) => setMax(Number(e.target.value))} disabled={disabled} aria-label="Most lines a fix may change"
-                style={{ ['--p' as string]: `${((max - 5) / 95) * 100}%` }} />
-              <b>{max} lines</b>
-            </motion.label>
-          ) : (
-            <motion.input key="glob" className="hr-glob" value={glob} onChange={(e) => setGlob(e.target.value)} disabled={disabled}
-              placeholder={kind === 'never' ? 'Files to never touch: migrations/' : 'Files to ask about: *.lock'}
-              aria-label="Files, as a pattern" spellCheck={false} autoCapitalize="off" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.18 }} />
-          )}
-        </AnimatePresence>
-        <input className="hr-why" value={why} onChange={(e) => setWhy(e.target.value)} placeholder="Why? (optional)" disabled={disabled} aria-label="Reason" maxLength={200} />
-      </div>
-      <div className="hr-compose-foot">
-        {/* what you're typing, as the card it will become; on Add this same ticket moves into the rulebook */}
-        <div className="hr-ticket-slot">
-          <AnimatePresence mode="popLayout" initial={false}>
-            {ready && !disabled ? (
-              <motion.div key="ticket" layoutId={`rule-${pending}`} className="hr-ticket" style={{ ['--c' as string]: RULE_KINDS[kind].color, ['--soft' as string]: RULE_KINDS[kind].soft }}
-                initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} transition={{ type: 'spring', stiffness: 420, damping: 36 }}>
-                <span className="hr-rule-kind">{RULE_KINDS[kind].label}</span>
-                {kind === 'size' ? <b>{max} changed lines</b> : <code>{glob.trim()}</code>}
-                {hits && <em title="Files the agents have touched that this matches">{hits.length} match{hits.length === 1 ? '' : 'es'}</em>}
-              </motion.div>
-            ) : (
-              <motion.p key="hint" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.18 }}>{RULE_KINDS[kind].says}</motion.p>
-            )}
-          </AnimatePresence>
-        </div>
-        <motion.button type="submit" className="btn btn-dark" disabled={!ready || disabled} whileTap={{ scale: 0.96 }}>Add rule</motion.button>
-      </div>
-    </motion.form>
-  )
-}
-
 function RuleCard({ rule, caught, total, disabled, onChange, onRemove }: {
   rule: HouseRule; caught: number; total: number; disabled: boolean; onChange: (p: Partial<HouseRule>) => void; onRemove: () => void
 }) {
-  const k = RULE_KINDS[rule.kind]
-  const flip = () => rule.kind !== 'size' && onChange({ kind: rule.kind === 'never' ? 'ask' : 'never' })
+  const other = rule.kind === 'never' ? 'ask' : 'never'
   return (
-    <motion.li layout layoutId={`rule-${rule.id}`} className={`hr-rule ${rule.on ? '' : 'off'}`} style={{ ['--c' as string]: k.color, ['--soft' as string]: k.soft }}
-      initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }}
-      exit={{ opacity: 0, x: 24, transition: { duration: 0.2 } }}
-      transition={{ type: 'spring', stiffness: 380, damping: 36 }}>
-      <button className="hr-rule-kind" onClick={flip} disabled={disabled || rule.kind === 'size'} title={rule.kind === 'size' ? undefined : 'Switch between never touch and ask me first'}>
-        <AnimatePresence mode="popLayout" initial={false}>
-          <motion.span key={rule.kind} initial={{ rotateX: -90, opacity: 0 }} animate={{ rotateX: 0, opacity: 1 }} exit={{ rotateX: 90, opacity: 0 }} transition={{ duration: 0.28 }}>{k.label}</motion.span>
-        </AnimatePresence>
-      </button>
-      <div className="hr-rule-body">
+    <motion.li layout layoutId={`rule-${rule.id}`} className={`hr-rule ${rule.on ? '' : 'off'}`}
+      initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: rule.on ? 1 : 0.55, scale: 1 }}
+      exit={{ opacity: 0, scale: 0.9, transition: { duration: 0.2 } }}
+      transition={{ type: 'spring', stiffness: 380, damping: 34 }}>
+      <div className="hr-rule-top">
         {rule.kind === 'size' ? <b>{rule.max} changed lines</b> : <code>{rule.glob}</code>}
-        {rule.why && <span>{rule.why}</span>}
+        {rule.kind !== 'size' && !disabled && (
+          <button className="hr-move" onClick={() => onChange({ kind: other })} title={`Move to ${RULE_KINDS[other].label}`} aria-label={`Move to ${RULE_KINDS[other].label}`} style={{ ['--k' as string]: RULE_KINDS[other].color }}>
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><path d={other === 'ask' ? 'M5 12h14M13 6l6 6-6 6' : 'M19 12H5M11 6l-6 6 6 6'} /></svg>
+          </button>
+        )}
+        <button className="hr-x" onClick={onRemove} disabled={disabled} aria-label="Remove rule">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round"><path d="M6 6l12 12M18 6L6 18" /></svg>
+        </button>
       </div>
-      <span className={`hr-caught ${caught ? 'hot' : ''}`} title={`Caught ${caught} of ${total} past fixes`}>
-        <AnimatePresence mode="popLayout" initial={false}>
-          <motion.b key={caught} initial={{ y: 10, opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: -10, opacity: 0 }}>{caught}</motion.b>
-        </AnimatePresence>
-        <small>caught</small>
-      </span>
-      <label className="toggle hr-toggle" title={rule.on ? 'Switch off' : 'Switch on'}>
-        <input type="checkbox" checked={rule.on} disabled={disabled} onChange={(e) => onChange({ on: e.target.checked })} />
-        <span className="toggle-track"><span className="toggle-thumb" /></span>
-        <span className="sr-only">Rule on</span>
-      </label>
-      <button className="hr-x" onClick={onRemove} disabled={disabled} aria-label="Remove rule">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round"><path d="M6 6l12 12M18 6L6 18" /></svg>
-      </button>
+      {rule.why && <span className="hr-rule-why">{rule.why}</span>}
+      <div className="hr-rule-foot">
+        <span className={`hr-caught ${caught ? 'hot' : ''}`} title={`Caught ${caught} of ${total} past fixes`}>
+          <AnimatePresence mode="popLayout" initial={false}>
+            <motion.b key={caught} initial={{ y: 10, opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: -10, opacity: 0 }}>{caught}</motion.b>
+          </AnimatePresence>
+          <small>caught</small>
+        </span>
+        <label className="toggle hr-toggle" title={rule.on ? 'Switch off' : 'Switch on'}>
+          <input type="checkbox" checked={rule.on} disabled={disabled} onChange={(e) => onChange({ on: e.target.checked })} />
+          <span className="toggle-track"><span className="toggle-thumb" /></span>
+          <span className="sr-only">Rule on</span>
+        </label>
+      </div>
     </motion.li>
   )
 }
