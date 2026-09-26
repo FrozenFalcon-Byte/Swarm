@@ -21,7 +21,7 @@ from firebase_admin import credentials, firestore, storage
 def service_account() -> dict | None:
     inline = os.environ.get("FIREBASE_SERVICE_ACCOUNT_JSON", "").strip()
     if inline:
-        return json.loads(inline)
+        return _parse_inline(inline)
     path = os.environ.get("GOOGLE_APPLICATION_CREDENTIALS", "").strip()
     if not path:
         return None
@@ -30,6 +30,32 @@ def service_account() -> dict | None:
         if candidate.is_file():
             return json.loads(candidate.read_text())
     return None
+
+
+def _parse_inline(raw: str) -> dict:
+    """The service account as pasted into a host's settings. Pasting is lossy (braces dropped, the whole
+    thing wrapped in quotes), so this also takes it base64-encoded, which survives any paste."""
+    import base64
+    import binascii
+
+    text = raw.strip()
+    if text[:1] in "'\"" and text[-1:] == text[:1] and not text.startswith('"type"'):
+        text = text[1:-1].strip()
+    if not text.startswith(("{", '"')):
+        try:
+            text = base64.b64decode(text, validate=True).decode().strip()
+        except (binascii.Error, UnicodeDecodeError):
+            pass
+    if text.startswith('"'):  # the braces got lost on the way in
+        text = "{" + text.rstrip(",") + "}"
+    try:
+        sa = json.loads(text)
+    except json.JSONDecodeError as e:
+        raise RuntimeError(f"FIREBASE_SERVICE_ACCOUNT_JSON isn't valid JSON ({e.msg} at char {e.pos}); "
+                           "paste the whole file, or its base64 (base64 < service-account.json)") from None
+    if not isinstance(sa, dict) or "private_key" not in sa:
+        raise RuntimeError("FIREBASE_SERVICE_ACCOUNT_JSON doesn't look like a service account (no private_key)")
+    return sa
 
 
 def project_id() -> str:
