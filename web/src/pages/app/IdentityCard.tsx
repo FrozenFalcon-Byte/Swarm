@@ -57,101 +57,161 @@ export function IdentityCard({ uid, name, sub, chips, photo, onPhoto, onRemove, 
   )
 }
 
-/* The live backdrop: a grid of dots and the four agents flying over it. The dots bulge away from your
-   pointer and take the colour of the nearest agent; the agents wander, then follow you when you're over the
-   card; a click sends a ripple through the grid and scatters them. Paused off screen, still for reduced motion. */
-const AGENT_COLORS = ['#fbe74e', '#9dc4f5', '#ff8a7a', '#5dd36a']
+/* The live backdrop: a few chunky stickers in the agents' colours, drawn like the rest of Swarm (ink outline,
+   hard shadow). They drift on their own and bounce off the card's edges, each other and your name, photo and
+   numbers. Move near one and it shies away; grab one and throw it; click empty space and the nearby ones hop.
+   They sit still for reduced motion, and the loop pauses off screen. */
+type Kind = 'dot' | 'pill' | 'ring' | 'square' | 'mark'
+const STICKERS: { kind: Kind; size: number; color: string; x: number; y: number }[] = [
+  { kind: 'mark', size: 46, color: 'var(--ink)', x: 0.47, y: 0.22 },
+  { kind: 'dot', size: 34, color: 'var(--triager)', x: 0.58, y: 0.78 },
+  { kind: 'pill', size: 30, color: 'var(--coder)', x: 0.66, y: 0.3 },
+  { kind: 'ring', size: 38, color: 'var(--tester)', x: 0.52, y: 0.62 },
+  { kind: 'square', size: 30, color: 'var(--reviewer)', x: 0.72, y: 0.72 },
+  { kind: 'dot', size: 20, color: 'var(--white)', x: 0.62, y: 0.12 },
+]
 
 function SwarmField() {
-  const canvas = useRef<HTMLCanvasElement>(null)
+  const box = useRef<HTMLDivElement>(null)
   useEffect(() => {
-    const cv = canvas.current, host = cv?.parentElement
-    if (!cv || !host) return
-    const ctx = cv.getContext('2d')
-    if (!ctx) return
+    const layer = box.current, host = layer?.parentElement
+    if (!layer || !host) return
+    const els = [...layer.querySelectorAll<HTMLElement>('.idc-sticker')]
     const calm = window.matchMedia('(prefers-reduced-motion: reduce)').matches || document.documentElement.classList.contains('less-motion')
-    const GAP = 20
-    let w = 0, h = 0, dpr = 1, raf = 0, visible = true, last = performance.now()
-    const pointer = { x: -9999, y: -9999, in: false }
-    const ripples: { x: number; y: number; t: number }[] = []
-    const agents = AGENT_COLORS.map((c, i) => ({ c, x: 0, y: 0, vx: 0, vy: 0, seed: i * 1.7, trail: [] as { x: number; y: number }[] }))
-    const size = () => {
+    let w = 0, h = 0, raf = 0, visible = true, last = performance.now()
+    let walls: { l: number; t: number; r: number; b: number }[] = []
+    const bodies = STICKERS.map((st, i) => ({
+      el: els[i], rad: (st.kind === 'pill' ? st.size * 1.5 : st.size) / 2 + 2, x: 0, y: 0, vx: (i % 2 ? 1 : -1) * 14, vy: (i % 3 ? -1 : 1) * 10,
+      rot: (i * 37) % 30 - 15, spin: (i % 2 ? 1 : -1) * 6, seed: i * 1.93, placed: false,
+    }))
+    const pointer = { x: -999, y: -999, in: false, px: 0, py: 0, vx: 0, vy: 0 }
+    let held: (typeof bodies)[number] | null = null
+
+    const measure = () => {
       const r = host.getBoundingClientRect()
-      dpr = Math.min(2, window.devicePixelRatio || 1); w = r.width; h = r.height
-      cv.width = w * dpr; cv.height = h * dpr; cv.style.width = `${w}px`; cv.style.height = `${h}px`
-      agents.forEach((a, i) => { if (!a.x) { a.x = w * (0.55 + i * 0.1); a.y = h * (0.3 + (i % 2) * 0.4) } })
+      w = r.width; h = r.height
+      walls = [...host.querySelectorAll<HTMLElement>('.idc-photo, .idc-id h1, .idc-sub, .idc-chips, .idc-stat')].map((el) => {
+        const b = el.getBoundingClientRect(); return { l: b.left - r.left - 4, t: b.top - r.top - 4, r: b.right - r.left + 4, b: b.bottom - r.top + 4 }
+      })
+      // anything sitting on the content (or not placed yet) moves to the nearest free spot to where it wants to be
+      STICKERS.forEach((st, i) => { const o = bodies[i]; if (!o.placed || blocked(o, o.x, o.y)) { home(o, o.placed ? o.x : st.x * w, o.placed ? o.y : st.y * h); o.placed = true } })
     }
-    const frame = (now: number) => {
-      const dt = Math.min(0.05, (now - last) / 1000); last = now
-      ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
-      ctx.clearRect(0, 0, w, h)
-      // agents: wander on their own, or gather loosely around the pointer
+    const blocked = (o: (typeof bodies)[number], x: number, y: number) =>
+      x < o.rad || x > w - o.rad || y < o.rad || y > h - o.rad ||
+      walls.some((b) => Math.hypot(x - Math.max(b.l, Math.min(x, b.r)), y - Math.max(b.t, Math.min(y, b.b))) < o.rad + 4) ||
+      bodies.some((q) => q !== o && q.placed && Math.hypot(q.x - x, q.y - y) < q.rad + o.rad)
+    const home = (o: (typeof bodies)[number], wantX: number, wantY: number) => {
+      let best: [number, number] | null = null, bestD = Infinity
+      for (let k = 0; k < 160; k++) {
+        const x = o.rad + Math.random() * Math.max(1, w - 2 * o.rad), y = o.rad + Math.random() * Math.max(1, h - 2 * o.rad)
+        if (blocked(o, x, y)) continue
+        const d = Math.hypot(x - wantX, y - wantY)
+        if (d < bestD) { bestD = d; best = [x, y] }
+      }
+      if (best) { o.x = best[0]; o.y = best[1] } else { o.x = Math.min(Math.max(wantX, o.rad), w - o.rad); o.y = Math.min(Math.max(wantY, o.rad), h - o.rad) }
+      o.vx *= 0.2; o.vy *= 0.2
+    }
+    let stuck = 0
+    const draw = () => { for (const o of bodies) o.el.style.transform = `translate(${(o.x - o.rad).toFixed(1)}px, ${(o.y - o.rad).toFixed(1)}px) rotate(${o.rot.toFixed(1)}deg)` }
+
+    const step = (now: number) => {
+      const dt = Math.min(0.033, (now - last) / 1000); last = now
       const t = now / 1000
-      for (const [i, a] of agents.entries()) {
-        const ang = t * 0.5 + a.seed + i * (Math.PI / 2)
-        const tx = pointer.in ? pointer.x + Math.cos(ang * 2) * 46 : w * 0.5 + Math.cos(ang * 0.7 + a.seed) * w * 0.42
-        const ty = pointer.in ? pointer.y + Math.sin(ang * 2) * 34 : h * 0.5 + Math.sin(ang * 1.1 + a.seed) * h * 0.36
-        a.vx += ((tx - a.x) * (pointer.in ? 7 : 1.4) - a.vx * (pointer.in ? 3.2 : 1.6)) * dt
-        a.vy += ((ty - a.y) * (pointer.in ? 7 : 1.4) - a.vy * (pointer.in ? 3.2 : 1.6)) * dt
-        for (const b of agents) if (b !== a) { const dx = a.x - b.x, dy = a.y - b.y, d2 = dx * dx + dy * dy + 1; if (d2 < 900) { a.vx += (dx / d2) * 900 * dt; a.vy += (dy / d2) * 900 * dt } }
-        a.x += a.vx * dt; a.y += a.vy * dt
-        a.trail.push({ x: a.x, y: a.y }); if (a.trail.length > 14) a.trail.shift()
-      }
-      for (let i = ripples.length - 1; i >= 0; i--) if (t - ripples[i].t > 1.6) ripples.splice(i, 1)
-      // the grid
-      for (let gy = GAP / 2; gy < h; gy += GAP) for (let gx = GAP / 2; gx < w; gx += GAP) {
-        let x = gx, y = gy, r = 1.1, col = 'rgba(15,15,15,0.2)'
-        const dx = gx - pointer.x, dy = gy - pointer.y, d = Math.hypot(dx, dy)
-        if (pointer.in && d < 130) {
-          const f = 1 - d / 130
-          x += (dx / (d || 1)) * f * 14; y += (dy / (d || 1)) * f * 14; r += f * 2.6
-          let best = 0, bd = Infinity
-          agents.forEach((a, k) => { const ad = Math.hypot(a.x - gx, a.y - gy); if (ad < bd) { bd = ad; best = k } })
-          col = AGENT_COLORS[best]
+      for (const o of bodies) {
+        if (o === held) {
+          o.vx = (pointer.x - o.x) / Math.max(dt, 0.008); o.vy = (pointer.y - o.y) / Math.max(dt, 0.008)
+          o.x = pointer.x; o.y = pointer.y; o.rot += o.vx * 0.002; continue
         }
-        for (const rp of ripples) {
-          const rad = (t - rp.t) * 520, rd = Math.abs(Math.hypot(gx - rp.x, gy - rp.y) - rad)
-          if (rd < 26) { const f = (1 - rd / 26) * (1 - (t - rp.t) / 1.6); r += f * 3; col = AGENT_COLORS[Math.floor(rad / 60) % 4] }
+        // a slow drift of its own, so the card never goes still
+        o.vx += Math.cos(t * 0.4 + o.seed) * 6 * dt; o.vy += Math.sin(t * 0.5 + o.seed * 1.3) * 6 * dt
+        // shy of the pointer
+        if (pointer.in) {
+          const dx = o.x - pointer.x, dy = o.y - pointer.y, d = Math.hypot(dx, dy)
+          if (d < o.rad + 70 && d > 0.1) { const f = (1 - d / (o.rad + 70)) * 900 * dt; o.vx += (dx / d) * f; o.vy += (dy / d) * f }
         }
-        ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fillStyle = col; ctx.fill()
+        const damp = Math.exp(-0.9 * dt); o.vx *= damp; o.vy *= damp; o.spin = Math.max(-140, Math.min(140, o.spin * Math.exp(-1.4 * dt)))
+        const sp = Math.hypot(o.vx, o.vy); if (sp > 900) { o.vx *= 900 / sp; o.vy *= 900 / sp }
+        o.x += o.vx * dt; o.y += o.vy * dt; o.rot = (o.rot + (o.spin + o.vx * 0.04) * dt) % 360
+        // your name, photo and numbers: solid, and they bounce off them
+        for (const b of walls) {
+          const cx = Math.max(b.l, Math.min(o.x, b.r)), cy = Math.max(b.t, Math.min(o.y, b.b))
+          let dx = o.x - cx, dy = o.y - cy, d = Math.hypot(dx, dy)
+          if (d >= o.rad) continue
+          if (d < 0.01) { // centre inside the box: leave by the nearest side
+            const exits = [[o.x - b.l, -1, 0], [b.r - o.x, 1, 0], [o.y - b.t, 0, -1], [b.b - o.y, 0, 1]].sort((p, q) => p[0] - q[0])[0]
+            dx = exits[1]; dy = exits[2]; d = 0
+          } else { dx /= d; dy /= d }
+          o.x += dx * (o.rad - d); o.y += dy * (o.rad - d)
+          const vn = o.vx * dx + o.vy * dy
+          if (vn < 0) { o.vx -= 1.7 * vn * dx; o.vy -= 1.7 * vn * dy; o.spin += (o.vx * dy - o.vy * dx) * 0.05 }
+        }
+        // the card's edges, last, so nothing ever leaves the card
+        if (o.x < o.rad) { o.x = o.rad; o.vx = Math.abs(o.vx) * 0.7; o.spin += o.vy * 0.05 }
+        if (o.x > w - o.rad) { o.x = w - o.rad; o.vx = -Math.abs(o.vx) * 0.7; o.spin -= o.vy * 0.05 }
+        if (o.y < o.rad) { o.y = o.rad; o.vy = Math.abs(o.vy) * 0.7; o.spin -= o.vx * 0.05 }
+        if (o.y > h - o.rad) { o.y = h - o.rad; o.vy = -Math.abs(o.vy) * 0.7; o.spin += o.vx * 0.05 }
       }
-      // the agents, with a fading trail
-      for (const a of agents) {
-        a.trail.forEach((p, k) => { ctx.beginPath(); ctx.arc(p.x, p.y, 2 + k * 0.25, 0, Math.PI * 2); ctx.fillStyle = a.c; ctx.globalAlpha = (k / a.trail.length) * 0.5; ctx.fill() })
-        ctx.globalAlpha = 1
-        ctx.beginPath(); ctx.arc(a.x, a.y, 6.5, 0, Math.PI * 2); ctx.fillStyle = a.c; ctx.fill(); ctx.lineWidth = 2; ctx.strokeStyle = '#0f0f0f'; ctx.stroke()
+      // and each other
+      for (let i = 0; i < bodies.length; i++) for (let j = i + 1; j < bodies.length; j++) {
+        const a = bodies[i], c = bodies[j], dx = c.x - a.x, dy = c.y - a.y, d = Math.hypot(dx, dy), min = a.rad + c.rad
+        if (d >= min || d < 0.01) continue
+        const nx = dx / d, ny = dy / d, push = (min - d) / 2
+        if (a !== held) { a.x -= nx * push; a.y -= ny * push }
+        if (c !== held) { c.x += nx * push; c.y += ny * push }
+        const rel = (c.vx - a.vx) * nx + (c.vy - a.vy) * ny
+        if (rel < 0) { const k = -1.6 * rel / 2; if (a !== held) { a.vx -= k * nx; a.vy -= k * ny } if (c !== held) { c.vx += k * nx; c.vy += k * ny } }
       }
-      if (!calm && visible && !document.hidden) raf = requestAnimationFrame(frame)
+      // one wedged between the card's edge and the content (it can't fit there) goes somewhere roomier
+      if (++stuck % 30 === 0) for (const o of bodies) if (o !== held && blocked(o, o.x, o.y)) home(o, o.x, o.y)
+      draw()
+      if (visible && !document.hidden) raf = requestAnimationFrame(step)
     }
-    const start = () => { cancelAnimationFrame(raf); last = performance.now(); raf = requestAnimationFrame(frame) }
+    const start = () => { cancelAnimationFrame(raf); last = performance.now(); if (!calm) raf = requestAnimationFrame(step) }
+
     const at = (e: PointerEvent) => { const r = host.getBoundingClientRect(); return { x: e.clientX - r.left, y: e.clientY - r.top } }
-    const move = (e: PointerEvent) => {
-      const p = at(e); pointer.x = p.x; pointer.y = p.y; pointer.in = true
-      host.style.setProperty('--mx', String(p.x / w - 0.5)); host.style.setProperty('--my', String(p.y / h - 0.5))
-      if (calm) start()
-    }
-    const leave = () => { pointer.in = false; host.style.setProperty('--mx', '0'); host.style.setProperty('--my', '0'); if (calm) start() }
+    const move = (e: PointerEvent) => { const p = at(e); pointer.x = p.x; pointer.y = p.y; pointer.in = true
+      const hit = bodies.some((o) => Math.hypot(o.x - p.x, o.y - p.y) < o.rad)
+      host.classList.toggle('idc-grab', !!held || (hit && !(e.target as HTMLElement).closest('button, a, input'))) }
+    const leave = () => { pointer.in = false; if (!held) host.classList.remove('idc-grab') }
     const down = (e: PointerEvent) => {
-      const p = at(e); ripples.push({ ...p, t: performance.now() / 1000 })
-      for (const a of agents) { const dx = a.x - p.x, dy = a.y - p.y, d = Math.hypot(dx, dy) || 1; a.vx += (dx / d) * 700; a.vy += (dy / d) * 700 }
-      if (calm) start()
+      if ((e.target as HTMLElement).closest('button, a, input, .idc-stat')) return
+      const p = at(e)
+      held = bodies.find((o) => Math.hypot(o.x - p.x, o.y - p.y) < o.rad + 4) ?? null
+      if (held) { e.preventDefault(); host.setPointerCapture(e.pointerId); held.el.classList.add('held'); host.classList.add('idc-grab'); return }
+      // a click on empty card: everything nearby hops away from it
+      for (const o of bodies) { const dx = o.x - p.x, dy = o.y - p.y, d = Math.hypot(dx, dy) || 1; if (d < 260) { const f = (1 - d / 260) * 520; o.vx += (dx / d) * f; o.vy += (dy / d) * f - 80; o.spin += (Math.random() - 0.5) * 200 } }
     }
-    size()
-    const ro = new ResizeObserver(() => { size(); start() })
+    const up = () => { if (held) { held.el.classList.remove('held'); held.spin += held.vx * 0.3; held = null } }
+
+    measure(); draw()
+    const settle = window.setTimeout(measure, 1100) // the banner's own entrance has moved things by then
+    const ro = new ResizeObserver(() => { measure(); draw() })
     ro.observe(host)
     const io = new IntersectionObserver(([e]) => { visible = e.isIntersecting; if (visible) start() })
     io.observe(host)
     const vis = () => { if (!document.hidden) start() }
-    host.addEventListener('pointermove', move); host.addEventListener('pointerleave', leave); host.addEventListener('pointerdown', down)
+    if (!calm) {
+      host.addEventListener('pointermove', move); host.addEventListener('pointerleave', leave)
+      host.addEventListener('pointerdown', down); host.addEventListener('pointerup', up); host.addEventListener('pointercancel', up)
+    }
     document.addEventListener('visibilitychange', vis)
     start()
     return () => {
-      cancelAnimationFrame(raf); ro.disconnect(); io.disconnect()
-      host.removeEventListener('pointermove', move); host.removeEventListener('pointerleave', leave); host.removeEventListener('pointerdown', down)
+      cancelAnimationFrame(raf); window.clearTimeout(settle); ro.disconnect(); io.disconnect()
+      host.removeEventListener('pointermove', move); host.removeEventListener('pointerleave', leave)
+      host.removeEventListener('pointerdown', down); host.removeEventListener('pointerup', up); host.removeEventListener('pointercancel', up)
       document.removeEventListener('visibilitychange', vis)
     }
   }, [])
-  return <canvas ref={canvas} className="idc-field" aria-hidden="true" />
+  return (
+    <div ref={box} className="idc-stickers" aria-hidden="true">
+      {STICKERS.map((st, i) => (
+        <span key={i} className={`idc-sticker idc-sticker--${st.kind}`} style={{ ['--c' as string]: st.color, ['--s' as string]: `${st.size}px`, animationDelay: `${0.35 + i * 0.07}s` }}>
+          {st.kind === 'mark' && <><i /><i /><i /><i /></>}
+        </span>
+      ))}
+    </div>
+  )
 }
 
 /** The profile picture, which changes by opening the new one from the centre over the old. */

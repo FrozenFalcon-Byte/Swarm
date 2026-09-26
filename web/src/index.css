@@ -132,7 +132,7 @@ img, svg { display: block; max-width: 100%; }
 .pt--viewport { background: var(--grey-6); } /* shows around the page as it folds into a card */
 .pt-content { transform-origin: 50% var(--pt-origin, 50vh); }
 .bellows { position: fixed; inset: 0; z-index: 90; pointer-events: none; }
-.bellows--pane { left: 280px; z-index: 40; }
+.bellows--pane { left: var(--side-w, 280px); z-index: 40; }
 .pleat { position: absolute; top: 0; bottom: 0; width: calc(50% / 6 + 1px); transform: scaleX(0); will-change: transform; border-inline: 1.5px solid var(--ink); }
 .pleat-l { transform-origin: 0% 50%; }
 .pleat-r { transform-origin: 100% 50%; }
