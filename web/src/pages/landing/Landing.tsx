@@ -1,5 +1,5 @@
 import { AnimatePresence, animate, motion, useInView, useMotionValueEvent, useScroll, useTransform, type MotionValue } from 'motion/react'
-import { useCallback, useEffect, useLayoutEffect, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode, type RefObject } from 'react'
 import { Link, useLocation } from 'react-router-dom'
 import { AgentDots } from '../../components/AgentDots'
 import { Logo, Mark } from '../../components/Logo'
@@ -24,9 +24,11 @@ export default function Landing() {
   const [fromIntro] = useState(phase === 'intro')
   useEffect(() => {
     if (phase === 'done') return
-    const html = document.documentElement
-    html.style.overflow = 'hidden'
-    return () => { html.style.overflow = '' }
+    // iOS ignores overflow on <html> alone, so hold the body and touch scrolling too
+    const html = document.documentElement, body = document.body
+    html.style.overflow = body.style.overflow = 'hidden'
+    body.style.touchAction = 'none'
+    return () => { html.style.overflow = body.style.overflow = ''; body.style.touchAction = '' }
   }, [phase])
   useEffect(() => {
     if (!hash || phase !== 'done') return
@@ -174,20 +176,19 @@ function Surtitle({ children, dot = 'var(--green)' }: { children: ReactNode; dot
 
 export function Nav() {
   const { user } = useAuth()
-  const home = useLocation().pathname === '/'
+  const path = useLocation().pathname
   const { scrollY } = useScroll()
   const [hidden, setHidden] = useState(false)
   const [menu, setMenu] = useState(false)
   useMotionValueEvent(scrollY, 'change', (y) => setHidden(y > (scrollY.getPrevious() ?? 0) && y > 300 && !menu))
-  // on other pages (the docs) the section links lead back to the landing page
-  const links = [['#how', 'How it works'], ['#patterns', 'Patterns'], ['#security', 'Security'], ['/docs/mcp', 'MCP'], ['#faq', 'FAQ']]
-    .map(([href, label]) => [href.startsWith('#') && !home ? `/${href}` : href, label])
+  // separate pages only; sections of the landing page are reached by scrolling it
+  const links = [['/playground', 'Playground'], ['/cost', 'Cost calculator'], ['/docs/mcp', 'MCP docs']]
   return (
     <motion.header className="nav" animate={{ y: hidden ? -120 : 0 }} transition={{ duration: 0.5, ease: easeOut }}>
       <div className="nav-inner">
         <Logo />
         <nav className="nav-pill" aria-label="Sections">
-          {links.map(([href, label], i) => <span key={href} className="nav-pill-item">{i > 0 && <i />}{href.startsWith('/') ? <Link to={href}>{label}</Link> : <a href={href}>{label}</a>}</span>)}
+          {links.map(([href, label], i) => <span key={href} className="nav-pill-item">{i > 0 && <i />}<Link to={href} className={path === href ? 'on' : ''} aria-current={path === href ? 'page' : undefined}>{label}</Link></span>)}
         </nav>
         <div className="nav-cta">
           {user ? <Link to="/app" className="btn btn-dark"><Roll>Dashboard</Roll></Link> : (
@@ -201,7 +202,8 @@ export function Nav() {
       <AnimatePresence>
         {menu && (
           <motion.nav className="nav-sheet" initial={{ opacity: 0, y: -16 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -16 }} transition={{ duration: 0.4, ease: easeOut }}>
-            {links.map(([href, label]) => href.startsWith('/') ? <Link key={href} to={href} onClick={() => setMenu(false)}>{label}</Link> : <a key={href} href={href} onClick={() => setMenu(false)}>{label}</a>)}
+            {path !== '/' && <Link to="/" onClick={() => setMenu(false)}>Home</Link>}
+            {links.map(([href, label]) => <Link key={href} to={href} onClick={() => setMenu(false)}>{label}</Link>)}
             {!user && <Link to="/signin">Sign in</Link>}
           </motion.nav>
         )}
@@ -316,7 +318,7 @@ function AppScreens() {
               <code className="mono">{'{ "task_id": "task-001", "from": "' + s.agent + '" }'}</code>
             </motion.div>
           </AnimatePresence>
-          <AnimatePresence mode="wait">
+          <AnimatePresence mode="popLayout" initial={false}>
             <motion.div key={i} className="screens-box-inner" initial={{ y: '100%', opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: '-60%', opacity: 0 }} transition={{ duration: 0.6, ease: easeOut }}>
               <h2 className="screens-title">{s.title}</h2>
               <div className="screens-tagrow"><span className="tag">{s.tag}</span><Glyph name={s.glyph} size={60} /></div>
@@ -324,7 +326,7 @@ function AppScreens() {
           </AnimatePresence>
         </div>
         <motion.div className="app-frame screens-frame" style={{ scale: frameScale }}>
-          <AnimatePresence mode="wait">
+          <AnimatePresence mode="popLayout" initial={false}>
             <motion.div key={i} className="screen" initial={{ opacity: 0, y: 40 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -40 }} transition={{ duration: 0.55, ease: easeOut }}>
               {[<ScreenTriage key={0} />, <ScreenPatch key={1} />, <ScreenProve key={2} />, <ScreenReview key={3} />][i]}
             </motion.div>
@@ -340,7 +342,7 @@ function AppScreens() {
           </div>
         </motion.div>
         <div className="screens-box screens-text-box">
-          <AnimatePresence mode="wait">
+          <AnimatePresence mode="popLayout" initial={false}>
             <motion.p key={i} initial={{ opacity: 0, y: 24 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -16 }} transition={{ duration: 0.5, ease: easeOut, delay: 0.08 }}>{s.text}</motion.p>
           </AnimatePresence>
           <AnimatePresence mode="wait">
@@ -795,24 +797,124 @@ function CountUp({ to, suffix = '' }: { to: number; suffix?: string }) {
   return <span ref={ref}>{Math.round(v)}{suffix}</span>
 }
 
+/** Loops `steps` (ms per phase) while the element is on screen; returns the current phase. */
+function usePhases(ref: RefObject<Element | null>, steps: number[]) {
+  const inView = useInView(ref, { margin: '-15% 0px' })
+  const [phase, setPhase] = useState(0)
+  useEffect(() => {
+    if (!inView) return
+    const t = window.setTimeout(() => setPhase((p) => (p + 1) % steps.length), steps[phase])
+    return () => window.clearTimeout(t)
+  }, [inView, phase, steps])
+  return phase
+}
+
+// 36 runs, 30 of them failing before the patch (83%), in a fixed but scattered order
+const RUNS = Array.from({ length: 36 }, (_, k) => ((k * 7 + 3) % 36) >= 6)
+const RUN_STEPS = [700, 2600, 900, 3200]
+
+function RunsCard() {
+  const ref = useRef<HTMLDivElement>(null)
+  const phase = usePhases(ref, RUN_STEPS) // 0 idle, 1 before, 2 patching, 3 after
+  const after = phase === 3
+  return (
+    <div ref={ref} className="stat-card-inner stat-runs" style={{ background: 'var(--sky-card)' }}>
+      <div className="stat-top">
+        <span className="stat-kicker">36 sandboxed runs</span>
+        <div className="stat-big">
+          <AnimatePresence mode="popLayout" initial={false}>
+            <motion.span key={after ? 'after' : 'before'} initial={{ y: '60%', opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: '-60%', opacity: 0 }} transition={{ duration: 0.5, ease: easeOut }}>
+              {after ? '0%' : '83%'}
+            </motion.span>
+          </AnimatePresence>
+          <small>{after ? 'failing after' : 'failing before'}</small>
+        </div>
+      </div>
+      <div className="srun-grid" aria-hidden="true">
+        {RUNS.map((fails, k) => {
+          const state = phase === 0 ? 'idle' : phase === 1 ? (fails ? 'fail' : 'pass') : phase === 2 ? 'patch' : 'pass'
+          return <i key={k} className={`srun srun--${state}`} style={{ transitionDelay: `${phase === 0 ? 0 : k * 28}ms` }} />
+        })}
+      </div>
+      <p>of runs failing, before and after the patches.</p>
+    </div>
+  )
+}
+
+const MERGE_STEPS = [1400, 1100, 500, 2600]
+
+function MergeCard() {
+  const ref = useRef<HTMLDivElement>(null)
+  const phase = usePhases(ref, MERGE_STEPS) // 0 approved, 1 cursor travels, 2 press, 3 merged
+  return (
+    <div ref={ref} className="stat-card-inner stat-merge" style={{ background: 'var(--pink-card)' }}>
+      <div className="stat-top">
+        <span className="stat-kicker">Automatic merges</span>
+        <b className="stat-big"><CountUp to={0} /></b>
+      </div>
+      <div className="mergebox" aria-hidden="true">
+        <div className="mergebox-row"><span className="mdot" style={{ background: 'var(--reviewer)' }} />Reviewer approved <em>fix: seed the shuffle</em></div>
+        <div className={`mergebox-btn ${phase === 3 ? 'is-done' : ''} ${phase === 2 ? 'is-press' : ''}`}>
+          <AnimatePresence mode="wait" initial={false}>
+            <motion.span key={phase === 3 ? 'd' : 'w'} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }} transition={{ duration: 0.25 }}>
+              {phase === 3 ? '✓ Merged by you' : 'Merge · waiting for you'}
+            </motion.span>
+          </AnimatePresence>
+        </div>
+        <motion.svg className="mergebox-cursor" width="22" height="22" viewBox="0 0 24 24"
+          animate={phase === 0 ? { x: 150, y: -60, opacity: 0 } : phase === 3 ? { x: 150, y: 40, opacity: 0 } : { x: 60, y: 10, opacity: 1, scale: phase === 2 ? 0.85 : 1 }}
+          transition={{ duration: phase === 2 ? 0.15 : 0.9, ease: easeInOut }}>
+          <path d="M4 2l16 9-7 2-3 7z" fill="var(--ink)" stroke="#fff" strokeWidth="1.5" strokeLinejoin="round" />
+        </motion.svg>
+      </div>
+      <p>A maintainer clicks merge, every single time.</p>
+    </div>
+  )
+}
+
+const TRAIL = [
+  { who: 'Triager', c: 'var(--triager)', did: 'labelled it a timing failure' },
+  { who: 'Coder', c: 'var(--coder)', did: 'replaced sleep(2) with a wait' },
+  { who: 'Tester', c: 'var(--tester)', did: 'passed 12 of 12 runs' },
+  { who: 'Reviewer', c: 'var(--reviewer)', did: 'approved the patch' },
+]
+const TRAIL_STEPS = [900, 900, 900, 900, 2800]
+
+function TrailCard() {
+  const ref = useRef<HTMLDivElement>(null)
+  const phase = usePhases(ref, TRAIL_STEPS) // how many entries are on the trail
+  return (
+    <div ref={ref} className="stat-card-inner stat-trail" style={{ background: 'var(--yellow-card)' }}>
+      <div className="stat-top">
+        <span className="stat-kicker">Agents on one board</span>
+        <b className="stat-big"><CountUp to={4} /></b>
+        <p>agents, with a full audit trail on every card.</p>
+      </div>
+      <ol className="trail" aria-hidden="true">
+        {TRAIL.map((t, k) => (
+          <li key={t.who} className={k < phase ? 'on' : ''} style={{ ['--c' as string]: t.c }}>
+            <span className="trail-dot" />
+            <b>{t.who}</b>
+            <span>{t.did}</span>
+            <time className="mono">{['09:12', '09:14', '09:21', '09:22'][k]}</time>
+          </li>
+        ))}
+      </ol>
+    </div>
+  )
+}
+
 function StatGrid() {
-  const items = [
-    { color: 'var(--sky-card)', big: <><CountUp to={83} suffix="%" /> → <CountUp to={0} suffix="%" /></>, text: 'of runs failing, before and after the patches, across 36 sandboxed runs.' },
-    { color: 'var(--pink-card)', big: <CountUp to={0} />, text: 'automatic merges. A maintainer clicks merge, every single time.' },
-    { color: 'var(--yellow-card)', big: <CountUp to={4} />, text: 'agents on one board, with a full audit trail on every card.' },
-  ]
   return (
     <section className="grid-sec">
-      <SplitWords text="Take the pager off." className="title-2 grid-title" />
+      <div className="grid-head">
+        <SplitWords text="Take the pager off." className="title-2" />
+        <p>Three numbers we hold ourselves to, played out the way they happen on the board.</p>
+      </div>
       <div className="stat-grid">
-        {items.map((it, k) => (
-          <Reveal key={k} delay={k * 0.1} className="stat-card">
-            <div className="stat-card-inner" style={{ background: it.color }}>
-              <b className="stat-big">{it.big}</b>
-              <p>{it.text}</p>
-            </div>
-          </Reveal>
-        ))}
+        <Reveal className="stat-card stat-a"><RunsCard /></Reveal>
+        <Reveal delay={0.1} className="stat-card stat-b"><MergeCard /></Reveal>
+        <Reveal delay={0.2} className="stat-card stat-c"><TrailCard /></Reveal>
       </div>
     </section>
   )
@@ -822,43 +924,86 @@ function StatGrid() {
 
 /* ============================================================ faq */
 
-const FAQS = [
-  ['What does “a test that fails at random” mean?', 'A test that passes on one run and fails on the next with no code change, because of things like set ordering, unseeded randomness or timing. Engineers call these “flaky tests”. They waste hours: nobody can tell a real bug from noise, so people rerun CI until it goes green. Swarm finds the cause and proves the fix.'],
-  ['Does Swarm merge anything on its own?', 'No. The best a task can reach on its own is Approved. A maintainer clicks Merge, which opens a pull request on GitHub. Security-sensitive paths need your approval even before that.'],
-  ['Where does the code run?', 'In a disposable copy of your repository. With Docker it runs in a container with no network access and memory, CPU and process limits. Without Docker it falls back to a local sandbox with CPU, file-size and time limits.'],
-  ['Which models does it use?', 'Free model APIs by default: Groq first, then Gemini and OpenRouter, with Anthropic or a local Ollama model as options. With no model at all, the agents use built-in fix strategies.'],
-  ['What kind of issues does it handle?', 'Version 1 focuses on tests that fail at random: ordering, randomness and timing. Everything else is triaged and handed to you with a label, not guessed at.'],
-  ['What is a “tool” in Swarm?', 'A small harness the tester writes when existing tests can’t prove a fix, for example running a test under 12 hash seeds. It must catch the bug on the old code before it is trusted and saved for reuse.'],
-  ['Can I talk to Swarm from Claude?', 'Yes. Swarm is also an MCP server: add `swarm mcp` to Claude Desktop, Claude Code or any MCP client and ask what the agents did overnight, read a diff or a harness, start a run, or send a patch back with feedback. Merging still happens only in the dashboard.'],
-  ['Can I use it on a private repository?', 'Yes. Connect GitHub (or paste a fine-grained token) in Settings. It is stored in your private user record and only the worker reads it, to clone, read issues and open pull requests. New issues are picked up automatically every few minutes.'],
-  ['What does it cost to run?', 'Nothing to start: Firebase’s free plan and the free tiers of Groq and Gemini cover a small team, within their rate limits.'],
+const FAQS: [string, string, string][] = [
+  ['Basics', 'What does “a test that fails at random” mean?', 'A test that passes on one run and fails on the next with no code change, because of things like set ordering, unseeded randomness or timing. Engineers call these “flaky tests”. They waste hours: nobody can tell a real bug from noise, so people rerun CI until it goes green. Swarm finds the cause and proves the fix.'],
+  ['Safety', 'Does Swarm merge anything on its own?', 'No. The best a task can reach on its own is Approved. A maintainer clicks Merge, which opens a pull request on GitHub. Security-sensitive paths need your approval even before that.'],
+  ['Safety', 'Where does the code run?', 'In a disposable copy of your repository. With Docker it runs in a container with no network access and memory, CPU and process limits. Without Docker it falls back to a local sandbox with CPU, file-size and time limits.'],
+  ['Setup', 'Which models does it use?', 'Free model APIs by default: Groq first, then Gemini and OpenRouter, with Anthropic or a local Ollama model as options. With no model at all, the agents use built-in fix strategies.'],
+  ['Basics', 'What kind of issues does it handle?', 'Version 1 focuses on tests that fail at random: ordering, randomness and timing. Everything else is triaged and handed to you with a label, not guessed at.'],
+  ['Basics', 'What is a “tool” in Swarm?', 'A small harness the tester writes when existing tests can’t prove a fix, for example running a test under 12 hash seeds. It must catch the bug on the old code before it is trusted and saved for reuse.'],
+  ['Setup', 'Can I talk to Swarm from Claude?', 'Yes. Swarm is also an MCP server: add `swarm mcp` to Claude Desktop, Claude Code or any MCP client and ask what the agents did overnight, read a diff or a harness, start a run, or send a patch back with feedback. Merging still happens only in the dashboard.'],
+  ['Setup', 'Can I use it on a private repository?', 'Yes. Connect GitHub (or paste a fine-grained token) in Settings. It is stored in your private user record and only the worker reads it, to clone, read issues and open pull requests. New issues are picked up automatically every few minutes.'],
+  ['Cost', 'What does it cost to run?', 'Nothing to start: Firebase’s free plan and the free tiers of Groq and Gemini cover a small team, within their rate limits.'],
 ]
+const TOPICS = ['All', 'Basics', 'Safety', 'Setup', 'Cost']
+
+/** Wraps each match of `q` in <mark>, so a search shows where it hit. */
+function Hit({ text, q }: { text: string; q: string }) {
+  if (!q) return <>{text}</>
+  const parts = text.split(new RegExp(`(${q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'ig'))
+  return <>{parts.map((p, i) => (i % 2 ? <mark key={i}>{p}</mark> : p))}</>
+}
 
 function Faq() {
-  const [open, setOpen] = useState<number | null>(0)
-  const [all, setAll] = useState(false)
-  const list = all ? FAQS : FAQS.slice(0, 4)
+  const [open, setOpen] = useState<string | null>(FAQS[0][1])
+  const [topic, setTopic] = useState('All')
+  const [q, setQ] = useState('')
+  const needle = q.trim().toLowerCase()
+  const list = FAQS.filter(([t, qq, a]) => (topic === 'All' || t === topic) && (!needle || `${qq} ${a}`.toLowerCase().includes(needle)))
   return (
     <section className="faq" id="faq">
-      <div className="faq-head"><SplitWords text="Any questions ?" className="title-2" /></div>
-      <div className="faq-list">
-        {list.map(([q, a], k) => (
-          <motion.div key={q} layout className={`faq-item ${open === k ? 'is-open' : ''}`} transition={{ duration: 0.5, ease: easeInOut }}>
-            <button className="faq-q" aria-expanded={open === k} onClick={() => setOpen(open === k ? null : k)}>
-              <span>{q}</span>
-              <motion.span className="faq-btn" animate={{ rotate: open === k ? 45 : 0 }} transition={{ duration: 0.4, ease: easeOut }} aria-hidden="true">+</motion.span>
+      <div className="faq-side">
+        <SplitWords text="Any questions ?" className="title-2" />
+        <label className="faq-search">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><circle cx="11" cy="11" r="7" /><path d="M20 20l-3.5-3.5" /></svg>
+          <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search the answers" aria-label="Search questions" />
+          <AnimatePresence>{q && <motion.button type="button" className="faq-search-x" onClick={() => setQ('')} aria-label="Clear search" initial={{ scale: 0 }} animate={{ scale: 1 }} exit={{ scale: 0 }}>×</motion.button>}</AnimatePresence>
+        </label>
+        <div className="faq-topics" role="tablist" aria-label="Topics">
+          {TOPICS.map((t) => (
+            <button key={t} role="tab" aria-selected={topic === t} className={`faq-topic ${topic === t ? 'on' : ''}`} onClick={() => setTopic(t)}>
+              {topic === t && <motion.span layoutId="faq-topic-on" className="faq-topic-on" transition={{ type: 'spring', stiffness: 420, damping: 34 }} />}
+              <span>{t}</span><small>{t === 'All' ? FAQS.length : FAQS.filter((f) => f[0] === t).length}</small>
             </button>
-            <AnimatePresence initial={false}>
-              {open === k && (
-                <motion.div className="faq-a" initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} transition={{ duration: 0.6, ease: easeInOut }}>
-                  <p>{a}</p>
-                </motion.div>
-              )}
-            </AnimatePresence>
-          </motion.div>
-        ))}
-        {!all && <button className="btn btn-line faq-more" onClick={() => setAll(true)}><Roll>Show all questions</Roll></button>}
+          ))}
+        </div>
+        <div className="faq-help">
+          <AgentDots size={14} />
+          <b>Still unsure?</b>
+          <p>Paste one of your tests into the playground, or read how Swarm plugs into Claude.</p>
+          <div><Link to="/playground" className="btn btn-dark btn-sm"><Roll>Playground</Roll></Link><Link to="/docs/mcp" className="btn btn-line btn-sm"><Roll>MCP docs</Roll></Link></div>
+        </div>
       </div>
+      <motion.div className="faq-list" layout>
+        <AnimatePresence initial={false} mode="popLayout">
+          {list.map(([t, qq, a], k) => {
+            const isOpen = open === qq || (!!needle && list.length <= 2)
+            return (
+              <motion.div key={qq} layout className={`faq-item ${isOpen ? 'is-open' : ''}`} initial={{ opacity: 0, y: 16, scale: 0.98 }} animate={{ opacity: 1, y: 0, scale: 1 }}
+                exit={{ opacity: 0, scale: 0.96, transition: { duration: 0.2 } }} transition={{ duration: 0.5, ease: easeInOut }}>
+                <button className="faq-q" aria-expanded={isOpen} onClick={() => setOpen(open === qq ? null : qq)}>
+                  <span className="faq-n mono">{String(k + 1).padStart(2, '0')}</span>
+                  <span className="faq-q-text"><Hit text={qq} q={q.trim()} /><small>{t}</small></span>
+                  <motion.span className="faq-btn" animate={{ rotate: isOpen ? 45 : 0 }} transition={{ duration: 0.4, ease: easeOut }} aria-hidden="true">+</motion.span>
+                </button>
+                <AnimatePresence initial={false}>
+                  {isOpen && (
+                    <motion.div className="faq-a" initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} transition={{ duration: 0.5, ease: easeInOut }}>
+                      <p><Hit text={a} q={q.trim()} /></p>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+              </motion.div>
+            )
+          })}
+        </AnimatePresence>
+        {list.length === 0 && (
+          <motion.div className="faq-none" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}>
+            <b>Nothing about “{q}” yet.</b>
+            <span>Try another word, or <button className="link" onClick={() => { setQ(''); setTopic('All') }}>see every question</button>.</span>
+          </motion.div>
+        )}
+      </motion.div>
     </section>
   )
 }
@@ -878,10 +1023,10 @@ export function Footer() {
         <Link to="/signup" className="btn btn-green btn-xl"><AgentDots size={22} /> <Roll>Get started free</Roll></Link>
       </div>
       <div className="footer-cols">
-        <div><b>Product</b><Link to="/#how">How it works</Link><Link to="/#patterns">Patterns</Link><Link to="/signup">Get started</Link></div>
+        <div><b>Product</b><Link to="/#how">How it works</Link><Link to="/#patterns">Patterns</Link><Link to="/playground">Playground</Link><Link to="/cost">Cost calculator</Link></div>
         <div><b>Security</b><Link to="/#security">Sandbox</Link><Link to="/#faq">Merge policy</Link></div>
         <div><b>Support</b><Link to="/#faq">FAQ</Link><Link to="/docs/mcp">MCP docs</Link><Link to="/signin">Sign in</Link></div>
-        <div><b>Company</b><span>Swarm</span><span>Made for maintainers</span></div>
+        <div><b>Start</b><Link to="/signup">Get started</Link><a href="https://github.com/FrozenFalcon-Byte/Swarm" target="_blank" rel="noreferrer">GitHub</a><span>Made for maintainers</span></div>
       </div>
       <div className="footer-bottom"><Logo /><span>© {new Date().getFullYear()} Swarm</span></div>
     </footer>

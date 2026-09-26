@@ -1,5 +1,5 @@
 import { AnimatePresence, motion } from 'motion/react'
-import { useRef, useState, type MouseEvent, type ReactNode } from 'react'
+import { useEffect, useRef, useState, type MouseEvent, type ReactNode } from 'react'
 import { useSearchParams } from 'react-router-dom'
 
 /* A side menu and one panel, for pages with several sections (Profile, Settings). Switching sections is
@@ -23,6 +23,13 @@ export function PanelLayout({ items, active, onPick, side, foot, children }: {
   const panel = useRef<HTMLDivElement>(null)
   const [origin, setOrigin] = useState({ x: 0, y: 0 })
   const item = items.find((i) => i.id === active) ?? items[0]
+  const nav = useRef<HTMLElement>(null)
+  // on phones the tabs scroll sideways: keep the open one in view
+  useEffect(() => {
+    const el = nav.current?.querySelector<HTMLElement>('.pl-tab.on'), box = nav.current
+    if (!el || !box || box.scrollWidth <= box.clientWidth) return
+    box.scrollTo({ left: el.offsetLeft - (box.clientWidth - el.offsetWidth) / 2, behavior: 'smooth' })
+  }, [active])
 
   const pick = (id: string, e: MouseEvent<HTMLButtonElement>) => {
     if (id === active) return
@@ -39,7 +46,7 @@ export function PanelLayout({ items, active, onPick, side, foot, children }: {
     <div className="pl">
       <aside className="pl-side">
         {side}
-        <nav className="pl-nav" aria-label="Sections">
+        <nav className="pl-nav" aria-label="Sections" ref={nav}>
           {items.map((i, k) => (
             <motion.button key={i.id} className={`pl-tab ${i.id === active ? 'on' : ''}`} style={{ ['--c' as string]: i.color }} onClick={(e) => pick(i.id, e)}
               aria-current={i.id === active ? 'page' : undefined} initial={{ opacity: 0, x: -14 }} animate={{ opacity: 1, x: 0 }}

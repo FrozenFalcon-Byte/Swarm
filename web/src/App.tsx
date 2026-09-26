@@ -14,10 +14,14 @@ const loadAuth = () => import('./pages/auth/AuthPage')
 const loadShell = () => import('./pages/app/AppShell')
 const loadDocs = () => import('./pages/docs/McpDocs')
 const loadOnboarding = () => import('./pages/onboarding/Onboarding')
+const loadPlayground = () => import('./pages/site/Playground')
+const loadCost = () => import('./pages/site/Cost')
 const AuthPage = lazy(loadAuth)
 const AppShell = lazy(loadShell)
 const McpDocs = lazy(loadDocs)
 const Onboarding = lazy(loadOnboarding)
+const Playground = lazy(loadPlayground)
+const Cost = lazy(loadCost)
 
 function RequireAuth({ children }: { children: ReactNode }) {
   const { user, loading } = useAuth()
@@ -53,7 +57,7 @@ export default function App() {
   // top-level section: landing, auth, or the app (the app runs its own pane transitions)
   const section = location.pathname.startsWith('/app') ? 'app' : location.pathname
   // warm the other sections' code so a page change never lands on a loading screen
-  useEffect(() => { const id = window.setTimeout(() => { loadAuth(); loadShell(); loadDocs(); loadOnboarding() }, 1500); return () => window.clearTimeout(id) }, [])
+  useEffect(() => { const id = window.setTimeout(() => { loadAuth(); loadShell(); loadDocs(); loadOnboarding(); loadPlayground(); loadCost() }, 1500); return () => window.clearTimeout(id) }, [])
   useEffect(() => { bootReady() }, [])
   const label = routeLabel(section === 'app' ? '/app' : section)
 
@@ -66,6 +70,8 @@ export default function App() {
           <Routes location={location}>
             <Route path="/" element={<Landing />} />
             <Route path="/docs/mcp" element={<McpDocs />} />
+            <Route path="/playground" element={<Playground />} />
+            <Route path="/cost" element={<Cost />} />
             <Route path="/signin" element={<NeedsFirebase><AuthPage mode="signin" /></NeedsFirebase>} />
             <Route path="/signup" element={<NeedsFirebase><AuthPage mode="signup" /></NeedsFirebase>} />
             <Route path="/onboarding" element={<NeedsFirebase><RequireAuth><Onboarding /></RequireAuth></NeedsFirebase>} />
