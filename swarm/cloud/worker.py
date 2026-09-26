@@ -35,7 +35,17 @@ from .github import GitError, explain, issues_changed_since, open_pull_request, 
 from .registry import FirestoreToolRegistry
 
 log = logging.getLogger("swarm.worker")
-ROOT = Path(__file__).resolve().parents[2]
+def _project_root() -> Path:
+    """Where demo_repo/ and demo_issues.json live. Next to the package in a checkout or an editable install;
+    after a plain `pip install .` the package is in site-packages, so look in SWARM_ROOT or the working
+    directory (the repository in CI, /app in the Docker image) instead."""
+    for base in (os.environ.get("SWARM_ROOT"), Path(__file__).resolve().parents[2], Path.cwd()):
+        if base and (Path(base) / "demo_repo").is_dir():
+            return Path(base).resolve()
+    return Path.cwd()
+
+
+ROOT = _project_root()
 
 
 class Worker:
@@ -277,6 +287,9 @@ class Worker:
                 snap.reference.update({"status": "done", "result": result, "finishedAt": gfs.SERVER_TIMESTAMP})
             except (InvalidTransition, ValueError, KeyError, PermissionError, GitError) as e:
                 snap.reference.update({"status": "failed", "error": str(e)[:400], "finishedAt": gfs.SERVER_TIMESTAMP})
+            except Exception as e:  # anything else: say so on the action and carry on, never leave it "processing"
+                log.exception("action %s on %s failed", a.get("type"), repo_id)
+                snap.reference.update({"status": "failed", "error": f"unexpected: {e}"[:400], "finishedAt": gfs.SERVER_TIMESTAMP})
             done += 1
         return done
 
