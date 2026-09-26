@@ -4,6 +4,7 @@ import { PageTransition, routeLabel } from '../../components/PageTransition'
 import { Link, NavLink, Route, Routes, useLocation, useNavigate } from 'react-router-dom'
 import { Logo } from '../../components/Logo'
 import { useAuth } from '../../lib/auth'
+import { wakeHub } from '../../lib/api'
 import { savePrefs, useAllTasks, useIsAdmin, useProfile, useRepos } from '../../lib/data'
 import { Avatar } from '../../components/Avatar'
 import { usingEmulators } from '../../lib/firebase'
@@ -99,6 +100,7 @@ export default function AppShell() {
   }).filter((p): p is NonNullable<typeof p> => !!p)
   useNeedsYouAlerts(repos, !!prefs?.notify)
   useEffect(() => { setMenu(false) }, [location.pathname])
+  useEffect(() => { wakeHub() }, []) // the server may be asleep on a free host; opening the dashboard wakes it
   // leave first, then sign out, so the dashboard's guard never bounces you to /signin on the way out
   const signOut = () => { navigate('/', { replace: true }); void logOut() }
   // animate between sections, not between a repo's tabs or its task drawer

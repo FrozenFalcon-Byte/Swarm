@@ -1,4 +1,5 @@
-"""`swarm hub`: everything Swarm serves, in one FastAPI app, sized for one free host (a Hugging Face Space).
+"""`swarm hub`: everything Swarm serves, in one FastAPI app, sized for one free host (Render's free plan,
+see render.yaml; or a Hugging Face Space, see space/).
 
   /                     a small status page
   /healthz              liveness, plus what this hub is doing
@@ -207,7 +208,8 @@ h1{{font-size:40px;letter-spacing:-.04em;margin:0 0 8px}}code{{background:#eceFe
 def serve(settings: Settings, host: str, port: int) -> None:
     import uvicorn
 
-    public = (os.environ.get("SWARM_PUBLIC_URL") or os.environ.get("SPACE_HOST") and f"https://{os.environ['SPACE_HOST']}"
-              or f"http://localhost:{port}").rstrip("/")
+    # Render and Hugging Face both say where they put us
+    public = (os.environ.get("SWARM_PUBLIC_URL") or os.environ.get("RENDER_EXTERNAL_URL")
+              or os.environ.get("SPACE_HOST") and f"https://{os.environ['SPACE_HOST']}" or f"http://localhost:{port}").rstrip("/")
     log.warning("Swarm hub on %s", public)
     uvicorn.run(create_hub(settings, public), host=host, port=port, log_level="warning", proxy_headers=True, forwarded_allow_ips="*")

@@ -1,0 +1,17 @@
+# Render's free plan puts the hub to sleep after 15 minutes without a visit; while it sleeps it can't start
+# the worker early. A visit every 10 minutes keeps it up (free on public repositories).
+# Set the Actions variable SWARM_HUB_URL to the hub's address (scripts/space.py --actions-only --hub-url ...).
+name: keep the hub awake
+
+on:
+  schedule:
+    - cron: "*/10 * * * *"
+  workflow_dispatch: {}
+
+jobs:
+  ping:
+    if: ${{ vars.SWARM_HUB_URL != '' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - run: curl -fsS -m 90 --retry 2 "${{ vars.SWARM_HUB_URL }}/healthz" > /dev/null || true

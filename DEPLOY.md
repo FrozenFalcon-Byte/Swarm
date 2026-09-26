@@ -10,35 +10,38 @@ Swarm is three pieces. The website is already free on Firebase Hosting. The othe
 
 Free tiers change often. Check each provider's current terms before relying on one.
 
-## Option 0: Hugging Face Space + GitHub Actions (free, no card)
+## Option 0: Render + GitHub Actions (free, no card)
 
 `swarm hub` is the whole server in one FastAPI app: MCP, the A2A gateway, passkey sign-in, and a
 dispatcher. The dispatcher watches Firestore and starts the GitHub Actions worker as soon as a run or an
 action is waiting, so work starts in about a minute instead of waiting for the 15-minute schedule. The
 worker itself stays on GitHub's runners, which have Docker, so every test still runs in the sandbox.
-Neither needs a card.
 
-1. Make two tokens:
-   - **Hugging Face:** huggingface.co → Settings → Access Tokens → New token, type *Write*.
-   - **GitHub:** Settings → Developer settings → Fine-grained tokens. Give it access to this repository only,
-     with the permission *Actions: Read and write*. The Space uses it to start the worker, and for nothing else.
-2. From the project folder:
+1. **A GitHub token for the dispatcher:** Settings → Developer settings → Fine-grained tokens. Give it access
+   to this repository only, with the permission *Actions: Read and write*. The hub uses it only to start the worker.
+2. **The hub on Render:** render.com → New → Blueprint → pick this repository. `render.yaml` creates
+   `swarm-hub` on the free plan. When asked, paste `FIREBASE_SERVICE_ACCOUNT_JSON` (the whole JSON on one
+   line) and `SWARM_DISPATCH_TOKEN` (the token from step 1).
+3. **The worker's secrets on GitHub,** plus the keep-alive address. From the project folder, with the `gh` CLI signed in:
 
    ```bash
-   HF_TOKEN=hf_... SWARM_DISPATCH_TOKEN=github_pat_... python scripts/space.py --space <you>/swarm --actions
+   .venv/bin/python scripts/space.py --actions-only --hub-url https://swarm-hub-xxxx.onrender.com
    ```
 
-   This creates the Space, sets its secrets (the Firebase service account from `secrets/service-account.json`)
-   and pushes the code. `--actions` also gives the GitHub Actions worker its secrets (the service account,
-   and any model keys in `.env`), using the `gh` CLI.
-3. Once `https://<you>-swarm.hf.space/healthz` answers, set `VITE_SWARM_API_URL=https://<you>-swarm.hf.space`
-   in `web/.env` and run `scripts/deploy.sh`.
-4. To redeploy on every push, add `HF_TOKEN` as an Actions secret and `HF_SPACE=<you>/swarm` as an Actions
-   variable (`.github/workflows/space.yml`).
+   This sets `FIREBASE_SERVICE_ACCOUNT_JSON` and any model keys from `.env` as Actions secrets, and
+   `SWARM_HUB_URL` as a variable.
+4. **The website:** set `VITE_SWARM_API_URL=https://swarm-hub-xxxx.onrender.com` in `web/.env` and run `scripts/deploy.sh`.
 
-Free Spaces sleep after two days without visits. The worker's schedule pings the hub every 15 minutes, so
-it stays awake. `SWARM_HUB_WORKER=on` runs the worker inside the Space instead of on GitHub. Spaces have no
-Docker, though, so tests then run without the sandbox. Only use that for repositories you trust.
+Render's free plan sleeps after 15 minutes without a visit. `.github/workflows/keepalive.yml` visits every
+10 minutes, and the dashboard wakes the hub whenever you open it or queue something, so a sleeping hub
+still starts the worker within a minute or so. Free instances get 750 hours a month, enough for one
+always-on service.
+
+`SWARM_HUB_WORKER=on` runs the worker inside the hub instead of on GitHub. Render has no Docker, though,
+so tests then run without the sandbox. Only use that for repositories you trust.
+
+A Hugging Face Space works the same way (`space/`, `scripts/space.py --space you/swarm`), but free Docker
+Spaces now need a PRO subscription.
 
 ## Option 1: one free VM runs everything
 

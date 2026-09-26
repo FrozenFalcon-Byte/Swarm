@@ -4,6 +4,7 @@ import {
   type DocumentData, type Query,
 } from 'firebase/firestore'
 import { getBytes, ref } from 'firebase/storage'
+import { wakeHub } from './api'
 import { db, storage } from './firebase'
 import type { GhRepo } from './github'
 import type { A2AEvent, Activity, GithubLink, HouseRule, Schedule, LabSpec, LabWave, McpToken, Onboarding, Passkey, Prefs, Profile, Repo, Run, Task, Tool, WorkerInfo } from './types'
@@ -123,10 +124,12 @@ export async function connectRepo(uid: string, source: 'github' | 'demo', gh?: G
 }
 
 export function queueRun(uid: string, repoId: string, trigger = 'manual') {
+  wakeHub()
   return addDoc(collection(db, 'repos', repoId, 'runs'), { status: 'queued', trigger, requestedBy: uid, createdAt: serverTimestamp() })
 }
 
 export function requestAction(uid: string, userName: string, repoId: string, type: 'merge' | 'approve' | 'reject' | 'reopen' | 'close', taskId: string, comment = '') {
+  wakeHub()
   return addDoc(collection(db, 'repos', repoId, 'actions'), {
     status: 'pending', type, taskId, comment, uid, userName, createdAt: serverTimestamp(),
   })

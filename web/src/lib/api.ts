@@ -1,9 +1,18 @@
-/** Swarm's own server (`swarm server`): passkeys and MCP. Everything else talks to Firebase directly. */
+/** Swarm's own server (`swarm hub` or `swarm server`): passkeys and MCP. Everything else talks to Firebase directly. */
 
 export const API_URL = (import.meta.env.VITE_SWARM_API_URL || 'http://localhost:8787').replace(/\/$/, '')
 export const MCP_URL = `${API_URL}/mcp`
 
 export class ApiError extends Error {}
+
+let lastWake = 0
+/** Nudge the hub awake (free hosts sleep when idle). It watches Firestore, so once it's up it sees whatever you
+ *  just queued and starts the worker straight away. Fire and forget, at most once every 30 seconds. */
+export function wakeHub() {
+  if (!import.meta.env.VITE_SWARM_API_URL || Date.now() - lastWake < 30_000) return
+  lastWake = Date.now()
+  fetch(`${API_URL}/healthz`, { mode: 'no-cors', cache: 'no-store' }).catch(() => {})
+}
 
 export async function api<T>(path: string, body: unknown = {}, idToken?: string): Promise<T> {
   let res: Response
@@ -14,7 +23,7 @@ export async function api<T>(path: string, body: unknown = {}, idToken?: string)
       body: JSON.stringify(body),
     })
   } catch {
-    throw new ApiError(`Swarm’s server isn’t reachable at ${API_URL}. Start it with: swarm server`)
+    throw new ApiError(`Swarm’s server isn’t reachable at ${API_URL}. Start it with: swarm hub`)
   }
   const data = await res.json().catch(() => ({}))
   if (!res.ok) throw new ApiError(data.error || `The server answered ${res.status}.`)

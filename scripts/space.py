@@ -128,9 +128,24 @@ def actions_secrets(values: dict[str, str]) -> None:
         say(f"GitHub Actions secret {key} set")
 
 
+def worker_secrets(env: dict[str, str], hub_url: str | None) -> None:
+    """What the scheduled worker on GitHub Actions needs: the service account, any model keys in .env,
+    and where the hub lives (so its schedule keeps the hub awake)."""
+    worker = {"FIREBASE_SERVICE_ACCOUNT_JSON": service_account()}
+    for key, as_key in (("GROQ_API_KEY", "GROQ_API_KEY"), ("GEMINI_API_KEY", "GEMINI_API_KEY"), ("GITHUB_TOKEN", "GH_WORKER_TOKEN")):
+        if env.get(key):
+            worker[as_key] = env[key]
+    actions_secrets(worker)
+    if hub_url:
+        subprocess.run(["gh", "variable", "set", "SWARM_HUB_URL", "--body", hub_url.rstrip("/")], cwd=ROOT, check=True, capture_output=True)
+        say("GitHub Actions variable SWARM_HUB_URL set")
+
+
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--space", required=True, help="owner/name on Hugging Face, e.g. you/swarm")
+    ap.add_argument("--space", help="owner/name on Hugging Face, e.g. you/swarm")
+    ap.add_argument("--actions-only", action="store_true", help="only set the GitHub Actions worker's secrets (no Hugging Face)")
+    ap.add_argument("--hub-url", help="with --actions-only: where the hub runs (e.g. your Render URL), for the keep-alive ping")
     ap.add_argument("--private", action="store_true", help="make the Space private (the web app can't reach a private Space)")
     ap.add_argument("--actions", action="store_true", help="also set the GitHub Actions secrets the worker needs")
     ap.add_argument("--no-push", action="store_true", help="only create and configure")
@@ -138,6 +153,11 @@ def main() -> None:
     args = ap.parse_args()
 
     env = env_file()
+    if args.actions_only:
+        worker_secrets(env, args.hub_url)
+        return
+    if not args.space:
+        sys.exit("--space owner/name is required (or use --actions-only).")
     token = env.get("HF_TOKEN") or sys.exit("Set HF_TOKEN to a Hugging Face token with write access.")
     if args.push_only:
         push(args.space, token)
@@ -167,13 +187,7 @@ def main() -> None:
         push(args.space, token)
 
     if args.actions:
-        worker = {"FIREBASE_SERVICE_ACCOUNT_JSON": service_account()}
-        for key, as_key in (("GROQ_API_KEY", "GROQ_API_KEY"), ("GEMINI_API_KEY", "GEMINI_API_KEY"), ("GITHUB_TOKEN", "GH_WORKER_TOKEN")):
-            if env.get(key):
-                worker[as_key] = env[key]
-        actions_secrets(worker)
-        subprocess.run(["gh", "variable", "set", "SWARM_HUB_URL", "--body", url], cwd=ROOT, check=True, capture_output=True)
-        say("GitHub Actions variable SWARM_HUB_URL set")
+        worker_secrets(env, url)
 
     print(f"\nDone. In a few minutes: {url}/healthz\n"
           f"Point the web app at it: VITE_SWARM_API_URL={url} in web/.env, then rebuild and deploy.\n"

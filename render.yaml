@@ -1,21 +1,24 @@
-# Render blueprint for `swarm server`: MCP, the A2A gateway and passkey sign-in, on the free plan.
+# Render blueprint for `swarm hub`: MCP, the A2A gateway, passkey sign-in, and a dispatcher that starts the
+# GitHub Actions worker as soon as there's work. Free plan, no card.
 # New → Blueprint in the Render dashboard, pick this repository, then fill in the secrets it asks for.
-# The worker doesn't run here: it runs on a schedule in GitHub Actions (.github/workflows/worker.yml).
+# The worker itself runs on GitHub Actions (.github/workflows/worker.yml), where tests get a Docker sandbox.
 services:
   - type: web
-    name: swarm-server
+    name: swarm-hub
     runtime: docker
     plan: free
     dockerfilePath: ./Dockerfile
-    dockerCommand: swarm server
+    dockerCommand: swarm hub
     healthCheckPath: /healthz
     autoDeploy: true
     envVars:
       - key: FIREBASE_SERVICE_ACCOUNT_JSON  # the whole service-account JSON, pasted as one value
         sync: false
-      - key: SWARM_PUBLIC_URL               # https://swarm-server-xxxx.onrender.com (after the first deploy)
+      - key: SWARM_DISPATCH_TOKEN           # fine-grained GitHub token: this repository, Actions read and write
         sync: false
+      - key: SWARM_GH_REPO
+        value: FrozenFalcon-Byte/Swarm
       - key: SWARM_WEB_ORIGINS
-        value: https://swarm-4ce56.web.app,https://swarm-4ce56.firebaseapp.com
+        value: https://swarm-4ce56.web.app,https://swarm-4ce56.firebaseapp.com,http://localhost:5173
       - key: SWARM_HOME
         value: /tmp/swarm
