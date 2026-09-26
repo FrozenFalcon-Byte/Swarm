@@ -1,4 +1,4 @@
-"""Command line: `swarm demo`, `lab`, `run`, `serve`, `agents`, `worker`, `server`, `admin`, `doctor`, `mcp`, `board`,
+"""Command line: `swarm demo`, `lab`, `run`, `serve`, `agents`, `worker`, `server`, `hub`, `admin`, `doctor`, `mcp`, `board`,
 `tools`."""
 
 from __future__ import annotations
@@ -66,6 +66,9 @@ def main(argv: list[str] | None = None) -> int:
     sv = sub.add_parser("server", help="MCP over HTTP for many clients, plus passkey sign-in for the web app")
     sv.add_argument("--host", default=os.environ.get("HOST", "127.0.0.1"))
     sv.add_argument("--port", type=int, default=int(os.environ.get("PORT", "8787")))
+    hb = sub.add_parser("hub", help="everything in one FastAPI app for one free host (MCP, A2A, passkeys, and starting the worker)")
+    hb.add_argument("--host", default=os.environ.get("HOST", "0.0.0.0"))
+    hb.add_argument("--port", type=int, default=int(os.environ.get("PORT", "7860")))
     sub.add_parser("doctor", help="check Firebase, GitHub and model connections, and say how to fix gaps")
     m = sub.add_parser("mcp", help="serve the board over MCP (stdio) for Claude and other MCP clients")
     m.add_argument("--cloud", action="store_true", help="use repositories in Firebase instead of the local board")
@@ -116,6 +119,12 @@ def main(argv: list[str] | None = None) -> int:
             worker.run_once()
         else:
             worker.run_forever()
+        return 0
+
+    if args.cmd == "hub":
+        from .hub import serve as serve_hub
+
+        serve_hub(settings, args.host, args.port)
         return 0
 
     if args.cmd == "server":

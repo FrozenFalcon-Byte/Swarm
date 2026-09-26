@@ -163,10 +163,14 @@ def create_app(settings: Settings, public_url: str, host: str = "127.0.0.1"):
 
     routes, _card = gateway_routes(public_url, lambda uid, name: GatewayBackend(settings, as_user=(uid, name)))
     app.router.routes[:0] = routes
+    starlette = app
     app = TokenGate(app, tokens.verify_token)
     # the web app calls /api from its own origin; MCP clients aren't browsers, so they don't need CORS
-    return CORSMiddleware(app, allow_origins=origins, allow_methods=["GET", "POST", "OPTIONS"],
-                          allow_headers=["authorization", "content-type"], max_age=600)
+    outer = CORSMiddleware(app, allow_origins=origins, allow_methods=["GET", "POST", "OPTIONS"],
+                           allow_headers=["authorization", "content-type"], max_age=600)
+    # for `swarm hub`, which mounts this app and has to run its lifespan (the MCP session manager) itself
+    outer.starlette, outer.lifespan_context = starlette, starlette.router.lifespan_context
+    return outer
 
 
 def serve(settings: Settings, host: str, port: int) -> None:

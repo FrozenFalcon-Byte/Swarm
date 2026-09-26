@@ -6,11 +6,41 @@ Swarm is three pieces. The website is already free on Firebase Hosting. The othe
 |---|---|---|
 | Website | Landing page and dashboard | Firebase Hosting (done: `scripts/deploy.sh`) |
 | **Worker** (`swarm worker`) | Runs the agents and the tests | To stay on, or to run on a schedule. Docker, for the strong sandbox |
-| **Server** (`swarm server`) | MCP for Claude and other tools, passkey sign-in | A public HTTPS address |
+| **Server** (`swarm server`, or `swarm hub`) | MCP for Claude and other tools, passkey sign-in | A public HTTPS address |
 
 Free tiers change often. Check each provider's current terms before relying on one.
 
-## Option 1: one free VM runs everything (recommended)
+## Option 0: Hugging Face Space + GitHub Actions (free, no card)
+
+`swarm hub` is the whole server in one FastAPI app: MCP, the A2A gateway, passkey sign-in, and a
+dispatcher. The dispatcher watches Firestore and starts the GitHub Actions worker as soon as a run or an
+action is waiting, so work starts in about a minute instead of waiting for the 15-minute schedule. The
+worker itself stays on GitHub's runners, which have Docker, so every test still runs in the sandbox.
+Neither needs a card.
+
+1. Make two tokens:
+   - **Hugging Face:** huggingface.co → Settings → Access Tokens → New token, type *Write*.
+   - **GitHub:** Settings → Developer settings → Fine-grained tokens. Give it access to this repository only,
+     with the permission *Actions: Read and write*. The Space uses it to start the worker, and for nothing else.
+2. From the project folder:
+
+   ```bash
+   HF_TOKEN=hf_... SWARM_DISPATCH_TOKEN=github_pat_... python scripts/space.py --space <you>/swarm --actions
+   ```
+
+   This creates the Space, sets its secrets (the Firebase service account from `secrets/service-account.json`)
+   and pushes the code. `--actions` also gives the GitHub Actions worker its secrets (the service account,
+   and any model keys in `.env`), using the `gh` CLI.
+3. Once `https://<you>-swarm.hf.space/healthz` answers, set `VITE_SWARM_API_URL=https://<you>-swarm.hf.space`
+   in `web/.env` and run `scripts/deploy.sh`.
+4. To redeploy on every push, add `HF_TOKEN` as an Actions secret and `HF_SPACE=<you>/swarm` as an Actions
+   variable (`.github/workflows/space.yml`).
+
+Free Spaces sleep after two days without visits. The worker's schedule pings the hub every 15 minutes, so
+it stays awake. `SWARM_HUB_WORKER=on` runs the worker inside the Space instead of on GitHub. Spaces have no
+Docker, though, so tests then run without the sandbox. Only use that for repositories you trust.
+
+## Option 1: one free VM runs everything
 
 A small always-free virtual machine runs the worker and the server with Docker, so every test gets the full locked-down sandbox.
 

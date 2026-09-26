@@ -1,0 +1,30 @@
+# Redeploys Swarm's server to its Hugging Face Space whenever the server code changes on main.
+# Set up once with scripts/space.py, then add to this repository (Settings → Secrets and variables → Actions):
+#   secret   HF_TOKEN   a Hugging Face token with write access
+#   variable HF_SPACE   owner/name of the Space, e.g. you/swarm
+name: deploy hub
+
+on:
+  push:
+    branches: [main]
+    paths: ["swarm/**", "pyproject.toml", "space/**", "demo_repo/**", "demo_issues.json", "scripts/space.py"]
+  workflow_dispatch: {}
+
+concurrency:
+  group: deploy-hub
+  cancel-in-progress: true
+
+jobs:
+  push:
+    if: ${{ vars.HF_SPACE != '' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install httpx
+      - name: Push to the Space
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        run: python scripts/space.py --space "${{ vars.HF_SPACE }}" --push-only

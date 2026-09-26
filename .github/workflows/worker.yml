@@ -27,6 +27,10 @@ jobs:
         with:
           python-version: "3.12"
           cache: pip
+      # the Space sleeps after two idle days; this pass is traffic, so it never does (set by scripts/space.py)
+      - name: Keep the hub awake
+        if: ${{ vars.SWARM_HUB_URL != '' }}
+        run: curl -fsS -m 30 "${{ vars.SWARM_HUB_URL }}/healthz" > /dev/null || true
       - run: pip install ".[cloud]"
       - name: One worker pass
         env:
