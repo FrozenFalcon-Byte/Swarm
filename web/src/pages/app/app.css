@@ -28,7 +28,11 @@
 .side-link-count { margin-left: auto; position: relative; }
 .side-home svg { transition: transform 0.5s var(--spring); }
 .side-home:hover svg { transform: translateX(-3px); }
-.side-repos { display: flex; flex-direction: column; gap: 2px; }
+/* only the repos scroll; everything above and below them stays put (the sidebar itself scrolls only on very short screens) */
+.side > .side-repos { flex: 0 1 auto; min-height: 96px; display: flex; flex-direction: column; }
+.side-repos-list { display: flex; flex-direction: column; gap: 2px; min-height: 0; overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin; margin: 0 -6px; padding: 0 6px;
+  mask-image: linear-gradient(transparent, #000 10px, #000 calc(100% - 14px), transparent); }
+.side-repos-list > * { flex-shrink: 0; }
 .side-repo { display: flex; align-items: center; gap: 12px; height: 36px; padding: 0 12px 0 16px; border-radius: 12px; font-size: 14px; font-weight: 500; color: var(--ink-2); white-space: nowrap; transition: background-color var(--t-fast) var(--ease-out), color var(--t-fast) var(--ease-out); }
 .side-repo:hover, .side-repo.active { background: var(--grey-8); color: var(--ink); }
 .side-repo-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

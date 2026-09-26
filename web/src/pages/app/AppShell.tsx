@@ -181,6 +181,7 @@ export default function AppShell() {
         {repos.length > 0 && !prefs?.hideRepos && (
           <div className="side-repos">
             <p className="side-label">Your repos</p>
+            <div className="side-repos-list" data-lenis-prevent>
             {repos.map((r) => (
               <NavLink key={r.id} to={`/app/repos/${r.id}`} className="side-repo" data-tip={r.displayName || r.fullName}>
                 <span className={`status-dot s-${r.status || 'idle'}`} />
@@ -188,6 +189,7 @@ export default function AppShell() {
                 {!!r.stats?.needsYou && <span className="side-count">{r.stats.needsYou}</span>}
               </NavLink>
             ))}
+            </div>
           </div>
         )}
         <div className="side-foot">
