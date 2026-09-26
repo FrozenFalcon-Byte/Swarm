@@ -26,12 +26,10 @@ const THEMES: { id: string; name: string; look: Prefs; bg: string; dot: string; 
   { id: 'harbour', name: 'Harbour', look: { accent: 'sky', canvas: 'mist', font: 'system', corners: 'soft' }, bg: '#f6f8fa', dot: 'var(--coder)', font: 'system-ui', r: 9 },
   { id: 'sunny', name: 'Sunny', look: { accent: 'yellow', canvas: 'paper', font: 'rounded', corners: 'round' }, bg: '#fbf8f1', dot: 'var(--triager)', font: 'ui-rounded, "SF Pro Rounded", system-ui', r: 14 },
 ]
-const VOICES: [NonNullable<Prefs['voice']>, string, string][] = [
-  ['friendly', 'Friendly', 'Morning, Sam.'], ['pirate', 'Pirate', 'Ahoy, Cap’n Sam!'], ['robot', 'Robot', 'HELLO, SAM.'], ['bard', 'Bard', 'Well met, Sam.'],
-]
+const exampleTime = (clock?: string) => new Date(2026, 0, 1, 14, 32).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit', hour12: clock === '12h' })
 const DEFAULTS: Prefs = {
   accent: 'green', canvas: 'white', font: 'grotesk', corners: 'round', textSize: 'default', density: 'comfortable',
-  sidebar: 'full', logo: 'alive', toasts: 'br', cursor: 'plain', sounds: 'off', celebrate: 'confetti', voice: 'friendly', pins: [], motion: 'system', clock: '24h', weekStart: 'mon',
+  sidebar: 'full', logo: 'alive', toasts: 'br', cursor: 'swarm', sounds: 'off', confirm: 'ask', times: 'relative', pins: [], motion: 'system', clock: '24h', weekStart: 'mon',
 }
 
 export function Appearance() {
@@ -138,28 +136,19 @@ export function Appearance() {
         </div>
       </Section>
 
-      <Section title="Little touches" action={<span className="muted">just for fun</span>}>
+      <Section title="Handy touches" action={<span className="muted">small things that help</span>}>
         <div className="prefs">
-          <PrefRow title="Greeting voice" text="How the Overview says hello and tells you what’s waiting.">
-            <div className="ap-voices" role="radiogroup" aria-label="Greeting voice">
-              {VOICES.map(([id, label, sample]) => {
-                const on = (prefs.voice ?? 'friendly') === id
-                return (
-                  <motion.button key={id} role="radio" aria-checked={on} className={`ap-voice ${on ? 'on' : ''}`} whileTap={{ scale: 0.95 }} onClick={() => save({ voice: id })}>
-                    <b>{label}</b><span>{sample}</span>
-                  </motion.button>
-                )
-              })}
-            </div>
+          <PrefRow title="Confirm before merging" text="Merge and Close ask for a second click, so a stray click never ships a fix or drops a task.">
+            <Seg id="ap-confirm" value={prefs.confirm ?? 'ask'} onPick={(v) => save({ confirm: v })} options={[['ask', 'Ask me'], ['off', 'One click']]} />
           </PrefRow>
-          <PrefRow title="Cursor swarm" text="The four agents tag along behind your pointer, and scatter when you stop.">
-            <Seg id="ap-cursor" value={prefs.cursor ?? 'plain'} onPick={(v) => save({ cursor: v })} options={[['plain', 'Just me'], ['swarm', 'Bring the swarm']]} />
+          <PrefRow title="Times" text="How times read across the dashboard: how long ago, or the time itself (in your clock format).">
+            <Seg id="ap-times" value={prefs.times ?? 'relative'} onPick={(v) => save({ times: v })} options={[['relative', '5m ago'], ['exact', exampleTime(prefs.clock)]]} />
+          </PrefRow>
+          <PrefRow title="Pointer" text="Swarm’s own sticker arrow: it leans as you move, fills with your colour over anything clickable, and pops when you click.">
+            <Seg id="ap-cursor" value={prefs.cursor === 'system' ? 'system' : 'swarm'} onPick={(v) => save({ cursor: v })} options={[['swarm', 'Swarm'], ['system', 'System']]} />
           </PrefRow>
           <PrefRow title="Click sounds" text="A soft pop when you press a button. Quiet enough for an office.">
             <Seg id="ap-sounds" value={prefs.sounds ?? 'off'} onPick={(v) => { save({ sounds: v }); if (v === 'pops') pop(1.2) }} options={[['off', 'Silent'], ['pops', 'Pops']]} />
-          </PrefRow>
-          <PrefRow title="Celebrations" text="Confetti in the agents’ colours when something goes right.">
-            <Seg id="ap-celebrate" value={prefs.celebrate ?? 'confetti'} onPick={(v) => save({ celebrate: v })} options={[['confetti', 'Confetti'], ['quiet', 'Keep it calm']]} />
           </PrefRow>
         </div>
       </Section>

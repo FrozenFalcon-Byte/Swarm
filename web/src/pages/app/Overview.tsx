@@ -4,7 +4,7 @@ import { Link } from 'react-router-dom'
 import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 import { agentColor } from '../../components/AgentDots'
 import { useAuth } from '../../lib/auth'
-import { queueRun, useAllTasks, useProfile, useRepos } from '../../lib/data'
+import { queueRun, useAllTasks, useRepos } from '../../lib/data'
 import { useToast } from '../../components/Island'
 import { Roll } from '../../components/Roll'
 import { easeOut } from '../../lib/motion'
@@ -13,23 +13,6 @@ import ConnectRepo from './ConnectRepo'
 import { useBootHold } from '../../lib/boot'
 import { CountUp, EmptyState, Section, evidenceRows, timeAgo } from './ui'
 
-/** Hello, in the voice you picked in Settings → Appearance. */
-function greeting(voice: string, name: string, hour: number, n: number, running: boolean) {
-  const s = n === 1 ? '' : 's'
-  if (voice === 'pirate') return {
-    hello: hour < 5 ? `Burnin’ the midnight oil, ${name}?` : `Ahoy, Cap’n ${name}!`,
-    status: n ? `${n} treasure${s} await yer say.` : running ? 'The crew be hard at work. Watch the horizon.' : 'Calm seas. Nothing needs ye.' }
-  if (voice === 'robot') return {
-    hello: `HELLO, ${name.toUpperCase()}.`,
-    status: n ? `${n} TASK${s.toUpperCase()} AWAIT${n === 1 ? 'S' : ''} INPUT.` : running ? 'AGENTS EXECUTING. STAND BY.' : 'ALL SYSTEMS IDLE. BEEP.' }
-  if (voice === 'bard') return {
-    hello: hour < 12 ? `Good morrow, ${name}.` : `Well met, ${name}.`,
-    status: n ? `${n} matter${s} await${n === 1 ? 's' : ''} thy judgement.` : running ? 'Thine agents toil most diligently.' : 'All is quiet in the realm.' }
-  return {
-    hello: `${hour < 5 ? 'Up late' : hour < 12 ? 'Morning' : hour < 18 ? 'Afternoon' : 'Evening'}, ${name}.`,
-    status: n ? `${n} ${n === 1 ? 'task is' : 'tasks are'} waiting for you.` : running ? 'The agents are working. Updates appear here live.' : 'Nothing needs you right now.' }
-}
-
 export default function Overview() {
   const { user } = useAuth()
   const { data: repos, loading } = useRepos(user?.uid)
@@ -37,7 +20,6 @@ export default function Overview() {
   const tasks = useAllTasks(repos.map((r) => r.id))
   const first = (user?.displayName || 'there').split(' ')[0]
   const toast = useToast()
-  const voice = useProfile(user?.uid)?.prefs?.voice ?? 'friendly'
   const shows = (_k: string) => true
 
   const m = useMemo(() => metrics(tasks), [tasks])
@@ -62,7 +44,8 @@ export default function Overview() {
     catch (e) { toast.error('Couldn’t queue that', (e as Error).message) }
   }
   const hour = new Date().getHours()
-  const { hello: greet, status } = greeting(voice, first, hour, waiting.length, running)
+  const greet = `${hour < 5 ? 'Up late' : hour < 12 ? 'Morning' : hour < 18 ? 'Afternoon' : 'Evening'}, ${first}.`
+  const status = waiting.length ? `${waiting.length} ${waiting.length === 1 ? 'task is' : 'tasks are'} waiting for you.` : running ? 'The agents are working. Updates appear here live.' : 'Nothing needs you right now.'
   const card = (i: number) => ({ initial: { opacity: 0, y: 18 }, animate: { opacity: 1, y: 0 }, transition: { duration: 0.6, ease: easeOut, delay: 0.04 + i * 0.05 } })
 
   return (

@@ -32,7 +32,7 @@ const PLACES = [
 
 // what changed lately, newest first
 const NEW = [
-  { tag: 'Look', c: 'var(--lab)', title: 'Themes and a lot more to tune', text: 'Six one-click themes, your own highlight colour, typeface and corners, plus a few little touches: a greeting voice, a cursor swarm, click sounds and confetti.', to: '/app/settings?tab=appearance', cta: 'Open Appearance' },
+  { tag: 'Look', c: 'var(--lab)', title: 'Themes and a lot more to tune', text: 'Six one-click themes, your own highlight colour, typeface and corners, plus handy touches: a second click before merging, exact or relative times, Swarm’s own pointer and click sounds.', to: '/app/settings?tab=appearance', cta: 'Open Appearance' },
   { tag: 'Layout', c: 'var(--coder)', title: 'Pins and a foldable sidebar', text: 'Pin pages and repositories to the top. Fold the sidebar to icons with the button next to the logo; hover the logo to open it again.', to: '/app/settings?tab=appearance', cta: 'Pin something' },
   { tag: 'Guardrails', c: 'var(--triager)', title: 'House rules', text: 'Write the rules the agents live by in one line: never touch, always ask, or keep fixes small. Try any path against them.', to: '/app/rules', cta: 'Write a rule' },
   { tag: 'Guardrails', c: 'var(--reviewer)', title: 'Quiet hours', text: 'Pick a preset or paint your own week. The agents only work inside the windows you leave open.', to: '/app/quiet-hours', cta: 'Set quiet hours' },
@@ -48,8 +48,8 @@ const GUARDS = [
 const TUNE = [
   ['Themes', 'Six whole looks in one click'], ['Highlight colour', 'Six pastels or any colour you pick'], ['Canvas', 'White, warm paper or cool mist'],
   ['Typeface', 'Grotesk, system, rounded or mono'], ['Corners and text size', 'Round, soft or sharp; smaller or larger'], ['Sidebar and pins', 'Full or icons, your pages first'],
-  ['Greeting voice', 'Friendly, pirate, robot or bard'], ['Cursor swarm', 'The agents follow your pointer'], ['Click sounds', 'A soft pop on every press'],
-  ['Celebrations', 'Confetti when things go right'], ['Notifications', 'Right, left or top'], ['Logo, motion, time', 'A lively logo, calmer motion, 12 or 24 hours'],
+  ['Confirm before merging', 'A second click for Merge and Close'], ['Times', '“5m ago” or the time itself'], ['Pointer', 'Swarm’s sticker arrow, or your system’s'],
+  ['Click sounds', 'A soft pop on every press'], ['Notifications', 'Right, left or top'], ['Logo, motion, time', 'A lively logo, calmer motion, 12 or 24 hours'],
 ] as const
 
 const KEYS: [string[], string][] = [

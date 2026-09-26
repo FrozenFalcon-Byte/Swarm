@@ -12,9 +12,9 @@ import { easeOut } from '../../lib/motion'
 import { Splash } from '../../components/Splash'
 import { useBootHold } from '../../lib/boot'
 import { CommandBar, useCommandBar } from './CommandBar'
-import { CursorSwarm } from './CursorSwarm'
 import { pop } from '../../lib/sound'
 import { ICONS, NAV } from './nav'
+import { setTimeStyle } from './ui'
 import './app.css'
 
 const pages = {
@@ -95,6 +95,7 @@ export default function AppShell() {
   useEffect(() => { setRail(prefs?.sidebar === 'icons') }, [prefs?.sidebar])
   const toggleRail = () => { const next = !rail; setRail(next); if (user) void savePrefs(user.uid, { sidebar: next ? 'icons' : 'full' }).catch(() => setRail(!next)) }
   useStartPage(prefs?.startPage)
+  setTimeStyle(prefs?.times ?? 'relative', prefs?.clock ?? '24h') // read by timeAgo everywhere below
   const pins = (prefs?.pins ?? []).map((to) => {
     const repo = to.startsWith('/app/repos/') ? repos.find((r) => `/app/repos/${r.id}` === to) : undefined
     const page = NAV.find((n) => n.to === to)
@@ -105,8 +106,14 @@ export default function AppShell() {
   useEffect(() => {
     const d = document.documentElement.dataset
     d.toasts = prefs?.toasts ?? 'br'
-    d.celebrate = prefs?.celebrate ?? 'confetti'
-  }, [prefs?.toasts, prefs?.celebrate])
+  }, [prefs?.toasts])
+  // the pointer lives outside the dashboard, so hand it your highlight colour
+  const shellRef = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    const c = shellRef.current && getComputedStyle(shellRef.current).getPropertyValue('--accent').trim()
+    if (c) document.documentElement.style.setProperty('--cursor-accent', c)
+    return () => { document.documentElement.style.removeProperty('--cursor-accent') }
+  }, [prefs?.accent, prefs?.accentHex])
   // a soft pop on every press, if you asked for sounds
   useEffect(() => {
     if (prefs?.sounds !== 'pops') return
@@ -126,7 +133,7 @@ export default function AppShell() {
   }, [])
 
   return (
-    <div className={`shell ${rail ? 'side-rail' : ''} text-${prefs?.textSize ?? 'default'} canvas-${prefs?.canvas ?? 'white'} font-${prefs?.font ?? 'grotesk'} corners-${prefs?.corners ?? 'round'}`}
+    <div ref={shellRef} className={`shell ${rail ? 'side-rail' : ''} text-${prefs?.textSize ?? 'default'} canvas-${prefs?.canvas ?? 'white'} font-${prefs?.font ?? 'grotesk'} corners-${prefs?.corners ?? 'round'}`}
       data-accent={prefs?.accent ?? 'green'} style={accentStyle(prefs?.accent, prefs?.accentHex)}>
       <header className="mtop">
         <Logo to="/app" />
@@ -249,7 +256,6 @@ export default function AppShell() {
           </PageTransition>
         </AnimatePresence>
       </main>
-      {prefs?.cursor === 'swarm' && <CursorSwarm />}
       <CommandBar open={cmdOpen} onClose={() => setCmdOpen(false)} repos={repos} pages={nav} onSignOut={signOut} />
     </div>
   )

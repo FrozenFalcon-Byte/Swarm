@@ -165,14 +165,14 @@ export interface Prefs {
   transition?: 'bellows' | 'fade' | 'none'
   /** the sidebar logo's agents move about, or sit still */
   logo?: 'alive' | 'still'
-  /** four agent dots that follow your pointer around */
-  cursor?: 'plain' | 'swarm'
+  /** Swarm's own pointer, or the system one */
+  cursor?: 'swarm' | 'system' | 'plain'
   /** soft pops when you click */
   sounds?: 'off' | 'pops'
-  /** confetti when something goes right */
-  celebrate?: 'confetti' | 'quiet'
-  /** how the Overview talks to you */
-  voice?: 'friendly' | 'pirate' | 'robot' | 'bard'
+  /** ask again before merging or closing a task */
+  confirm?: 'ask' | 'off'
+  /** "5m ago" or the actual time */
+  times?: 'relative' | 'exact'
   /** which corner notifications arrive in */
   toasts?: 'br' | 'bl' | 'top'
   /** the dashboard's highlight colour: the sidebar's active pill, selections, the save chip */

@@ -54,9 +54,17 @@ export function CountUp({ value, decimals = 0, suffix = '' }: { value: number; d
   return <span ref={ref} className="tabnum">{v.toFixed(decimals)}{suffix}</span>
 }
 
+// Settings → Appearance → Times: "5m ago", or the time itself (set by the dashboard shell as it renders)
+let exact = false, twelve = false
+export function setTimeStyle(times: 'relative' | 'exact', clock: '24h' | '12h') { exact = times === 'exact'; twelve = clock === '12h' }
+
 export function timeAgo(input?: string | Date | { toDate(): Date } | null): string {
   if (!input) return '—'
   const d = typeof input === 'string' ? new Date(input) : input instanceof Date ? input : input.toDate()
+  if (exact) {
+    const time = d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit', hour12: twelve })
+    return new Date().toDateString() === d.toDateString() ? time : `${d.toLocaleDateString([], { month: 'short', day: 'numeric' })}, ${time}`
+  }
   const s = Math.max(0, Math.round((Date.now() - d.getTime()) / 1000))
   if (s < 45) return 'just now'
   if (s < 3600) return `${Math.round(s / 60)}m ago`

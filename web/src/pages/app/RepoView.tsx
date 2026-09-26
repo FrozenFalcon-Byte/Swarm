@@ -268,8 +268,15 @@ function TaskDrawer({ repoId, task, onClose }: { repoId: string; task?: Task; on
   const { data: actions } = useActionStatus(repoId)
   const last = actions.find((a) => task && a.taskId === task.task_id)
 
+  // Settings → Appearance → Confirm: merging and closing take a second click, within a few seconds
+  const confirm = (useProfile(user?.uid)?.prefs?.confirm ?? 'ask') === 'ask'
+  const [armed, setArmed] = useState<string | null>(null)
+  useEffect(() => { if (!armed) return; const id = window.setTimeout(() => setArmed(null), 3500); return () => window.clearTimeout(id) }, [armed])
+  const label = (type: string, text: string) => (armed === type ? `Sure? ${text}` : text)
   const act = async (type: 'merge' | 'approve' | 'reject' | 'reopen' | 'close') => {
     if (!user || !task) return
+    if (confirm && (type === 'merge' || type === 'close') && armed !== type) { setArmed(type); return }
+    setArmed(null)
     if (type === 'reject' && !comment.trim()) { setSent('Say what should change so the coder can act on it.'); return }
     await requestAction(user.uid, user.displayName || user.email || 'maintainer', repoId, type, task.task_id, comment)
     setSent(null); setComment('')
@@ -338,7 +345,7 @@ function TaskDrawer({ repoId, task, onClose }: { repoId: string; task?: Task; on
                 ))}</ul>
               </div>
             </div>
-            <Actions task={task} comment={comment} setComment={setComment} act={act} last={last} note={sent} />
+            <Actions task={task} comment={comment} setComment={setComment} act={act} last={last} note={sent} armed={armed} label={label} />
           </>
         )}
       </motion.aside>
@@ -347,7 +354,8 @@ function TaskDrawer({ repoId, task, onClose }: { repoId: string; task?: Task; on
   )
 }
 
-function Actions({ task, comment, setComment, act, last, note }: {
+function Actions({ task, comment, setComment, act, last, note, armed, label }: {
+  armed: string | null; label: (type: string, text: string) => string
   task: Task; comment: string; setComment: (s: string) => void; act: (t: 'merge' | 'approve' | 'reject' | 'reopen' | 'close') => void
   last?: { status: string; type: string; error?: string; result?: string }; note: string | null
 }) {
@@ -357,11 +365,11 @@ function Actions({ task, comment, setComment, act, last, note }: {
     : last?.status === 'done' ? <span className="action-status">{last.type}: {last.result}</span> : null
   const body = (() => {
     switch (task.state) {
-      case 'Approved': return <><button className="btn btn-green" onClick={() => act('merge')} disabled={!!pending}><Roll>Merge</Roll></button><input id="comment" value={comment} onChange={(e) => setComment(e.target.value)} placeholder="What should change? (to request changes)" /><button className="btn btn-line" onClick={() => act('reject')} disabled={!!pending}><Roll>Request changes</Roll></button></>
+      case 'Approved': return <><button className={`btn btn-green ${armed === 'merge' ? 'btn-armed' : ''}`} onClick={() => act('merge')} disabled={!!pending}><Roll key={armed ?? ''}>{label('merge', 'Merge')}</Roll></button><input id="comment" value={comment} onChange={(e) => setComment(e.target.value)} placeholder="What should change? (to request changes)" /><button className="btn btn-line" onClick={() => act('reject')} disabled={!!pending}><Roll>Request changes</Roll></button></>
       case 'Needs Human': return <><input id="comment" value={comment} onChange={(e) => setComment(e.target.value)} placeholder="Comment (needed to request changes)" />
         {task.artifacts.diff_text && <><button className="btn btn-green" onClick={() => act('approve')} disabled={!!pending}><Roll>Approve patch</Roll></button><button className="btn btn-line" onClick={() => act('reject')} disabled={!!pending}><Roll>Request changes</Roll></button></>}
         {!task.artifacts.diff_text && <button className="btn btn-dark" onClick={() => act('reopen')} disabled={!!pending}><Roll>Send to the swarm</Roll></button>}
-        <button className="btn btn-ghost" onClick={() => act('close')} disabled={!!pending}><Roll>Close</Roll></button></>
+        <button className={`btn btn-ghost ${armed === 'close' ? 'btn-armed' : ''}`} onClick={() => act('close')} disabled={!!pending}><Roll key={armed ?? ''}>{label('close', 'Close')}</Roll></button></>
       case 'Closed': return <button className="btn btn-dark" onClick={() => act('reopen')} disabled={!!pending}><Roll>Reopen for the swarm</Roll></button>
       default: return null
     }

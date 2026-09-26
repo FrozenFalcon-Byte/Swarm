@@ -2,6 +2,7 @@ import { AnimatePresence, MotionConfig, useIsPresent } from 'motion/react'
 import { lazy, Suspense, useEffect, type ReactNode } from 'react'
 import { Navigate, Route, Routes, useLocation } from 'react-router-dom'
 import { PageTransition, routeLabel } from './components/PageTransition'
+import { Cursor } from './components/Cursor'
 import { SetupNeeded } from './components/SetupNeeded'
 import { Splash } from './components/Splash'
 import { useAuth } from './lib/auth'
@@ -51,7 +52,8 @@ function NeedsFirebase({ children }: { children: ReactNode }) {
 export default function App() {
   const location = useLocation()
   const { user } = useAuth()
-  const motionPref = useProfile(user?.uid)?.prefs?.motion ?? 'system'
+  const prefs = useProfile(user?.uid)?.prefs
+  const motionPref = prefs?.motion ?? 'system'
   // CSS animations follow the same setting as motion's (see .less-motion in index.css)
   useEffect(() => { document.documentElement.classList.toggle('less-motion', motionPref === 'less') }, [motionPref])
   // top-level section: landing, auth, or the app (the app runs its own pane transitions)
@@ -63,6 +65,8 @@ export default function App() {
 
   return (
     // scroll to the top only once the old page has folded away, never while it's still on screen
+    <>
+    <Cursor off={prefs?.cursor === 'system'} />
     <MotionConfig reducedMotion={motionPref === 'less' ? 'always' : motionPref === 'full' ? 'never' : 'user'}>
     <AnimatePresence mode="wait" initial={false} onExitComplete={() => { if (!window.location.hash) window.scrollTo(0, 0) }}>
       <PageTransition key={section} label={label}>
@@ -82,5 +86,6 @@ export default function App() {
       </PageTransition>
     </AnimatePresence>
     </MotionConfig>
+    </>
   )
 }

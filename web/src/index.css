@@ -169,8 +169,6 @@ img, svg { display: block; max-width: 100%; }
 .toast-confetti i { position: absolute; left: -5px; top: -5px; border: 1.5px solid var(--ink); }
 html[data-toasts="bl"] .toasts { right: auto; left: 22px; align-items: flex-start; }
 html[data-toasts="top"] .toasts { top: 18px; bottom: auto; left: 0; right: 0; align-items: center; flex-direction: column-reverse; }
-html[data-celebrate="quiet"] .toast-confetti { display: none; }
-.cursor-dot { position: fixed; left: -4px; top: -4px; z-index: 260; width: 8px; height: 8px; border-radius: 50%; border: 1.5px solid var(--ink); pointer-events: none; opacity: 0; transition: opacity 0.4s var(--ease-out); will-change: transform; }
 @media (max-width: 640px) { .toasts { left: 16px; right: 16px; bottom: 16px; align-items: stretch; } .toast { width: auto; } }
 @keyframes wave { 0%, 100% { transform: scaleY(0.3); } 50% { transform: scaleY(1); } }
 
@@ -200,3 +198,26 @@ html[data-celebrate="quiet"] .toast-confetti { display: none; }
 .sel-pop li svg { flex: none; }
 .sel-pop li.sel-none { color: var(--ink-3); cursor: default; background: none; }
 @media (max-width: 860px) { .toolbar-side .sel { flex: 1; } .toolbar-side .sel-btn { width: 100%; max-width: none; } }
+
+/* ---------- Swarm's own pointer (components/Cursor.tsx) */
+html.sw-cursor-on, html.sw-cursor-on * { cursor: none !important; }
+.sw-cursor { position: fixed; left: 0; top: 0; z-index: 10000; pointer-events: none; opacity: 0; transition: opacity 0.2s; will-change: transform; }
+.sw-cursor-lean { position: absolute; left: 0; top: 0; transform-origin: 0 0; }
+.sw-cursor-body { position: absolute; left: -5.1px; top: -2.8px; width: 28px; height: 28px; transform-origin: 5.1px 2.8px;
+  transition: transform 0.35s cubic-bezier(0.34, 1.56, 0.64, 1), opacity 0.2s; }
+.sw-cursor svg { position: absolute; inset: 0; overflow: visible; }
+.sw-cursor-shade path { fill: var(--ink, #0f0f0f); }
+.sw-cursor-arrow path { fill: var(--white, #fff); stroke: var(--ink, #0f0f0f); stroke-width: 1.7; stroke-linejoin: round; transition: fill 0.25s; }
+.sw-cursor[data-state="hover"] .sw-cursor-arrow path { fill: var(--cursor-accent, var(--triager)); }
+.sw-cursor[data-state="hover"] .sw-cursor-body { transform: scale(1.14) rotate(-8deg); }
+.sw-cursor[data-state="grab"] .sw-cursor-arrow path { fill: var(--triager); }
+.sw-cursor[data-state="grab"] .sw-cursor-body { transform: scale(1.1) rotate(-24deg); }
+.sw-cursor[data-down] .sw-cursor-body { transform: scale(0.8) rotate(-4deg); transition-duration: 0.12s; }
+.sw-cursor[data-state="text"] .sw-cursor-body { transform: scale(0.2); opacity: 0; }
+.sw-cursor-caret { position: absolute; left: -1.5px; top: -12px; width: 3px; height: 24px; border-radius: 2px; background: var(--ink, #0f0f0f); opacity: 0; transform: scaleY(0.3);
+  transition: opacity 0.15s, transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1); box-shadow: 2px 2px 0 var(--cursor-accent, var(--green)); }
+.sw-cursor-caret::before, .sw-cursor-caret::after { content: ""; position: absolute; left: -3px; width: 9px; height: 3px; border-radius: 2px; background: inherit; }
+.sw-cursor-caret::before { top: 0; } .sw-cursor-caret::after { bottom: 0; }
+.sw-cursor[data-state="text"] .sw-cursor-caret { opacity: 1; transform: none; }
+.sw-spark { position: fixed; z-index: 9999; width: 0; height: 0; pointer-events: none; }
+.sw-spark i { position: absolute; left: -1.25px; top: 0; width: 2.5px; height: 7px; border-radius: 2px; background: var(--ink, #0f0f0f); transform-origin: 50% 0; }

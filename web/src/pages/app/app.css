@@ -1727,10 +1727,6 @@ a:hover > .help-new-go span { transform: translateX(4px); }
 @media (max-width: 1000px) { .help-body { grid-template-columns: 1fr; } .help-toc { display: none; } .help-tune { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 @media (max-width: 640px) { .help-new, .help-steps, .help-guards, .help-keys, .help .help-places, .help-tune, .help-words { grid-template-columns: 1fr; } .help-steps li::after { display: none; } }
 
-/* Appearance → greeting voice */
-.ap-voices { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; width: min(340px, 100%); }
-.ap-voice { display: flex; flex-direction: column; gap: 2px; text-align: left; padding: 10px 12px; border-radius: 14px; border: 2px solid var(--line-soft); background: var(--white); transition: border-color var(--t-fast), box-shadow 0.3s var(--ease-out), transform 0.3s var(--ease-out); }
-.ap-voice b { font-size: 13.5px; font-weight: 600; }
-.ap-voice span { font-size: 12.5px; color: var(--ink-3); }
-.ap-voice:hover { border-color: var(--ink); }
-.ap-voice.on { border-color: var(--ink); box-shadow: 0 3px 0 var(--ink); transform: translateY(-2px); background: var(--accent-soft, var(--white)); }
+/* a Merge or Close that's waiting for its second click */
+.btn-armed { animation: armed 0.9s var(--ease-in-out) infinite; }
+@keyframes armed { 0%, 100% { box-shadow: 0 0 0 0 var(--ink); } 50% { box-shadow: 0 0 0 4px rgba(15, 15, 15, 0.18); } }
