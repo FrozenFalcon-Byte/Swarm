@@ -1,5 +1,5 @@
 import { AnimatePresence, motion } from 'motion/react'
-import { useEffect, useMemo, useState, type ReactNode } from 'react'
+import { useEffect, useMemo, useState, useSyncExternalStore, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import { easeOut } from '../lib/motion'
 import { useToast } from './Island'
@@ -11,6 +11,26 @@ import './code.css'
  */
 
 type Lang = 'python' | 'json' | 'diff' | 'text'
+
+/* Word wrap is one choice for every code view, remembered in this browser; flipping it in one window flips them all. */
+const WRAP_KEY = 'swarm.codeWrap'
+const wrapSubs = new Set<() => void>()
+let wrapOn = (() => { try { return localStorage.getItem(WRAP_KEY) === '1' } catch { return false } })()
+export function useWrap(): [boolean, () => void] {
+  const on = useSyncExternalStore((f) => { wrapSubs.add(f); return () => { wrapSubs.delete(f) } }, () => wrapOn)
+  const flip = () => {
+    wrapOn = !wrapOn
+    try { localStorage.setItem(WRAP_KEY, wrapOn ? '1' : '0') } catch { /* private window: it just won't be remembered */ }
+    wrapSubs.forEach((f) => f())
+  }
+  return [on, flip]
+}
+
+/** The little wrap switch the code views share. */
+export function WrapButton({ className = 'cw-btn' }: { className?: string }) {
+  const [wrap, flip] = useWrap()
+  return <button type="button" className={`${className} ${wrap ? 'on' : ''}`} aria-pressed={wrap} onClick={flip} data-tip={wrap ? 'Keep long lines on one line' : 'Wrap long lines'}>Wrap</button>
+}
 
 const PY_KEYWORDS = new Set(['False', 'None', 'True', 'and', 'as', 'assert', 'async', 'await', 'break', 'class', 'continue',
   'def', 'del', 'elif', 'else', 'except', 'finally', 'for', 'from', 'global', 'if', 'import', 'in', 'is', 'lambda',
@@ -95,6 +115,7 @@ export function CodeWindow({ title, code, lang, onClose, maxHeight, actions, loa
   const language = lang || guessLang(title, code)
   const lines = useMemo(() => highlight(code, language), [code, language])
   const [copied, setCopied] = useState(false)
+  const [wrap] = useWrap()
   const copy = async () => {
     try { await navigator.clipboard.writeText(code); setCopied(true); toast.ok('Copied'); window.setTimeout(() => setCopied(false), 1400) }
     catch { toast.error('Couldn’t copy', 'Your browser blocked the clipboard.') }
@@ -110,12 +131,13 @@ export function CodeWindow({ title, code, lang, onClose, maxHeight, actions, loa
         <div className="cw-title"><FileIcon lang={language} /><span>{title}</span></div>
         <div className="cw-actions">
           {actions}
+          <WrapButton />
           <button className="cw-btn" onClick={copy} disabled={loading}>{copied ? 'Copied' : 'Copy'}</button>
         </div>
       </div>
       <div className="cw-body" style={maxHeight ? { maxHeight } : undefined}>
         {loading ? <div className="cw-loading"><span /><span /><span /></div> : (
-          <pre className="cw-code"><code>
+          <pre className={`cw-code ${wrap ? 'is-wrap' : ''}`}><code>
             {lines.map((l, i) => (
               <span key={i} className={`cw-line ${l.cls || ''}`}>
                 <span className="cw-ln" aria-hidden="true">{i + 1}</span>

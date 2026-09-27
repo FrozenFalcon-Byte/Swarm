@@ -183,6 +183,7 @@ export default function AppShell() {
       <aside className="side">
         <div className="side-top">
           <LiveLogo to="/" busy={repos.some((r) => r.status === 'running')} still={prefs?.logo === 'still'} folded={rail} />
+          <ModeToggle className="side-mode-top" />
           <button className="side-fold" onClick={toggleRail} data-tip={rail ? 'Expand sidebar' : 'Collapse sidebar'} aria-label={rail ? 'Expand the sidebar' : 'Collapse the sidebar'}>
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><rect x="3.5" y="4.5" width="17" height="15" rx="3" /><path d="M9.5 4.5v15M16 10l-2 2 2 2" /></svg>
           </button>
@@ -221,7 +222,7 @@ export default function AppShell() {
           </div>
         )}
         <div className="side-foot">
-          <ModeToggle className="side-mode" labels />
+          {rail && <ModeToggle className="side-mode" />}
           <nav className="side-nav" aria-label="More">
             {nav.filter((n) => n.group === 'foot').map((n) => <SideLink key={n.to} to={n.to} icon={n.icon}>{n.label}</SideLink>)}
           </nav>

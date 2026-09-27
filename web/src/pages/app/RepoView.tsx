@@ -13,6 +13,7 @@ import { MoreIssues } from './Lab'
 import { ToolCards } from './ToolsPage'
 import { LANES, PIPELINE, Section, StatePill, kindLabel, timeAgo } from './ui'
 import { Roll } from '../../components/Roll'
+import { WrapButton, useWrap } from '../../components/CodeWindow'
 import { useBootHold } from '../../lib/boot'
 import { RunProgressPanel, useRunToasts } from './RunProgress'
 
@@ -441,11 +442,15 @@ function Evidence({ task }: { task: Task }) {
 }
 
 function Diff({ text }: { text: string }) {
+  const [wrap] = useWrap()
   return (
-    <div className="diff">
-      {text.split('\n').map((l, k) => (
-        <div key={k} className={l.startsWith('+++') || l.startsWith('---') ? 'file' : l.startsWith('@@') ? 'hunk' : l.startsWith('+') ? 'add' : l.startsWith('-') ? 'del' : ''}>{l || ' '}</div>
-      ))}
+    <div className="diff-box">
+      <WrapButton className="diff-wrap" />
+      <div className={`diff ${wrap ? 'is-wrap' : ''}`}>
+        {text.split('\n').map((l, k) => (
+          <div key={k} className={l.startsWith('+++') || l.startsWith('---') ? 'file' : l.startsWith('@@') ? 'hunk' : l.startsWith('+') ? 'add' : l.startsWith('-') ? 'del' : ''}>{l || ' '}</div>
+        ))}
+      </div>
     </div>
   )
 }

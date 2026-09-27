@@ -23,6 +23,8 @@ export default function Overview() {
   const shows = (_k: string) => true
 
   const m = useMemo(() => metrics(tasks), [tasks])
+  const evidence = m.evidence.slice(-EVIDENCE_MAX)
+  const crowded = evidence.length > 5
   const waiting = tasks.filter((t) => t.state === 'Approved' || t.state === 'Needs Human')
     .sort((a, b) => (a.state === 'Approved' ? -1 : 1) - (b.state === 'Approved' ? -1 : 1))
   const repoName = (id: string) => repos.find((r) => r.id === id)?.displayName || 'repo'
@@ -113,14 +115,17 @@ export default function Overview() {
 
         {m.evidence.length > 0 && shows('evidence') && (
           <motion.section className={`ov-card ov-evidence ${shows('moves') ? '' : 'wide'}`} {...card(8)}>
-            <header><h2>Failing runs, before and after</h2><span className="muted">% of runs failing</span></header>
+            <header><h2>Failing runs, before and after</h2><span className="muted">% of runs failing{m.evidence.length > EVIDENCE_MAX ? ` · latest ${EVIDENCE_MAX} tests` : ''}</span></header>
             <div className="chart">
-              <ResponsiveContainer width="100%" height={240}>
-                <BarChart data={m.evidence} barGap={4} margin={{ top: 8, right: 8, left: -12, bottom: 0 }}>
+              <ResponsiveContainer width="100%" height={crowded ? 290 : 240}>
+                <BarChart data={evidence} barGap={crowded ? 2 : 4} margin={{ top: 8, right: 8, left: -12, bottom: 0 }}>
                   <CartesianGrid vertical={false} stroke="var(--line-soft)" />
-                  <XAxis dataKey="test" tick={{ fontSize: 11, fill: 'var(--ink-2)' }} tickLine={false} axisLine={false} interval={0} tickFormatter={(v: string) => v.replace(/^test_/, '')} />
+                  {/* a few tests get their names flat; more than that, short names on a slant so they never overlap */}
+                  <XAxis dataKey="test" tick={{ fontSize: 11, fill: 'var(--ink-2)' }} tickLine={false} axisLine={false} interval={0}
+                    angle={crowded ? -40 : 0} textAnchor={crowded ? 'end' : 'middle'} height={crowded ? 72 : 30}
+                    tickFormatter={(v: string) => clip(v.replace(/^test_/, ''), crowded ? 12 : 16)} />
                   <YAxis domain={[0, 100]} ticks={[0, 50, 100]} tick={{ fontSize: 11, fill: 'var(--ink-3)' }} tickLine={false} axisLine={false} unit="%" />
-                  <Tooltip cursor={{ fill: 'var(--grey-8)' }} contentStyle={{ borderRadius: 12, border: '1.5px solid var(--ink)', fontSize: 13 }} formatter={(v, n) => [`${v}%`, String(n)]} />
+                  <Tooltip cursor={{ fill: 'var(--grey-8)' }} labelFormatter={(v) => String(v)} contentStyle={{ borderRadius: 12, border: '1.5px solid var(--ink)', fontSize: 13 }} formatter={(v, n) => [`${v}%`, String(n)]} />
                   <Bar dataKey="before" name="Before" fill="var(--tester)" stroke="var(--ink)" strokeWidth={1.5} radius={[6, 6, 0, 0]} animationDuration={1100} />
                   <Bar dataKey="after" name="After" fill="var(--reviewer)" stroke="var(--ink)" strokeWidth={1.5} radius={[6, 6, 0, 0]} minPointSize={3} animationDuration={1100} animationBegin={250} />
                 </BarChart>
@@ -149,6 +154,9 @@ export default function Overview() {
     </div>
   )
 }
+
+const EVIDENCE_MAX = 12
+const clip = (s: string, n: number) => (s.length > n ? s.slice(0, n - 1) + '…' : s)
 
 function Stat({ i, label, big, note, tone }: { i: number; label: string; big: React.ReactNode; note: string; tone: string }) {
   return (
