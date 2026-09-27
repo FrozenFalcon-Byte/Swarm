@@ -248,7 +248,7 @@ html.sw-cursor-on, html.sw-cursor-on * { cursor: none !important; }
 .mode-knob { position: absolute; left: 2.5px; top: 2.5px; width: 18px; height: 18px; border-radius: 50%; background: #ffffff; box-shadow: 0 0 0 1.5px #0f0f0f; color: #0f0f0f;
   display: grid; place-items: center; transform: translateX(0); transition: transform 0.55s cubic-bezier(0.5, 1.5, 0.45, 0.95); animation: mode-go-a 0.5s var(--ease-out); }
 .mode.is-dark .mode-knob { transform: translateX(20px); animation-name: mode-go-b; }
-.mode.is-dark @keyframes mode-go-a { 40% { scale: 1.3 0.86; } }
+@keyframes mode-go-a { 40% { scale: 1.3 0.86; } }
 @keyframes mode-go-b { 40% { scale: 1.3 0.86; } }
 .mode-burst { position: absolute; left: 50%; top: 50%; width: 0; height: 0; pointer-events: none; }
 .mode-burst i { position: absolute; left: -3px; top: -3px; width: 6px; height: 6px; border-radius: 50%; box-shadow: 0 0 0 1px #0f0f0f; opacity: 0; --r: 30px;
@@ -258,7 +258,7 @@ html.sw-cursor-on, html.sw-cursor-on * { cursor: none !important; }
 @media (hover: hover) {
   .mode:not(.is-dark):hover .mode-knob { transform: translateX(3px); }
   .mode.is-dark:hover .mode-knob { transform: translateX(17px); }
-  .mode:hover }
+}
 .mode:active .mode-track { transform: scale(0.94); transition-duration: 0.12s; }
 .mode:focus-visible { outline: none; } .mode:focus-visible .mode-track { outline: 2px solid var(--ink); outline-offset: 2px; }
 @media (prefers-reduced-motion: reduce) { .mode-burst { display: none; } }
