@@ -5,13 +5,49 @@ export const MCP_URL = `${API_URL}/mcp`
 
 export class ApiError extends Error {}
 
+/* Waking the hub. Free hosts put it to sleep after 15 idle minutes and take about 50 seconds to start it
+   again. wakeHub() pings /healthz; an answer within a couple of seconds means it was already up and nobody
+   needs to hear about it. Otherwise it reports "waking" (the app shows a toast with a countdown) and keeps
+   trying until the hub answers, then "awake", however early that is. */
+
+export const HUB_WAKE_MS = 50_000
+export type HubWake = { phase: 'waking'; since: number } | { phase: 'awake'; took: number } | { phase: 'failed'; error: string }
+const wakeListeners = new Set<(w: HubWake) => void>()
+/** Hear about the hub waking up. Returns the unsubscribe. */
+export function onHubWake(fn: (w: HubWake) => void) { wakeListeners.add(fn); return () => { wakeListeners.delete(fn) } }
+const tell = (w: HubWake) => wakeListeners.forEach((f) => f(w))
+
 let lastWake = 0
-/** Nudge the hub awake (free hosts sleep when idle). It watches Firestore, so once it's up it sees whatever you
- *  just queued and starts the worker straight away. Fire and forget, at most once every 30 seconds. */
+let waking: Promise<void> | null = null
+const ping = (ms: number) => {
+  const ctl = new AbortController()
+  const t = window.setTimeout(() => ctl.abort(), ms)
+  return fetch(`${API_URL}/healthz`, { mode: 'no-cors', cache: 'no-store', signal: ctl.signal }).finally(() => window.clearTimeout(t))
+}
+
+/** Nudge the hub awake. It watches Firestore, so once it's up it sees whatever you just queued and starts the
+ *  worker straight away. Fire and forget; at most once every 30 seconds, and never twice at the same time. */
 export function wakeHub() {
-  if (!import.meta.env.VITE_SWARM_API_URL || Date.now() - lastWake < 30_000) return
+  if (!import.meta.env.VITE_SWARM_API_URL || waking || Date.now() - lastWake < 30_000) return
   lastWake = Date.now()
-  fetch(`${API_URL}/healthz`, { mode: 'no-cors', cache: 'no-store' }).catch(() => {})
+  const since = Date.now()
+  let said = false
+  const slow = window.setTimeout(() => { said = true; tell({ phase: 'waking', since }) }, 1800)
+  waking = (async () => {
+    // a sleeping host holds the first request until it has started; if that request gives up, ask again
+    while (Date.now() - since < 150_000) {
+      try {
+        await ping(70_000)
+        window.clearTimeout(slow)
+        if (said) tell({ phase: 'awake', took: Date.now() - since })
+        return
+      } catch {
+        if (!said) { window.clearTimeout(slow); said = true; tell({ phase: 'waking', since }) }
+        await new Promise((r) => window.setTimeout(r, 3000))
+      }
+    }
+    tell({ phase: 'failed', error: `Swarm’s server at ${API_URL} didn’t answer. Your run is saved; the scheduled worker picks it up within 15 minutes.` })
+  })().finally(() => { waking = null; lastWake = Date.now() })
 }
 
 export async function api<T>(path: string, body: unknown = {}, idToken?: string): Promise<T> {

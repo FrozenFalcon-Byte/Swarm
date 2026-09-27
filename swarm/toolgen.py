@@ -1,19 +1,22 @@
-"""Tools the Tester can write on the spot.
+"""Tools the Tester writes on the spot.
 
 Every tool follows one contract so the Tester can run any of them the same way:
 
     python <tool>.py <pytest node id> <runs>
     -> prints one JSON line: {"test", "runs", "failures", "failure_rate", "failing": [...]}
 
-Offline the Tester instantiates a template matched to the suspected source of
-flakiness; with an LLM it asks the model to write the harness against the same
-contract. Either way the tool is validated before it is trusted.
+With an LLM the Tester designs a harness for the failure in front of it: it reads the test, the code under
+test and the coder's diagnosis, and writes a script that provokes that mechanism (a sweep of hash seeds for
+set ordering, the test run after its neighbours for leaked state, a frozen or skewed clock, and so on), with
+its own name, description and tags. Offline, or when a design doesn't hold up, it falls back to a template
+matched to the kind of failure. Either way the tool is validated before it is trusted or saved.
 """
 
 from __future__ import annotations
 
 import logging
-from dataclasses import dataclass
+import re
+from dataclasses import dataclass, field
 
 from .llm import LLM, LLMError
 
@@ -162,24 +165,75 @@ def spec_for(source: str) -> ToolSpec:
     return ToolSpec(k["stem"], k["description"], list(k["tags"]))
 
 
-def write_tool(source: str, tool_id: str, task_id: str, default_runs: int, llm: LLM | None = None) -> str:
+def template_tool(source: str, tool_id: str, task_id: str, default_runs: int) -> str:
+    """The built-in harness for this kind of failure."""
     spec = KINDS.get(source, KINDS["unknown"])
-    if llm is not None and llm.available:
-        try:
-            code = llm.complete(
-                "You write small, safe, standard-library-only Python test harnesses. Output only the code.",
-                f"Write a harness for this purpose: {spec['description']}\nContract: {CONTRACT}\n"
-                f"Default runs: {default_runs}. Output a single python file, no markdown fences.",
-                max_tokens=2000,
-            ).strip()
-        except LLMError as e:  # every provider down or rate-limited: the template still does the job
-            log.warning("LLM tool writing failed, using the built-in template: %s", str(e)[:200])
-        else:
-            if code.startswith("```"):
-                code = code.strip("`").split("\n", 1)[1]
-            return code
     if "template" in spec:
         return spec["template"].format(description=spec["description"], task_id=task_id, tool_id=tool_id,
                                        default_runs=default_runs)
     return _TEMPLATE.format(description=spec["description"], task_id=task_id, tool_id=tool_id,
                             default_runs=default_runs, loop_body=spec["loop_body"])
+
+
+@dataclass
+class ToolDesign:
+    stem: str
+    description: str
+    tags: list[str] = field(default_factory=list)
+    code: str = ""
+
+
+DESIGN_SYSTEM = (
+    "You are the Tester in a team of agents that fix tests which fail at random. You design small, focused test "
+    "harnesses: standard-library Python scripts that make one specific intermittent failure show up reliably, so a "
+    "fix can be proven rather than hoped for. Design for the mechanism in front of you (hash seeds for set or dict "
+    "order, the test run after its neighbours for leaked state, a skewed TZ or clock for time, seeds or many runs for "
+    "randomness, several runs at once for races). Only fall back to plain repetition when repetition really is what "
+    "exposes it. Never edit the repository's files; change the conditions a run happens under (environment "
+    "variables, test order, arguments, parallel processes)."
+)
+FORMAT = (
+    "Answer in exactly this shape, nothing before or after:\n"
+    "NAME: <snake_case name for the technique, 2-4 words, no version number>\n"
+    "DESCRIPTION: <one or two sentences: what the harness varies and which kind of failure it exposes, written so "
+    "another agent can tell whether it fits their failure>\n"
+    "TAGS: <5-8 short comma-separated keywords>\n"
+    "---\n"
+    "<the python script, no markdown fences>"
+)
+
+
+def design_tool(context: str, default_runs: int, llm: LLM, feedback: str = "") -> ToolDesign | None:
+    """Ask the LLM for a harness built for this failure. None when no provider answers or the answer isn't usable."""
+    prompt = (f"{context}\n\nContract: {CONTRACT} Each run in a fresh subprocess with a timeout of at most 60 seconds; "
+              f"label every run with the condition it ran under (e.g. \"PYTHONHASHSEED=7\" or \"after test_a, test_b\"). "
+              f"Default runs: {default_runs}.\n")
+    if feedback:
+        prompt += f"\nYour previous harness didn't hold up: {feedback}\nDesign a better one.\n"
+    try:
+        text = llm.complete(DESIGN_SYSTEM, prompt + "\n" + FORMAT, max_tokens=3000)
+    except LLMError as e:  # every provider down or rate-limited: the template still does the job
+        log.warning("LLM tool design failed, using the built-in template: %s", str(e)[:200])
+        return None
+    return parse_design(text)
+
+
+def parse_design(text: str) -> ToolDesign | None:
+    head, sep, code = text.strip().partition("\n---")
+    if not sep:
+        return None
+    code = code.lstrip("-").strip()
+    fenced = re.search(r"```(?:python)?\s*\n(.*?)```", code, re.S)
+    if fenced:
+        code = fenced.group(1)
+    fields = {k.lower(): v.strip() for k, v in re.findall(r"^\s*(NAME|DESCRIPTION|TAGS)\s*:\s*(.+)$", head, re.M | re.I)}
+    stem = re.sub(r"_v\d+$", "", re.sub(r"[^a-z0-9]+", "_", fields.get("name", "").lower()).strip("_"))[:40]
+    description = fields.get("description", "")[:400]
+    tags = [t.strip().lower()[:30] for t in fields.get("tags", "").split(",") if t.strip()][:8]
+    if not stem or not description or "json" not in code:
+        return None
+    try:
+        compile(code, f"{stem}.py", "exec")
+    except SyntaxError:
+        return None
+    return ToolDesign(stem, description, tags, code.strip() + "\n")

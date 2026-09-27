@@ -22,6 +22,7 @@ from a2a.types.a2a_pb2 import Part, TaskState
 from ..agents.base import Agent
 from ..board import Task
 from ..board.models import TaskState as Col
+from ..board.models import utcnow
 from .cards import AGENTS, DONE, NEEDS_PERSON, NEXT_SKILL
 
 if TYPE_CHECKING:
@@ -113,11 +114,13 @@ class BoardAgentExecutor(AgentExecutor):
             await up.start_work(say(f"{self.agent.name} picked up {card.task_id}: {card.title}"))
             try:
                 await self._handle(card, up)
-            except Exception as e:  # the agent crashed: report it on the wire, leave the card where it is
+            except Exception as e:  # the agent crashed: say so everywhere a person looks, then let go of the card
                 log.exception("%s crashed on %s", self.agent.name, card.task_id)
-                self.network.swarm._record(self.agent.name, f"error: {e}", card.task_id)
+                self._crashed(card, e)
                 await up.failed(say(f"{self.agent.name} hit an error on {card.task_id}: {e}"))
                 return
+            if card.artifacts.get("last_error"):  # it went through this time
+                self.network.board.update(card.task_id, self.agent.name, artifacts={"last_error": None})
             if self.network.delay:
                 await asyncio.sleep(self.network.delay)
 
@@ -136,6 +139,19 @@ class BoardAgentExecutor(AgentExecutor):
             await up.complete(say(f"{after.task_id} is {after.state.value}. {after.note}".strip()))
         else:
             await up.complete(say(f"{after.task_id} is {after.state.value}."))
+
+    def _crashed(self, card: Task, e: Exception) -> None:
+        """The card stays in its column, so the next run tries it again; until then it says what went wrong
+        instead of "tester is on it", and the run reports the error."""
+        swarm = self.network.swarm
+        what = f"{type(e).__name__}: {e}".strip()[:300]
+        swarm._record(self.agent.name, f"error: {what}", card.task_id)
+        swarm.errors.append({"agent": self.agent.name, "task_id": card.task_id, "error": what})
+        try:
+            self.network.board.update(card.task_id, self.agent.name, f"hit an error: {what}", assigned_agent=None,
+                                      artifacts={"last_error": {"agent": self.agent.name, "error": what, "ts": utcnow()}})
+        except Exception:
+            log.exception("couldn't note the error on %s", card.task_id)
 
     async def _handle(self, card: Task, up: TaskUpdater) -> None:
         """Run the agent's (blocking) handler in a thread and stream what it says as it says it."""

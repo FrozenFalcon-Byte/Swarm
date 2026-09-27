@@ -44,6 +44,7 @@ class Swarm:
         self.reviewer = ReviewerAgent(self.board, self.settings, sandbox=self.sandbox, **common)
         self.agents = [self.triager, self.coder, self.tester, self.reviewer]
         self.busy: dict[str, bool] = {a.name: False for a in self.agents}
+        self.errors: list[dict] = []  # agents that crashed on a task, for the run's summary
         self._loop: threading.Thread | None = None
         self._stop = threading.Event()
         self._run_lock = threading.Lock()

@@ -105,15 +105,54 @@ function Maker({ uid }: { uid?: string }) {
     } catch (e) { toast.error('Couldn’t start it', (e as Error).message) }
     setBusy(false)
   }
+  const sized = SIZES.find((s) => s.id === size)!
+  const picked = KINDS.filter((k) => kinds.includes(k.id))
+  const flip = (k: LabKind) => setKinds(kinds.includes(k) ? (kinds.length > 1 ? kinds.filter((x) => x !== k) : kinds) : [...kinds, k])
+  const step = (n: number) => ({ initial: { opacity: 0, y: 18 }, animate: { opacity: 1, y: 0 }, transition: { duration: 0.55, ease: easeOut, delay: 0.08 * n } })
   return (
-    <motion.section className="lab-maker" initial={{ opacity: 0, y: 18 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.6, ease: easeOut }}>
-      <div className="lab-maker-text">
-        <h2>Make up a new project</h2>
-        <p>A model invents everything, fresh each time: the library, every module, the bug hidden in each one and the issues people file about them, in their own words. Every bug is proven in the sandbox first: its test has to fail at random, and the fix has to pass every time. Questions, vague reports, feature requests, plain bugs and duplicates are mixed in for the triager. If no model answers, built-in makers fill in.</p>
+    <section className="lab-maker" aria-labelledby="lab-make-h">
+      <div className="lab-maker-head">
+        <h2 id="lab-make-h">Make up a new project</h2>
+        <p>A model invents the library, the bug hidden in each module and the issues people file about them. Every bug is proven in the sandbox first; built-in makers fill in if no model answers.</p>
       </div>
-      <Choices size={size} setSize={setSize} kinds={kinds} setKinds={setKinds} />
-      <button className="btn btn-dark lab-go" onClick={make} disabled={busy || !uid}><Roll>{busy ? 'Starting…' : 'Make it up'}</Roll></button>
-    </motion.section>
+      <div className="lab-steps">
+        <motion.div className="lab-step" style={{ ['--soft' as string]: 'var(--sky-soft)' }} {...step(0)}>
+          <span className="lab-step-n">1</span>
+          <h3>How big</h3>
+          <div className="lab-sizes" role="radiogroup" aria-label="How big">
+            {SIZES.map((s) => (
+              <button key={s.id} role="radio" aria-checked={size === s.id} className={`lab-size ${size === s.id ? 'on' : ''}`} onClick={() => setSize(s.id)}>
+                {size === s.id && <motion.span layoutId="lab-size-card" className="lab-size-pill" transition={{ duration: 0.45, ease: easeOut }} />}
+                <b>{s.label}</b><span>{s.n}</span>
+              </button>
+            ))}
+          </div>
+        </motion.div>
+        <motion.div className="lab-step lab-step--wide" style={{ ['--soft' as string]: 'var(--yellow-soft)' }} {...step(1)}>
+          <span className="lab-step-n">2</span>
+          <h3>Kinds of random failure <small>{picked.length} of {KINDS.length}</small></h3>
+          <div className="lab-kinds">
+            {KINDS.map((k) => (
+              <button key={k.id} className={`lab-kind ${kinds.includes(k.id) ? 'on' : ''}`} style={{ ['--k' as string]: k.colour }} onClick={() => flip(k.id)} aria-pressed={kinds.includes(k.id)}>
+                <span className="lab-kind-dot" />
+                <span><b>{k.label}</b><span>{k.hint}</span></span>
+              </button>
+            ))}
+          </div>
+        </motion.div>
+        <motion.div className="lab-step lab-step--go" style={{ ['--soft' as string]: 'var(--mint)' }} {...step(2)}>
+          <span className="lab-step-n">3</span>
+          <h3>Make it up</h3>
+          <p className="lab-recap"><b>{sized.label}</b> project, {sized.n}, failing through {picked.length === KINDS.length ? 'every kind' : picked.map((k) => k.label.toLowerCase()).join(', ')}.</p>
+          <ul className="lab-proof">
+            <li>Each bug’s test fails at random</li>
+            <li>Each known fix passes every run</li>
+            <li>Questions, duplicates and vague reports mixed in</li>
+          </ul>
+          <button className="btn btn-dark lab-go" onClick={make} disabled={busy || !uid}><Roll>{busy ? 'Starting…' : 'Make it up'}</Roll></button>
+        </motion.div>
+      </div>
+    </section>
   )
 }
 
@@ -149,6 +188,11 @@ function LabProject({ repo, i }: { repo: Repo; i: number }) {
           <span className="chip">{issues} issues</span>
           {score.total > 0 && <span className={`chip ${score.right === score.total ? 'ok' : ''}`}>{score.right}/{score.total} as expected</span>}
         </div>
+        {score.total > 0 && (
+          <span className="lab-score" aria-hidden="true">
+            <motion.i initial={{ scaleX: 0 }} animate={{ scaleX: score.right / score.total }} transition={{ duration: 0.9, ease: easeOut }} />
+          </span>
+        )}
         <div className="lab-proj-actions">
           <Link className="btn btn-line btn-sm" to={`/app/repos/${repo.id}`}><Roll>Open board</Roll></Link>
           <button className="btn btn-line btn-sm" onClick={() => setAdding((a) => !a)} disabled={pending || asked >= 20}><Roll>Add a wave</Roll></button>

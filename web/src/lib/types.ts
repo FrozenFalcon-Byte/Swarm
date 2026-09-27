@@ -40,6 +40,8 @@ export interface Task {
       preexisting_failures?: string[]
       harness?: { tool_id: string; reused: boolean; evidence: Record<string, { before: Evidence; after: Evidence }> }
     }
+    /** set when an agent crashed on this task; cleared once one handles it cleanly */
+    last_error?: { agent: string; error: string; ts: string } | null
   }
 }
 
@@ -113,9 +115,18 @@ export interface Tool {
 }
 
 export interface Activity { id: string; ts: string; agent: string; message: string; task_id: string | null }
+export interface RunError { agent: string; task: string | null; error: string }
+/** What the worker says about a run while it goes: the phase, how far along, and what each agent is doing. */
+export interface RunProgress {
+  phase: 'queued' | 'preparing' | 'lab' | 'reading' | 'agents' | 'saving' | 'done' | 'failed'
+  label: string; percent: number; tasks: number; settled: number
+  agents: Record<string, { task: string | null; state: string; busy: boolean; text: string }>
+  errors: RunError[]; updatedAt?: string
+}
 export interface Run {
   id: string; status: 'queued' | 'running' | 'done' | 'failed'; trigger?: string; error?: string
-  summary?: { ingested: number; tasksMoved: number; llm: string | null; sandbox: string }
+  summary?: { ingested: number; tasksMoved: number; llm: string | null; sandbox: string; toolsWritten?: number; errors?: RunError[] }
+  progress?: RunProgress
   createdAt?: { toDate(): Date }; finishedAt?: { toDate(): Date }
 }
 export interface WorkerInfo {

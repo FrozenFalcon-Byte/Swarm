@@ -1,9 +1,14 @@
 """Tester: runs the patch in the sandbox and, when the existing suite can't prove
-the fix (a flaky test passing once proves nothing), writes a harness that can,
-validates it against old and new code, and registers it for reuse."""
+the fix (a flaky test passing once proves nothing), finds or designs a harness that can.
+
+A saved harness is reused only if it actually reproduces this failure on the old code. Otherwise the
+Tester designs one for this failure (the LLM reads the test, the code and the coder's diagnosis), checks
+that it catches the failure on the old code and isn't simply broken on the fixed code, tries once more
+with what went wrong, and falls back to a template. Only a harness that holds up is saved for reuse."""
 
 from __future__ import annotations
 
+import ast
 import json
 import re
 from pathlib import Path
@@ -11,7 +16,7 @@ from pathlib import Path
 from ..board import Task, TaskState
 from ..registry import ToolRecord, ToolRegistry
 from ..sandbox import Sandbox
-from ..toolgen import spec_for, write_tool
+from ..toolgen import design_tool, spec_for, template_tool
 from .base import Agent
 from .coder import _digest
 
@@ -67,11 +72,11 @@ class TesterAgent(Agent):
 
         # 2. Flakiness evidence: a single green run proves nothing, so use a repeat-run harness.
         source = task.artifacts.get("flakiness_source", "unknown")
-        tool, reused = self._get_or_write_tool(task, source, test_ids)
+        tool, reused, known = self._get_or_write_tool(task, source, test_ids)
         evidence = {}
-        for test in test_ids:
-            before = self._run_tool(tool, test, diff=None)
-            after = self._run_tool(tool, test, diff=diff)
+        for test in test_ids:  # runs already made while choosing or validating the tool count as evidence
+            before = known.get(test, {}).get("old") or self._run_tool(tool, test, diff=None)
+            after = known.get(test, {}).get("new") or self._run_tool(tool, test, diff=diff)
             evidence[test] = {"before": before, "after": after}
         results["harness"] = {"tool_id": tool.tool_id, "reused": reused, "evidence": evidence}
         if reused:  # a new tool's first use is counted at registration
@@ -121,33 +126,87 @@ class TesterAgent(Agent):
         idx = RepoIndex(self.settings.repo_path)
         return [f"{s.path}::{s.name}" for s in idx.symbols if idx.is_test_path(s.path) and s.name.startswith("test_")]
 
-    def _get_or_write_tool(self, task: Task, source: str, test_ids: list[str]) -> tuple[ToolRecord, bool]:
+    def _get_or_write_tool(self, task: Task, source: str, test_ids: list[str]) -> tuple[ToolRecord, bool, dict]:
+        """The harness for this task, whether it was reused, and the runs already made with it
+        ({test: {"old": ..., "new": ...}})."""
         spec = spec_for(source)
-        hits = self.registry.search(f"{spec.description} {' '.join(spec.tags)}")
-        if hits:
-            tool, score = hits[0]
-            self.say(f"reusing registered tool {tool.tool_id} (match {score})", task)
-            self.board.update(task.task_id, self.name, f"reused tool {tool.tool_id} from {tool.created_by_task} (match {score})")
-            return tool, True
+        diff = task.artifacts.get("diff_text")
 
+        # 1. A saved tool, but only one that reproduces this failure: a close description isn't proof it fits.
+        for tool, score in self.registry.search(f"{spec.description} {' '.join(spec.tags)}")[:3]:
+            old = {t: self._run_tool(tool, t, diff=None) for t in test_ids}
+            if test_ids and all(_catches(r) for r in old.values()):
+                self.say(f"reusing {tool.tool_id} (match {score}): it reproduces the failure on the old code", task)
+                self.board.update(task.task_id, self.name, f"reused tool {tool.tool_id} from {tool.created_by_task} (match {score})")
+                return tool, True, {t: {"old": r} for t, r in old.items()}
+            self.say(f"{tool.tool_id} looked like a fit (match {score}) but doesn't reproduce this failure; not using it", task)
+
+        # 2. Design one for this failure, test it, and try again with what went wrong.
+        feedback, context = "", None
+        for attempt in (1, 2):
+            if not self.llm.available:
+                break
+            context = context or self._failure_context(task, source, test_ids)
+            self.say(f"designing a harness for this failure (attempt {attempt})", task)
+            d = design_tool(context, self.settings.flaky_repeat_runs, self.llm, feedback)
+            if d is None:
+                break
+            tool_id = self.registry.next_id(d.stem)
+            validation, ok, why = self._validate(d.code, test_ids, diff)
+            if ok:
+                return self._save(task, tool_id, d.description, d.code, d.tags, validation), False, validation
+            self.say(f"{tool_id} didn't hold up: {why}", task)
+            self.board.update(task.task_id, self.name, f"designed {tool_id}, discarded it: {why[:160]}")
+            feedback = why
+
+        # 3. The built-in harness for this kind of failure.
         tool_id = self.registry.next_id(spec.stem)
-        self.say(f"no saved harness fits '{source}' random failures — writing {tool_id}", task)
-        code = write_tool(source, tool_id, task.task_id, self.settings.flaky_repeat_runs, self.llm)
-        # Test the test: it must catch the bug on old code and pass on the fixed code.
-        tmp = ToolRecord(tool_id=tool_id, description=spec.description, code_path="", created_by_task=task.task_id)
-        validation = {}
-        for test in test_ids:
-            before = self._run_tool(tmp, test, diff=None, code=code)
-            after = self._run_tool(tmp, test, diff=task.artifacts.get("diff_text"), code=code)
-            validation[test] = {"detects_bug_on_old_code": before.get("failures", 0) > 0,
-                                "old": before, "new": after}
-        validated = all(v["detects_bug_on_old_code"] and "error" not in v["old"] for v in validation.values())
-        rec = self.registry.register(tool_id, spec.description, code, task.task_id, spec.tags, validated, validation)
+        self.say(f"no saved harness fits '{source}' random failures, writing {tool_id} from the built-in template", task)
+        code = template_tool(source, tool_id, task.task_id, self.settings.flaky_repeat_runs)
+        validation, ok, why = self._validate(code, test_ids, diff)
+        return self._save(task, tool_id, spec.description, code, spec.tags, validation, ok, why), False, validation
+
+    def _save(self, task: Task, tool_id: str, description: str, code: str, tags: list[str], validation: dict,
+              validated: bool = True, why: str = "") -> ToolRecord:
+        rec = self.registry.register(tool_id, description, code, task.task_id, tags, validated, validation)
         self.board.update(task.task_id, self.name,
                           f"wrote tool {tool_id}; validation {'passed' if validated else 'FAILED'} "
-                          f"(catches the failures on the old code: {validated})")
+                          f"(catches the failures on the old code: {validated})" + (f": {why[:160]}" if why else ""))
         self.say(f"registered {tool_id} (validated={validated})", task)
-        return rec, False
+        return rec
+
+    def _validate(self, code: str, test_ids: list[str], diff: str | None) -> tuple[dict, bool, str]:
+        """Test the test: it must catch the failure on the old code, and on the fixed code it must at least
+        be able to pass (a harness that fails every run is measuring something else)."""
+        tmp = ToolRecord(tool_id="candidate", description="", code_path="", created_by_task="")
+        validation, problems = {}, []
+        for test in test_ids:
+            old = self._run_tool(tmp, test, diff=None, code=code)
+            new = self._run_tool(tmp, test, diff=diff, code=code)
+            catches = _catches(old)
+            validation[test] = {"detects_bug_on_old_code": catches, "passes_on_fixed_code": new.get("failures") == 0,
+                                "old": old, "new": new}
+            if "error" in old or "error" in new:
+                problems.append(f"it crashed on {test}: {(old.get('error') or new.get('error') or '')[-240:]}")
+            elif not catches:
+                problems.append(f"it saw no failures of {test} on the old code ({old.get('failures')}/{old.get('runs')})")
+            elif (new.get("failures") or 0) >= (new.get("runs") or 1):
+                problems.append(f"it failed every run of {test} on the fixed code too, so it isn't measuring this failure")
+        ok = bool(test_ids) and not problems
+        return validation, ok, "; ".join(problems)
+
+    def _failure_context(self, task: Task, source: str, test_ids: list[str]) -> str:
+        """What the LLM needs to design a harness for this failure: the issue, the diagnosis, the test, the code."""
+        a = task.artifacts
+        parts = [f"Issue: {task.title}\n{task.body[:1200]}",
+                 f"Suspected kind of failure: {source}", f"The coder's diagnosis: {a.get('root_cause') or 'none given'}"]
+        for ref in test_ids[:3]:
+            parts.append(f"Failing test {ref}:\n{_source_of(self.settings.repo_path, ref)}")
+        for ref in (a.get("target_symbols") or [])[:3]:
+            parts.append(f"Code under test {ref}:\n{_source_of(self.settings.repo_path, ref)}")
+        if a.get("diff_text"):
+            parts.append(f"The proposed fix (the harness must pass with it and catch the failure without it):\n{a['diff_text'][:2000]}")
+        return "\n\n".join(parts)
 
     def _run_tool(self, tool: ToolRecord, test: str, diff: str | None, code: str | None = None) -> dict:
         code = code if code is not None else Path(tool.code_path).read_text()
@@ -174,6 +233,27 @@ class TesterAgent(Agent):
         self.board.transition(task.task_id, TaskState.REJECTED, self.name, f"tests failed: {reason[:200]}",
                               note=f"Tester: {reason}", assigned_agent=None, artifacts=arts)
         self.say(f"rejected: {reason[:120]}", task)
+
+
+def _catches(result: dict) -> bool:
+    return "error" not in result and (result.get("failures") or 0) > 0
+
+
+def _source_of(root: Path, ref: str, limit: int = 2500) -> str:
+    """The source of `path::name` (a function or class, top level or in a class), or the file's head."""
+    path, _, name = ref.partition("::")
+    try:
+        src = (root / path).read_text()
+    except OSError:
+        return "(not found)"
+    want = name.split(".")[-1]
+    try:
+        for node in ast.walk(ast.parse(src)):
+            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)) and node.name == want:
+                return (ast.get_source_segment(src, node) or "")[:limit]
+    except SyntaxError:
+        pass
+    return src[:limit]
 
 
 def _test_names(text: str) -> list[str]:

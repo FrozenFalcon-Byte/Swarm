@@ -1,5 +1,6 @@
 import { AnimatePresence, motion, type Variants } from 'motion/react'
-import { createContext, useCallback, useContext, useMemo, useRef, useState, type ReactNode } from 'react'
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { HUB_WAKE_MS, onHubWake } from '../lib/api'
 
 /*
  * Toasts as stickers. Each one arrives as its agent's dot, which rolls in from the corner, bursts open into
@@ -7,11 +8,13 @@ import { createContext, useCallback, useContext, useMemo, useRef, useState, type
  * fuse along the bottom burns down while it's up (hover to hold it), and on the way out the card folds
  * back into the dot, which drops away. A success throws a little confetti of agent colours; an error
  * shakes its head. Up to three stack in the corner; a "working…" note turns into whatever comes next.
+ * A note with an `eta` counts down instead, and its bar fills up to the moment it expects to be done.
  */
 
 type Tone = 'ok' | 'error' | 'info' | 'work'
-export interface Toast { id: number; slot: number; tone: Tone; title: string; body?: string; duration: number }
-type Push = (t: { tone?: Tone; title: string; body?: string; duration?: number }) => number
+type Eta = { since: number; ms: number }
+export interface Toast { id: number; slot: number; tone: Tone; title: string; body?: string; duration: number; eta?: Eta }
+type Push = (t: { tone?: Tone; title: string; body?: string; duration?: number; eta?: Eta }) => number
 interface ToastApi { push: Push; ok(title: string, body?: string): number; error(title: string, body?: string): number; info(title: string, body?: string): number; work(title: string, body?: string): number; dismiss(id?: number): void }
 
 const Ctx = createContext<ToastApi | null>(null)
@@ -25,9 +28,9 @@ export function IslandProvider({ children }: { children: ReactNode }) {
   const seq = useRef(0)
   const close = useCallback((id?: number) => setToasts((ts) => (id === undefined ? ts.slice(0, -1) : ts.filter((t) => t.id !== id))), [])
 
-  const push = useCallback<Push>(({ tone = 'info', title, body, duration }) => {
+  const push = useCallback<Push>(({ tone = 'info', title, body, duration, eta }) => {
     const id = ++seq.current
-    const t: Toast = { id, slot: id, tone, title, body, duration: duration ?? (tone === 'work' ? 0 : tone === 'error' ? 5600 : 3600) }
+    const t: Toast = { id, slot: id, tone, title, body, eta, duration: duration ?? (tone === 'work' ? 0 : tone === 'error' ? 7000 : 3600) }
     setToasts((ts) => {
       // a "working on it" note becomes the answer, in the same card, rather than a second card
       const w = ts.findIndex((x) => x.tone === 'work')
@@ -45,6 +48,13 @@ export function IslandProvider({ children }: { children: ReactNode }) {
     work: (title, body) => push({ tone: 'work', title, body }),
     dismiss: (id) => close(id),
   }), [push, close])
+
+  // Swarm's server napping on a free host: say how long it takes to wake, and say so the moment it's up
+  useEffect(() => onHubWake((w) => {
+    if (w.phase === 'waking') push({ tone: 'work', title: 'Waking Swarm’s server', body: 'It naps after 15 quiet minutes.', eta: { since: w.since, ms: HUB_WAKE_MS } })
+    else if (w.phase === 'awake') push({ tone: 'ok', title: 'Server is awake', body: `Up in ${Math.max(1, Math.round(w.took / 1000))}s. The agents take it from here.`, duration: 4200 })
+    else push({ tone: 'error', title: 'The server didn’t wake up', body: w.error, duration: 9000 })
+  }), [push])
 
   return (
     <Ctx.Provider value={api}>
@@ -91,7 +101,11 @@ function Sticker({ t, depth, onClose }: { t: Toast; depth: number; onClose: () =
                   </span>
                 ))}
               </b>
-              {t.body && <motion.span initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.62 + words.length * 0.04, duration: 0.45 }}>{t.body}</motion.span>}
+              {(t.body || t.eta) && (
+                <motion.span initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.62 + words.length * 0.04, duration: 0.45 }}>
+                  {t.body}{t.eta && <>{t.body && ' '}<Countdown eta={t.eta} /></>}
+                </motion.span>
+              )}
             </div>
             <button className="toast-x" onClick={(e) => { e.stopPropagation(); onClose() }} aria-label="Dismiss">
               <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round"><path d="M6 6l12 12M18 6L6 18" /></svg>
@@ -100,10 +114,31 @@ function Sticker({ t, depth, onClose }: { t: Toast; depth: number; onClose: () =
         </AnimatePresence>
         {t.duration > 0
           ? <i key={`fuse-${t.id}`} className="toast-fuse" style={{ animationDuration: `${t.duration}ms`, animationPlayState: held ? 'paused' : 'running', background: COLOR[t.tone] }} onAnimationEnd={onClose} />
-          : <i className="toast-fuse toast-fuse--work" />}
+          : t.eta
+            ? <i key={`eta-${t.id}`} className="toast-fuse toast-fuse--work toast-fuse--eta" style={{ ['--eta' as string]: `${t.eta.ms}ms`, ['--gone' as string]: `${t.eta.since - Date.now()}ms` }} />
+            : <i className="toast-fuse toast-fuse--work" />}
       </motion.div>
       {t.tone === 'ok' && <Confetti key={`c-${t.id}`} />}
     </motion.li>
+  )
+}
+
+/** "About 42s to go", the number rolling down a second at a time; past the estimate, "any moment now". */
+function Countdown({ eta }: { eta: Eta }) {
+  const left = () => Math.ceil((eta.since + eta.ms - Date.now()) / 1000)
+  const [s, setS] = useState(left)
+  useEffect(() => { const id = window.setInterval(() => setS(left()), 250); return () => window.clearInterval(id) })
+  if (s <= 0) return <span className="toast-eta">Any moment now…</span>
+  return (
+    <span className="toast-eta">
+      About{' '}
+      <span className="toast-eta-n tabnum">
+        <AnimatePresence mode="popLayout" initial={false}>
+          <motion.b key={s} initial={{ y: '-100%', opacity: 0 }} animate={{ y: '0%', opacity: 1 }} exit={{ y: '100%', opacity: 0 }} transition={{ duration: 0.35, ease: EASE }}>{s}</motion.b>
+        </AnimatePresence>
+      </span>
+      s to go
+    </span>
   )
 }
 

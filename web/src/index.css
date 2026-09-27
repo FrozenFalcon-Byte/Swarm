@@ -181,6 +181,12 @@ img, svg { display: block; max-width: 100%; }
 .toast-fuse { position: absolute; left: 0; right: 0; bottom: 0; height: 4px; transform-origin: 0 50%; animation: toast-fuse linear forwards; border-top: 1.5px solid var(--ink); }
 .toast-fuse--work { background: repeating-linear-gradient(90deg, var(--triager) 0 14px, var(--coder) 14px 28px, var(--tester) 28px 42px, var(--reviewer) 42px 56px); background-size: 56px 100%; animation: toast-crawl 0.8s linear infinite; }
 @keyframes toast-fuse { from { transform: scaleX(1); } to { transform: scaleX(0); } }
+/* an eta: the bar fills to where it expects to be done (started in the past by --gone), still crawling */
+.toast-fuse--eta { animation: toast-fill var(--eta) linear var(--gone) forwards, toast-crawl 0.8s linear infinite; clip-path: inset(0 100% 0 0); }
+@keyframes toast-fill { from { clip-path: inset(0 100% 0 0); } to { clip-path: inset(0 0 0 0); } }
+.toast-eta { white-space: nowrap; }
+.toast-eta-n { display: inline-flex; overflow: hidden; vertical-align: bottom; min-width: 1.2em; justify-content: flex-end; }
+.toast-eta-n b { display: inline-block; font-weight: 700; color: var(--ink); }
 @keyframes toast-crawl { to { background-position: 56px 0; } }
 .toast-orbit { position: relative; width: 22px; height: 22px; }
 .toast-orbit i { position: absolute; left: 7px; top: 7px; width: 8px; height: 8px; border-radius: 50%; border: 1.5px solid var(--ink); animation: toast-orbit 1s var(--ease-in-out) infinite; }

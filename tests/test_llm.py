@@ -51,11 +51,25 @@ def test_triage_blends_llm_with_heuristics(settings, issues):
     assert t.confidence < settings.triage_confidence_threshold  # disagreement goes to a human
 
 
-def test_tool_writing_falls_back_to_template_when_every_provider_fails(settings):
-    from swarm.toolgen import write_tool
+def test_tool_design_gives_way_to_the_template_when_every_provider_fails(settings):
+    from swarm.toolgen import design_tool, template_tool
 
     settings.llm_disabled = False
     llm = LLM(settings, providers=[Fake("a", fail=True), Fake("b", fail=True)])
-    code = write_tool("hash-order", "hashseed_sweep_v1", "task-001", 20, llm)
-    compile(code, "hashseed_sweep_v1.py", "exec")  # the built-in template, not a crash
+    assert design_tool("a test that fails at random", 20, llm) is None  # no crash, the Tester uses the template
+    code = template_tool("hash-order", "hashseed_sweep_v1", "task-001", 20)
+    compile(code, "hashseed_sweep_v1.py", "exec")
     assert "task-001" in code
+
+
+def test_tool_design_is_read_from_the_llm_answer(settings):
+    from swarm.toolgen import design_tool
+
+    settings.llm_disabled = False
+    reply = ("NAME: Tag Order Seed Sweep v2\nDESCRIPTION: Sweeps PYTHONHASHSEED so set iteration order changes.\n"
+             "TAGS: hash, set order, seeds\n---\n```python\nimport json\nprint(json.dumps({}))\n```\n")
+    d = design_tool("context", 12, LLM(settings, providers=[Fake("a", reply=reply)]))
+    assert d and d.stem == "tag_order_seed_sweep" and d.tags == ["hash", "set order", "seeds"]
+    assert d.code.startswith("import json")
+    broken = "NAME: x\nDESCRIPTION: y\nTAGS: z\n---\nimport json\ndef (:\n"
+    assert design_tool("context", 12, LLM(settings, providers=[Fake("a", reply=broken)])) is None

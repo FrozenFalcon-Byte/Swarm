@@ -15,6 +15,7 @@ import logging
 import os
 import shutil
 import socket
+import threading
 import time
 from datetime import datetime, timezone
 from pathlib import Path
@@ -46,6 +47,126 @@ def _project_root() -> Path:
 
 
 ROOT = _project_root()
+
+# How far along a task is, out of 5: a run's percentage is the tasks it touches, averaged.
+STAGE = {TaskState.NEW: 0, TaskState.TRIAGED: 1, TaskState.IN_PROGRESS: 2, TaskState.AWAITING_TESTS: 3,
+         TaskState.IN_REVIEW: 4, TaskState.REJECTED: 1, TaskState.APPROVED: 5, TaskState.HUMAN_REVIEW: 5,
+         TaskState.MERGED: 5, TaskState.CLOSED: 5}
+AT_REST = {TaskState.APPROVED, TaskState.HUMAN_REVIEW, TaskState.MERGED, TaskState.CLOSED}
+# where each phase sits on the bar; the agents' share is filled in by the tasks moving
+PHASES = {"preparing": (0, 4, "Getting the code"), "lab": (4, 8, "Making up bugs"), "reading": (8, 12, "Reading the issues"),
+          "agents": (12, 97, "Agents working"), "saving": (97, 99, "Saving results"), "done": (100, 100, "Done")}
+OVER = {"completed", "failed", "rejected", "input-required", "canceled"}
+
+
+class RunProgress:
+    """What a run is doing, written onto its run document (`progress`) so the web app can show a percentage,
+    the phase, and what each agent is on. It follows the board and the agents' A2A traffic, keeps its own
+    copy of the task states (no extra reads), and writes at most every 1.5 seconds."""
+
+    def __init__(self, ref, every: float = 1.5):
+        self.ref, self.every = ref, every
+        self.phase = "preparing"
+        self.states: dict[str, TaskState] = {}
+        self.in_play: set[str] = set()
+        self.agents: dict[str, dict] = {}
+        self.errors: list[dict] = []
+        self.percent = 0
+        self._lock = threading.Lock()
+        self._dirty = True
+        self._stop = threading.Event()
+        self._thread = threading.Thread(target=self._loop, name="run-progress", daemon=True)
+
+    # -- inputs ------------------------------------------------------------------
+    def start(self) -> "RunProgress":
+        self._thread.start()
+        return self
+
+    def set_phase(self, phase: str) -> None:
+        with self._lock:
+            self.phase, self._dirty = phase, True
+
+    def watch(self, swarm) -> None:
+        tasks = swarm.board.list()
+        with self._lock:
+            self.states = {t.task_id: t.state for t in tasks}
+            self.in_play = {t.task_id for t in tasks if t.state not in AT_REST}
+            self._dirty = True
+        swarm.board.subscribe(self.on_task)
+        swarm.on_exchange(self.on_exchange)
+        swarm.on_activity(self.on_activity)
+
+    def on_task(self, _event: str, t) -> None:
+        with self._lock:
+            if self.states.get(t.task_id) != t.state:
+                self.in_play.add(t.task_id)
+            self.states[t.task_id] = t.state
+            if (t.artifacts or {}).get("last_error"):
+                e = t.artifacts["last_error"]
+                entry = {"agent": e.get("agent"), "task": t.task_id, "error": (e.get("error") or "")[:300]}
+                if entry not in self.errors:
+                    self.errors = [*self.errors, entry][-10:]
+            self._dirty = True
+
+    def on_exchange(self, e: dict) -> None:
+        if e.get("kind") not in ("status", "task") or e.get("from") not in PHASE_AGENTS:
+            return
+        with self._lock:
+            a = self.agents.setdefault(e["from"], {})
+            state = e.get("state") or ""
+            a.update(task=e.get("taskId"), state=state, busy=state not in OVER)
+            if e.get("text"):
+                a["text"] = e["text"][:160]
+            self._dirty = True
+
+    def on_activity(self, e: dict) -> None:
+        if e.get("agent") not in PHASE_AGENTS or not e.get("message"):
+            return
+        with self._lock:
+            a = self.agents.setdefault(e["agent"], {})
+            a.update(text=e["message"][:160], task=e.get("task_id") or a.get("task"))
+            self._dirty = True
+
+    # -- output ------------------------------------------------------------------
+    def snapshot(self) -> dict:
+        lo, hi, label = PHASES[self.phase]
+        play = [self.states[t] for t in self.in_play if t in self.states]
+        done = sum(1 for s in play if s in AT_REST)
+        if self.phase == "agents" and play:
+            share = sum(STAGE.get(s, 0) for s in play) / (5 * len(play))
+            pct = lo + (hi - lo) * share
+        else:
+            pct = lo
+        self.percent = max(self.percent, min(100, round(pct)))  # never goes backwards, even when a fix is rejected
+        return {"phase": self.phase, "label": label, "percent": self.percent, "tasks": len(play), "settled": done,
+                "agents": {k: v for k, v in self.agents.items()}, "errors": self.errors[-5:], "updatedAt": utcnow()}
+
+    def flush(self, force: bool = False) -> None:
+        with self._lock:
+            if not (self._dirty or force):
+                return
+            snap, self._dirty = self.snapshot(), False
+        try:
+            self.ref.update({"progress": snap})
+        except Exception as e:  # progress is a nicety; never let it stop the run
+            log.warning("couldn't write run progress: %s", e)
+
+    def _loop(self) -> None:
+        while not self._stop.wait(self.every):
+            self.flush()
+
+    def finish(self, phase: str = "done") -> dict:
+        self._stop.set()
+        with self._lock:
+            self.phase = phase
+            if phase == "done":
+                self.percent = 100
+                for a in self.agents.values():
+                    a["busy"] = False
+            return self.snapshot()
+
+
+PHASE_AGENTS = ("triager", "coder", "tester", "reviewer")
 
 
 class Worker:
@@ -140,17 +261,21 @@ class Worker:
             if not self._claim(snap.reference, "queued", "running"):
                 continue
             repo_id = snap.reference.parent.parent.id
+            progress = RunProgress(snap.reference).start()
             try:
-                summary = self.run_repo(repo_id)
-                snap.reference.update({"status": "done", "finishedAt": gfs.SERVER_TIMESTAMP, "summary": summary})
+                summary = self.run_repo(repo_id, progress)
+                snap.reference.update({"status": "done", "finishedAt": gfs.SERVER_TIMESTAMP, "summary": summary,
+                                       "progress": progress.finish("done")})
             except Exception as e:  # a failed run is reported, never retried silently
                 log.exception("run failed for %s", repo_id)
-                snap.reference.update({"status": "failed", "finishedAt": gfs.SERVER_TIMESTAMP, "error": str(e)[:500]})
+                snap.reference.update({"status": "failed", "finishedAt": gfs.SERVER_TIMESTAMP, "error": str(e)[:500],
+                                       "progress": progress.finish(progress.phase)})
                 self.db.collection("repos").document(repo_id).update({"status": "error", "lastError": str(e)[:300]})
             done += 1
         return done
 
-    def run_repo(self, repo_id: str) -> dict:
+    def run_repo(self, repo_id: str, progress: RunProgress | None = None) -> dict:
+        step = progress.set_phase if progress else (lambda _p: None)
         repo = self._repo(repo_id)
         repo_ref = self.db.collection("repos").document(repo_id)
         started = datetime.now(timezone.utc).isoformat(timespec="seconds")
@@ -162,11 +287,19 @@ class Worker:
             repo.update(info)
         swarm = self._swarm(repo_id, repo)
         if repo.get("source") == "lab" or (repo.get("source") == "demo" and (repo.get("lab") or {}).get("waves")):
+            step("lab")
             repo["_lab"] = self._lab_waves(repo_id, repo, swarm)
+        step("preparing")
         self._prepare_checkout(swarm, repo)
+        step("reading")
         before = {t.task_id: t.state for t in swarm.board.list()}
-        created = swarm.ingest(self._issues(repo))
+        issues = self._issues(repo)
+        if progress:
+            progress.watch(swarm)
+        created = swarm.ingest(issues)
+        step("agents")
         messages = swarm.run_until_idle()
+        step("saving")
         self._upload_artifacts(repo_id, swarm)
         after = swarm.board.list()
         moved = sum(1 for t in after if before.get(t.task_id) != t.state)
@@ -174,7 +307,8 @@ class Worker:
         repo_ref.update({"status": "idle", "stats": stats, "lastRunAt": gfs.SERVER_TIMESTAMP, "lastError": None,
                          "lastSyncedAt": started})
         return {"ingested": created, "messages": messages, "tasksMoved": moved, "llm": swarm.llm.describe()["active"],
-                "sandbox": swarm.sandbox.backend}
+                "sandbox": swarm.sandbox.backend, "toolsWritten": stats["toolsWritten"],
+                "errors": [{"agent": e["agent"], "task": e["task_id"], "error": e["error"]} for e in swarm.errors[:10]]}
 
     def _lab_waves(self, repo_id: str, repo: dict, swarm: Swarm) -> list[dict]:
         """Test-lab repos: make up every wave that was asked for and not made yet, then return them all."""

@@ -108,7 +108,13 @@ def parse_pytest(result: RunResult) -> TestReport:
 
 
 SANDBOX_IMAGE = "swarm-sandbox:1"
-SANDBOX_DOCKERFILE = Path(__file__).resolve().parents[1] / "docker" / "sandbox.Dockerfile"
+# Kept here rather than in a file next to the package: a pip install (the cloud worker's) ships only the
+# package, so a Dockerfile beside it would be missing and every tester run would fail to build its sandbox.
+SANDBOX_DOCKERFILE = """\
+FROM python:3.12-slim
+RUN pip install --no-cache-dir "pytest>=8" && useradd --uid 1000 --create-home runner
+USER 1000:1000
+"""
 _image_ready: set[str] = set()
 
 
@@ -118,8 +124,10 @@ def ensure_image(image: str) -> None:
         return
     have = subprocess.run(["docker", "image", "inspect", image], capture_output=True).returncode == 0
     if not have and image == SANDBOX_IMAGE:
-        subprocess.run(["docker", "build", "-q", "-t", image, "-f", str(SANDBOX_DOCKERFILE), str(SANDBOX_DOCKERFILE.parent)],
-                       check=True, capture_output=True, timeout=600)
+        r = subprocess.run(["docker", "build", "-q", "-t", image, "-"], input=SANDBOX_DOCKERFILE,
+                           capture_output=True, text=True, timeout=600)
+        if r.returncode:
+            raise RuntimeError(f"couldn't build the sandbox image {image}: {(r.stderr or r.stdout).strip()[-600:]}")
     _image_ready.add(image)
 
 

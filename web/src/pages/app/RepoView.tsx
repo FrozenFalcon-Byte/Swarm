@@ -7,13 +7,14 @@ import { useAuth } from '../../lib/auth'
 import { useToast } from '../../components/Island'
 import { queueRun, removeRepo, requestAction, setAutoSync, useActionStatus, useIsAdmin, useActivity, usePrefs, useRepo, useRuns, useTasks } from '../../lib/data'
 import { easeInOut, easeOut } from '../../lib/motion'
-import type { Task } from '../../lib/types'
+import type { Run, Task } from '../../lib/types'
 import { Handoffs } from './Handoffs'
 import { MoreIssues } from './Lab'
 import { ToolCards } from './ToolsPage'
 import { LANES, PIPELINE, Section, StatePill, kindLabel, timeAgo } from './ui'
 import { Roll } from '../../components/Roll'
 import { useBootHold } from '../../lib/boot'
+import { RunProgressPanel, useRunToasts } from './RunProgress'
 
 export default function RepoView() {
   const params = useParams()
@@ -30,6 +31,8 @@ export default function RepoView() {
   const [queued, setQueued] = useState(false)
   const toast = useToast()
   const prefs = usePrefs(user?.uid)
+  const { data: runs, loading: runsLoading } = useRuns(repoId)
+  useRunToasts(repoId, runs, !runsLoading)
   // open on the tab you chose in your profile, the first time you arrive at this repo (clicking Board later stays on Board)
   useEffect(() => {
     if (!prefs) return
@@ -47,7 +50,7 @@ export default function RepoView() {
   const runNow = async () => {
     if (!user) return
     setQueued(true)
-    try { await queueRun(user.uid, repoId); toast.work('Swarm queued', 'The worker picks it up in a few seconds.'); setTimeout(() => toast.dismiss(), 3200) }
+    try { await queueRun(user.uid, repoId); toast.info('Run queued', 'The worker picks it up in a few seconds.') }
     catch (e) { toast.error('Couldn’t queue a run', (e as Error).message) }
     setTimeout(() => setQueued(false), 4000)
   }
@@ -88,6 +91,8 @@ export default function RepoView() {
 
       {repo.status === 'error' && <div className="banner banner-bad">The last run failed: {repo.lastError}{/GitHub|token|rate limit/i.test(repo.lastError || '') ? <> <Link className="link" to="/app/settings">Open settings</Link></> : ' Check the worker’s log, then run again.'}</div>}
 
+      <RunProgressPanel runs={runs} />
+
       <LayoutGroup id="tabs">
         <nav className="tabs" aria-label="Repository sections">
           {[['board', 'Board', needsYou], ['handoffs', 'Agent traffic', 0], ['activity', 'Activity', 0], ['tools', 'Tools', 0], ['runs', 'Runs', 0]].map(([id, label, n]) => (
@@ -101,11 +106,11 @@ export default function RepoView() {
 
       <AnimatePresence mode="wait">
         <motion.div key={tab} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -6 }} transition={{ duration: 0.35, ease: easeOut }}>
-          {tab === 'board' && <Lanes tasks={tasks} allOpen={prefs?.lanes === 'all'} onOpen={(id) => navigate(`/app/repos/${repoId}/tasks/${id}`)} />}
+          {tab === 'board' && <Lanes tasks={tasks} running={busy} allOpen={prefs?.lanes === 'all'} onOpen={(id) => navigate(`/app/repos/${repoId}/tasks/${id}`)} />}
           {tab === 'handoffs' && <Handoffs repoId={repoId} tasks={tasks} onOpen={(id) => navigate(`/app/repos/${repoId}/tasks/${id}`)} />}
           {tab === 'activity' && <ActivityFeed repoId={repoId} />}
           {tab === 'tools' && <ToolCards repoId={repoId} />}
-          {tab === 'runs' && <Runs repoId={repoId} />}
+          {tab === 'runs' && <Runs runs={runs} />}
         </motion.div>
       </AnimatePresence>
 
@@ -120,14 +125,14 @@ export default function RepoView() {
 
 const openedRepos = new Set<string>()
 
-function Lanes({ tasks, onOpen, allOpen }: { tasks: Task[]; onOpen: (id: string) => void; allOpen?: boolean }) {
+function Lanes({ tasks, onOpen, allOpen, running }: { tasks: Task[]; onOpen: (id: string) => void; allOpen?: boolean; running?: boolean }) {
   const byLane = useMemo(() => LANES.map((l) => ({ ...l, tasks: tasks.filter((t) => l.states.includes(t.state)).sort((a, b) => a.task_id.localeCompare(b.task_id)) })), [tasks])
   // lanes you folded or opened by hand; otherwise empty lanes and Closed start folded
   const [manual, setManual] = useState<Record<string, boolean>>({})
   const narrow = useMedia('(max-width: 760px)')
   const firstBusy = byLane.find((l) => l.id === 'you' && l.tasks.length) || byLane.find((l) => l.tasks.length && l.id !== 'closed') || byLane[0]
   const [pick, setPick] = useState<string | null>(null)
-  if (!tasks.length) return <Section><p className="muted pad">No tasks yet. When the worker picks up the first run, issues appear here and move across the lanes live.</p></Section>
+  if (!tasks.length) return <Section><p className="muted pad">{running ? 'The run is under way. Issues land here as the triager reads them, then move across the lanes live.' : 'No tasks yet. When the worker picks up the first run, issues appear here and move across the lanes live.'}</p></Section>
   const folded = (l: (typeof byLane)[number]) => manual[l.id] ?? (allOpen ? false : !l.tasks.length || l.id === 'closed')
   const toggle = (l: (typeof byLane)[number]) => setManual((m) => ({ ...m, [l.id]: !folded(l) }))
   const tone = (t: string) => t === 'none' ? 'var(--grey-6)' : `var(--${t})`
@@ -146,7 +151,9 @@ function Lanes({ tasks, onOpen, allOpen }: { tasks: Task[]; onOpen: (id: string)
               {t.priority !== 'unset' && <span className={`chip ${t.priority === 'high' || t.priority === 'critical' ? 'hot' : ''}`}>{t.priority}</span>}
               {t.attempts > 1 && <span className="chip">attempt {t.attempts}</span>}
             </div>
-            {t.assigned_agent && <span className="working"><span className="move-dot" style={{ background: agentColor(t.assigned_agent), width: 10, height: 10 }} />{t.assigned_agent} is on it</span>}
+            {t.artifacts?.last_error ? (
+              <span className="working is-bad" title={t.artifacts.last_error.error}><span className="chip bad">{t.artifacts.last_error.agent} hit an error</span></span>
+            ) : t.assigned_agent && <span className="working"><span className="move-dot" style={{ background: agentColor(t.assigned_agent), width: 10, height: 10 }} />{t.assigned_agent} is on it</span>}
           </motion.div>
         ))}
       </AnimatePresence>
@@ -236,8 +243,7 @@ function ActivityFeed({ repoId }: { repoId: string }) {
   )
 }
 
-function Runs({ repoId }: { repoId: string }) {
-  const { data } = useRuns(repoId)
+function Runs({ runs: data }: { runs: Run[] }) {
   return (
     <Section title="Runs" action={<span className="muted">each run ingests new issues and works until idle</span>}>
       {!data.length ? <p className="muted pad">No runs yet.</p> : (
@@ -247,7 +253,9 @@ function Runs({ repoId }: { repoId: string }) {
               <span className={`pill ${r.status === 'done' ? 'tone-ok' : r.status === 'failed' ? 'tone-bad' : 'tone-warn'}`}>{r.status}</span>
               <div className="run-main">
                 <b>{r.trigger === 'connect' ? 'First run after connecting' : r.trigger?.startsWith('action:') ? `After you chose “${r.trigger.slice(7)}”` : 'Manual run'}</b>
-                <span>{r.error ? r.error : r.summary ? `${r.summary.ingested} new issues · ${r.summary.tasksMoved} tasks moved · ${r.summary.llm || 'heuristics'} · ${r.summary.sandbox} sandbox` : 'Waiting for a worker…'}</span>
+                <span>{r.error ? r.error : r.summary ? `${r.summary.ingested} new issues · ${r.summary.tasksMoved} tasks moved${r.summary.toolsWritten ? ` · ${r.summary.toolsWritten} new tools` : ''} · ${r.summary.llm || 'heuristics'} · ${r.summary.sandbox} sandbox` : r.progress ? `${r.progress.label} · ${r.progress.settled} of ${r.progress.tasks} tasks settled` : 'Waiting for a worker…'}</span>
+                {(r.status === 'running' || r.status === 'queued') && <span className="run-bar"><motion.i initial={false} animate={{ width: `${Math.max(3, r.progress?.percent ?? 0)}%` }} transition={{ duration: 0.9, ease: easeOut }} /></span>}
+                {(r.summary?.errors || []).map((e, i) => <span key={i} className="run-err"><span className="chip bad">{e.agent}</span> {e.task ? `${e.task}: ` : ''}{e.error}</span>)}
               </div>
               <span className="muted">{timeAgo(r.createdAt)}</span>
             </div>
@@ -278,7 +286,8 @@ function TaskDrawer({ repoId, task, onClose }: { repoId: string; task?: Task; on
     if (confirm && (type === 'merge' || type === 'close') && armed !== type) { setArmed(type); return }
     setArmed(null)
     if (type === 'reject' && !comment.trim()) { setSent('Say what should change so the coder can act on it.'); return }
-    await requestAction(user.uid, user.displayName || user.email || 'maintainer', repoId, type, task.task_id, comment)
+    try { await requestAction(user.uid, user.displayName || user.email || 'maintainer', repoId, type, task.task_id, comment) }
+    catch (e) { toast.error('Couldn’t send that to the worker', (e as Error).message); return }
     setSent(null); setComment('')
     toast.ok({ merge: 'Merging', approve: 'Approved', reject: 'Sent back to the coder', reopen: 'Back to the swarm', close: 'Closed' }[type], `${task.task_id} · the worker takes it from here`)
   }
@@ -314,6 +323,7 @@ function TaskDrawer({ repoId, task, onClose }: { repoId: string; task?: Task; on
             </header>
             <div className="drawer-body">
               <Stepper task={task} />
+              {task.artifacts?.last_error && <div className="banner banner-bad"><span><b>The {task.artifacts.last_error.agent} hit an error</b> {timeAgo(task.artifacts.last_error.ts)}: <span className="mono">{task.artifacts.last_error.error}</span>. The next run picks this task up again.</span></div>}
               {task.note && task.state !== 'Merged' && <div className={`banner ${task.state === 'Needs Human' ? 'banner-warn' : task.state === 'Rejected' ? 'banner-bad' : 'banner-info'}`}>{task.note}</div>}
               <div className="dsec"><h4>The issue</h4><p style={{ whiteSpace: 'pre-wrap', color: 'var(--ink-2)' }}>{task.body}</p></div>
               <dl className="kv">
