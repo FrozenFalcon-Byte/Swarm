@@ -299,24 +299,36 @@ function Hero({ ready, tileShown, fromIntro }: { ready: boolean; tileShown: bool
           <Link to="/signup" className="btn btn-green btn-xl"><AgentDots size={22} /> <Roll>Connect a repo</Roll><Go /></Link>
         </motion.div>
       </motion.div>
-      <Ticker ready={ready} />
+      <IssueRoute ready={ready} />
     </section>
   )
 }
 
-const EVENTS = [
-  ['triager', '#101 labeled · random failure · high'], ['coder', 'task-001 · patch v1 · +1 −1'], ['tester', 'hashseed_sweep_v1 · 10/12 → 0/12'],
-  ['reviewer', 'task-001 approved · 6 checks'], ['triager', '#104 duplicate of task-001'], ['coder', 'task-002 · bound the jitter'],
-  ['tester', 'repeat_run_v1 · 3/12 → 0/12'], ['reviewer', 'task-003 touches auth · waiting for you'],
+const ROUTE = [
+  { who: 'you', c: 'var(--white)', t: 'An issue comes in', d: 'a test that fails now and then' },
+  { who: 'triager', c: 'var(--triager)', t: 'Triager sorts it', d: 'labels it, closes duplicates' },
+  { who: 'coder', c: 'var(--coder)', t: 'Coder fixes it', d: 'the smallest diff that works' },
+  { who: 'tester', c: 'var(--tester)', t: 'Tester proves it', d: 'dozens of runs, before and after' },
+  { who: 'reviewer', c: 'var(--reviewer)', t: 'Reviewer checks it', d: 'then you press merge' },
 ] as const
 
-/** A slow marquee of what the agents are doing, along the bottom of the hero. */
-function Ticker({ ready }: { ready: boolean }) {
-  const row = EVENTS.map(([a, t], i) => <span key={i} className="tick"><i style={{ background: `var(--${a})` }} /><b>{a}</b><span className="mono">{t}</span></span>)
+/** Along the bottom of the hero: the route one issue takes, lit one step at a time. */
+function IssueRoute({ ready }: { ready: boolean }) {
+  const [at, setAt] = useState(0)
+  useEffect(() => {
+    if (!ready || window.matchMedia('(prefers-reduced-motion: reduce)').matches) return
+    const id = window.setInterval(() => setAt((i) => (i + 1) % ROUTE.length), 2200)
+    return () => window.clearInterval(id)
+  }, [ready])
   return (
-    <motion.div className="ticker" aria-hidden="true" initial={{ opacity: 0, y: 20 }} animate={ready ? { opacity: 1, y: 0 } : {}} transition={{ delay: 1.1, duration: 0.9, ease: easeOut }}>
-      <div className="ticker-track">{row}{row}</div>
-    </motion.div>
+    <motion.ol className="route" aria-label="How one issue goes through Swarm" initial={{ opacity: 0, y: 20 }} animate={ready ? { opacity: 1, y: 0 } : {}} transition={{ delay: 1.1, duration: 0.9, ease: easeOut }}>
+      {ROUTE.map((r, i) => (
+        <li key={r.who} className={`route-step ${i === at ? 'is-on' : ''} ${i < at ? 'is-done' : ''}`} onMouseEnter={() => setAt(i)}>
+          <span className="route-n" style={{ background: r.c }}>{i + 1}</span>
+          <span className="route-t"><b>{r.t}</b><span>{r.d}</span></span>
+        </li>
+      ))}
+    </motion.ol>
   )
 }
 

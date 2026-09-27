@@ -23,7 +23,7 @@ const pages = {
   overview: () => import('./Overview'), repos: () => import('./Repos'), repo: () => import('./RepoView'),
   tools: () => import('./ToolsPage'), settings: () => import('./Settings'), profile: () => import('./Profile'),
   help: () => import('./Help'), agents: () => import('./Agents'), lab: () => import('./Lab'),
-  rules: () => import('./Rules'), quiet: () => import('./QuietHours'),
+  rules: () => import('./Rules'), quiet: () => import('./QuietHours'), whodunit: () => import('./Whodunit'),
 }
 const Overview = lazy(pages.overview)
 const Repos = lazy(pages.repos)
@@ -36,6 +36,7 @@ const Agents = lazy(pages.agents)
 const Lab = lazy(pages.lab)
 const Rules = lazy(pages.rules)
 const QuietHours = lazy(pages.quiet)
+const Whodunit = lazy(pages.whodunit)
 
 let startHandled = false // once per page load: later visits to /app are deliberate
 
@@ -183,7 +184,6 @@ export default function AppShell() {
       <aside className="side">
         <div className="side-top">
           <LiveLogo to="/" busy={repos.some((r) => r.status === 'running')} still={prefs?.logo === 'still'} folded={rail} />
-          <ModeToggle className="side-mode-top" />
           <button className="side-fold" onClick={toggleRail} data-tip={rail ? 'Expand sidebar' : 'Collapse sidebar'} aria-label={rail ? 'Expand the sidebar' : 'Collapse the sidebar'}>
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><rect x="3.5" y="4.5" width="17" height="15" rx="3" /><path d="M9.5 4.5v15M16 10l-2 2 2 2" /></svg>
           </button>
@@ -205,6 +205,8 @@ export default function AppShell() {
           {<>
             <p className="side-label">Guardrails</p>
             {nav.filter((n) => n.group === 'guard').map((n) => <SideLink key={n.to} to={n.to} icon={n.icon}>{n.label}</SideLink>)}
+            <p className="side-label">Just for fun</p>
+            {nav.filter((n) => n.group === 'play').map((n) => <SideLink key={n.to} to={n.to} icon={n.icon}>{n.label}</SideLink>)}
           </>}
         </nav>
         {repos.length > 0 && (
@@ -222,7 +224,6 @@ export default function AppShell() {
           </div>
         )}
         <div className="side-foot">
-          {rail && <ModeToggle className="side-mode" />}
           <nav className="side-nav" aria-label="More">
             {nav.filter((n) => n.group === 'foot').map((n) => <SideLink key={n.to} to={n.to} icon={n.icon}>{n.label}</SideLink>)}
           </nav>
@@ -242,6 +243,8 @@ export default function AppShell() {
         </div>
       </aside>
       <main className="main">
+        {/* light and dark: a slim row of its own above every page, so it never sits on top of anything (phones have it in the menu sheet) */}
+        <div className="main-bar"><ModeToggle /></div>
         <AnimatePresence mode="wait" initial={false} onExitComplete={() => window.scrollTo(0, 0)}>
           <PageTransition key={key} scope="pane" label={routeLabel(key, (id) => repos.find((r) => r.id === id)?.displayName)}>
             <Suspense fallback={<Splash />}>
@@ -257,6 +260,7 @@ export default function AppShell() {
                 <Route path="lab" element={admin ? <Lab /> : <Overview />} />
                 <Route path="rules" element={<Rules />} />
                 <Route path="quiet-hours" element={<QuietHours />} />
+                <Route path="whodunit" element={<Whodunit />} />
               </Routes>
             </Suspense>
           </PageTransition>

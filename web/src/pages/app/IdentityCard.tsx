@@ -33,7 +33,7 @@ export function IdentityCard({ uid, name, sub, chips, photo, onPhoto, onRemove, 
     <motion.header className="idc" initial={{ opacity: 0, y: 18, scale: 0.985 }} animate={{ opacity: 1, y: 0, scale: 1 }} transition={{ duration: 0.8, ease: easeOut }}
       style={{ ['--hue' as string]: p.color, ['--spin' as string]: `${p.angle}deg`, ['--speed' as string]: `${p.speed}s` }}>
       <div className="idc-bg" aria-hidden="true"><i /><i /><i /><i /></div>
-      <SwarmField />
+      <Relay />
       <button type="button" className={`idc-photo ${dragging ? 'is-drop' : ''}`} onClick={onPhoto} aria-label="Change profile picture" {...dropProps}>
         {photo}
         <span className="idc-photo-cta"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M4 8h3l2-3h6l2 3h3v11H4z" /><circle cx="12" cy="13" r="3.5" /></svg>Change</span>
@@ -57,89 +57,29 @@ export function IdentityCard({ uid, name, sub, chips, photo, onPhoto, onRemove, 
   )
 }
 
-/* The live backdrop: a few chunky stickers in the agents' colours, drawn like the rest of Swarm (ink outline,
-   hard shadow). Each has a home on the card and bobs there on its own clock; they lean a little as your
-   pointer crosses the banner (nearer ones more), hop and spin when clicked, and can be dragged anywhere,
-   springing home when let go. No physics loop, so nothing jitters, tunnels or gets stuck. */
-type Kind = 'dot' | 'pill' | 'ring' | 'square' | 'mark'
-const STICKERS: { kind: Kind; size: number; color: string; x: number; y: number; depth: number }[] = [
-  { kind: 'mark', size: 46, color: 'var(--ink)', x: 0.5, y: 0.2, depth: 1 },
-  { kind: 'dot', size: 34, color: 'var(--triager)', x: 0.6, y: 0.8, depth: 0.6 },
-  { kind: 'pill', size: 30, color: 'var(--coder)', x: 0.68, y: 0.3, depth: 1.3 },
-  { kind: 'ring', size: 38, color: 'var(--tester)', x: 0.55, y: 0.6, depth: 0.8 },
-  { kind: 'square', size: 30, color: 'var(--reviewer)', x: 0.74, y: 0.7, depth: 1.1 },
-  { kind: 'dot', size: 20, color: 'var(--white)', x: 0.64, y: 0.1, depth: 1.6 },
-]
+/* The backdrop: the four agents passing work along a loop, the way a fix travels from triage to review.
+   A dashed route drifts behind your name, each agent rides it on its own clock, and little notes (the
+   messages they hand each other) follow a second, fainter route. Still when you've asked for less motion. */
+const ROUTE = 'M-60 250 C 140 60, 330 330, 520 180 S 830 30, 1060 150'
+const NOTES = 'M-60 90 C 160 200, 360 20, 560 120 S 860 260, 1060 80'
+const calm = () => window.matchMedia('(prefers-reduced-motion: reduce)').matches || document.documentElement.classList.contains('less-motion')
 
-function SwarmField() {
-  const box = useRef<HTMLDivElement>(null)
-  // each sticker's home: the free spot nearest where it would like to be, clear of your name, photo and numbers
-  // (and of the others). Worked out on mount and whenever the banner changes size; one with no room hides.
-  const [homes, setHomes] = useState<({ x: number; y: number } | null)[]>(() => STICKERS.map(() => null))
-  useEffect(() => {
-    const layer = box.current, host = layer?.parentElement
-    if (!layer || !host) return
-    const place = () => {
-      const r = host.getBoundingClientRect()
-      // what's actually drawn: the text itself, not the full-width lines it sits on
-      const box = (el: Element) => {
-        if (el.matches('.idc-id h1, .idc-sub')) { const rg = document.createRange(); rg.selectNodeContents(el); return rg.getBoundingClientRect() }
-        if (el.matches('.idc-chips') && el.children.length) {
-          const bs = [...el.children].map((c) => c.getBoundingClientRect())
-          return { left: Math.min(...bs.map((b) => b.left)), top: Math.min(...bs.map((b) => b.top)), right: Math.max(...bs.map((b) => b.right)), bottom: Math.max(...bs.map((b) => b.bottom)) }
-        }
-        return el.getBoundingClientRect()
-      }
-      const walls = [...host.querySelectorAll('.idc-photo, .idc-id h1, .idc-sub, .idc-chips, .idc-stat')].map((el) => {
-        const b = box(el); return { l: b.left - r.left, t: b.top - r.top, r: b.right - r.left, b: b.bottom - r.top }
-      })
-      const taken: { x: number; y: number; rad: number }[] = []
-      setHomes(STICKERS.map((st) => {
-        const rad = (st.kind === 'pill' ? st.size * 1.5 : st.size) / 2 + 10
-        const free = (x: number, y: number) => x > rad && x < r.width - rad && y > rad && y < r.height - rad &&
-          !walls.some((w) => Math.hypot(x - Math.max(w.l, Math.min(x, w.r)), y - Math.max(w.t, Math.min(y, w.b))) < rad) &&
-          !taken.some((q) => Math.hypot(q.x - x, q.y - y) < q.rad + rad)
-        const want = { x: st.x * r.width, y: st.y * r.height }
-        let best: { x: number; y: number } | null = null, bestD = Infinity
-        for (let x = rad; x < r.width - rad; x += 10) for (let y = rad; y < r.height - rad; y += 10) {
-          const d = Math.hypot(x - want.x, y - want.y)
-          if (d < bestD && free(x, y)) { bestD = d; best = { x, y } }
-        }
-        if (best) taken.push({ ...best, rad })
-        return best
-      }))
-    }
-    const move = (e: PointerEvent) => {
-      const r = host.getBoundingClientRect()
-      layer.style.setProperty('--px', (((e.clientX - r.left) / r.width) * 2 - 1).toFixed(3))
-      layer.style.setProperty('--py', (((e.clientY - r.top) / r.height) * 2 - 1).toFixed(3))
-    }
-    const leave = () => { layer.style.setProperty('--px', '0'); layer.style.setProperty('--py', '0') }
-    place()
-    const settle = window.setTimeout(place, 1000) // after the banner's own entrance
-    const ro = new ResizeObserver(place)
-    ro.observe(host)
-    host.addEventListener('pointermove', move); host.addEventListener('pointerleave', leave)
-    return () => { window.clearTimeout(settle); ro.disconnect(); host.removeEventListener('pointermove', move); host.removeEventListener('pointerleave', leave) }
-  }, [])
-  const hop = (el: HTMLElement | null) => el?.animate(
-    [{ transform: 'none' }, { transform: 'translateY(-22px) rotate(200deg) scale(1.15)', offset: 0.45 }, { transform: 'translateY(2px) rotate(350deg) scale(0.95)', offset: 0.8 }, { transform: 'rotate(360deg)' }],
-    { duration: 760, easing: 'cubic-bezier(0.3, 0.7, 0.3, 1)' })
+function Relay() {
+  const [still] = useState(calm)
+  const ride = (path: string, dur: number, k: number, n: number) => still
+    ? <animateMotion dur="1s" fill="freeze" keyPoints={`${(k + 0.5) / n};${(k + 0.5) / n}`} keyTimes="0;1" calcMode="linear" path={path} />
+    : <animateMotion dur={`${dur}s`} begin={`${(-dur * k) / n}s`} repeatCount="indefinite" rotate="0" path={path} />
   return (
-    <div ref={box} className="idc-stickers" aria-hidden="true">
-      {STICKERS.map((st, i) => homes[i] && (
-        <motion.span key={i} className={`idc-sticker idc-sticker--${st.kind}`}
-          style={{ left: homes[i].x, top: homes[i].y, ['--c' as string]: st.color, ['--s' as string]: `${st.size}px`, ['--d' as string]: st.depth,
-            ['--bob' as string]: `${2.6 + (i % 3) * 0.7}s`, ['--delay' as string]: `${-i * 0.6}s`, animationDelay: `${0.35 + i * 0.07}s` }}
-          drag dragSnapToOrigin dragElastic={0.5} dragTransition={{ bounceStiffness: 260, bounceDamping: 12 }}
-          whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.92 }} whileDrag={{ scale: 1.18, rotate: i % 2 ? 12 : -12, zIndex: 5 }}
-          onTap={(e) => hop((e.currentTarget as HTMLElement | null)?.querySelector<HTMLElement>('.idc-sticker-body') ?? null)}>
-          <span className="idc-sticker-lean">
-            <span className="idc-sticker-body">{st.kind === 'mark' && <><i /><i /><i /><i /></>}</span>
-          </span>
-        </motion.span>
+    <svg className="idc-relay" viewBox="0 0 1000 300" preserveAspectRatio="xMidYMid slice" aria-hidden="true">
+      <path className="idc-relay-route" d={ROUTE} />
+      <path className="idc-relay-route is-faint" d={NOTES} />
+      {[0, 1, 2].map((k) => (
+        <g key={`n${k}`} className="idc-relay-note">{ride(NOTES, 18, k, 3)}<rect x="-15" y="-10" width="30" height="20" rx="6" /><path d="M-9 -4 L0 3 L9 -4" /></g>
       ))}
-    </div>
+      {['triager', 'coder', 'tester', 'reviewer'].map((a, k) => (
+        <g key={a} className="idc-relay-agent">{ride(ROUTE, 16, k, 4)}<circle r="15" style={{ fill: `var(--${a})` }} /><circle className="idc-relay-eye" cx="-4.5" cy="-2" r="2" /><circle className="idc-relay-eye" cx="4.5" cy="-2" r="2" /></g>
+      ))}
+    </svg>
   )
 }
 

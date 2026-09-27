@@ -117,23 +117,25 @@ export default function QuietHours() {
 
       <div className="qh-stage">
         <motion.section className={`qh-hero m-${mode}`} {...rise(1)}>
-          <Washes mode={mode} />
-          <Orb mode={mode} />
           <div className="qh-hero-in">
-            <Now scheduled={!!sched} open={hours[at.index] === '1'} next={next} />
-            <div className="qh-title" aria-live="polite">
-              {/* old and new share one grid cell: the old one leaves upward first, then the new one rises in */}
-              <div className="qh-stack">
-                <AnimatePresence initial={false}>
-                  <motion.h2 key={mode} variants={roll} initial="below" animate="in" exit="above">
-                    {info.label.split(' ').map((w, i) => <span key={i} className="qh-word"><motion.span variants={word} custom={i}>{w}</motion.span></span>)}
-                  </motion.h2>
-                </AnimatePresence>
-              </div>
-              <div className="qh-stack">
-                <AnimatePresence initial={false}>
-                  <motion.p key={mode} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0, transition: { duration: 0.45, ease: EASE, delay: 0.3 } }} exit={{ opacity: 0, y: -6, transition: { duration: 0.18 } }}>{info.says}</motion.p>
-                </AnimatePresence>
+            <div className={`qh-tile m-${mode}`}>
+              <Washes mode={mode} />
+              <Orb mode={mode} />
+              <Now scheduled={!!sched} open={hours[at.index] === '1'} next={next} />
+              <div className="qh-title" aria-live="polite">
+                {/* old and new share one grid cell: the old one leaves upward first, then the new one rises in */}
+                <div className="qh-stack">
+                  <AnimatePresence initial={false}>
+                    <motion.h2 key={mode} variants={roll} initial="below" animate="in" exit="above">
+                      {info.label.split(' ').map((w, i) => <span key={i} className="qh-word"><motion.span variants={word} custom={i}>{w}</motion.span></span>)}
+                    </motion.h2>
+                  </AnimatePresence>
+                </div>
+                <div className="qh-stack">
+                  <AnimatePresence initial={false}>
+                    <motion.p key={mode} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0, transition: { duration: 0.45, ease: EASE, delay: 0.3 } }} exit={{ opacity: 0, y: -6, transition: { duration: 0.18 } }}>{info.says}</motion.p>
+                  </AnimatePresence>
+                </div>
               </div>
             </div>
             <Dial hours={hours} day={shownDay} today={today} hour={at.index % 24} minute={at.minute} wave={wave} clock={clock} />

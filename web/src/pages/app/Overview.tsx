@@ -10,6 +10,7 @@ import { Roll } from '../../components/Roll'
 import { easeOut } from '../../lib/motion'
 import { AGENTS, type Task } from '../../lib/types'
 import ConnectRepo from './ConnectRepo'
+import { Standup } from './Standup'
 import { useBootHold } from '../../lib/boot'
 import { CountUp, EmptyState, Section, evidenceRows, timeAgo } from './ui'
 
@@ -150,6 +151,8 @@ export default function Overview() {
             </ul>
           )}
         </motion.section>}
+
+        {shows('standup') && <Standup tasks={tasks} className="wide" motionProps={card(10)} />}
       </div>
     </div>
   )

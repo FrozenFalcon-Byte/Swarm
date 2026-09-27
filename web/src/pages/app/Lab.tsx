@@ -1,9 +1,10 @@
 import { AnimatePresence, motion } from 'motion/react'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { CodeDialog } from '../../components/CodeWindow'
 import { useToast } from '../../components/Island'
 import { Roll } from '../../components/Roll'
+import { wakeHub } from '../../lib/api'
 import { useAuth } from '../../lib/auth'
 import { addLabWave, createLabProject, newLabSpec, onlineWorker, removeRepo, useLabWaves, useRepos, useTasks, useWorkers } from '../../lib/data'
 import { easeOut } from '../../lib/motion'
@@ -16,6 +17,8 @@ import { StatePill } from './ui'
  * the whole swarm can be exercised on something new every time. Each wave comes with its answer key, so
  * you can check what the agents did against what was really wrong.
  */
+
+const HUB = !!import.meta.env.VITE_SWARM_API_URL
 
 const KINDS: { id: LabKind; label: string; hint: string; colour: string }[] = [
   { id: 'hash-order', label: 'Order from a set', hint: 'results come back in a different order between runs', colour: 'var(--triager)' },
@@ -43,14 +46,19 @@ export default function Lab() {
   const { data: repos } = useRepos(user?.uid)
   const { data: workers } = useWorkers()
   const worker = onlineWorker(workers)
+  // wake the hub as you arrive, so a sleeping server is already starting (with its toast) before you press anything
+  useEffect(() => { wakeHub() }, [])
   const labs = repos.filter((r) => r.source === 'lab' || !!r.lab?.waves?.length).sort((a, b) => (b.createdAt?.toDate().getTime() || 0) - (a.createdAt?.toDate().getTime() || 0))
 
   return (
     <div className="page lab-page">
       <PageHead title="Test lab" sub="Make up a project full of bugs, then watch the swarm find and fix them. Only admins see this page." />
-      {!worker && (
+      {/* with a hub, the worker is a GitHub Actions pass started on demand, so "offline" just means asleep */}
+      {!worker && (HUB ? (
+        <p className="lab-warn is-calm"><span className="status-dot s-idle" />The worker is asleep between runs. Making a project wakes it; the first one usually starts within a minute.</p>
+      ) : (
         <p className="lab-warn"><span className="status-dot s-error" />No worker is online, so nothing will be made up yet. Start one with <span className="mono">swarm worker</span>.</p>
-      )}
+      ))}
       <Maker uid={user?.uid} />
       <section className="lab-list">
         <h2 className="lab-h2">Your test projects</h2>
