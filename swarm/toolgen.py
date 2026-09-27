@@ -196,7 +196,7 @@ FORMAT = (
     "Answer in exactly this shape, nothing before or after:\n"
     "NAME: <snake_case name for the technique, 2-4 words, no version number>\n"
     "DESCRIPTION: <one or two sentences: what the harness varies and which kind of failure it exposes, written so "
-    "another agent can tell whether it fits their failure>\n"
+    "another agent can tell whether it fits their failure; say 'fails at random', never 'flaky'>\n"
     "TAGS: <5-8 short comma-separated keywords>\n"
     "---\n"
     "<the python script, no markdown fences>"
@@ -229,6 +229,8 @@ def parse_design(text: str) -> ToolDesign | None:
     fields = {k.lower(): v.strip() for k, v in re.findall(r"^\s*(NAME|DESCRIPTION|TAGS)\s*:\s*(.+)$", head, re.M | re.I)}
     stem = re.sub(r"_v\d+$", "", re.sub(r"[^a-z0-9]+", "_", fields.get("name", "").lower()).strip("_"))[:40]
     description = fields.get("description", "")[:400]
+    # the site says "fails at random"; keep a model's wording in line with it
+    description = re.sub(r"\bflaky\b", "random", re.sub(r"\bflakiness\b", "random failures", description, flags=re.I), flags=re.I)
     tags = [t.strip().lower()[:30] for t in fields.get("tags", "").split(",") if t.strip()][:8]
     if not stem or not description or "json" not in code:
         return None
