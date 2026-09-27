@@ -64,3 +64,8 @@ html.vt-morph::view-transition-new(root) { z-index: 2; }
 html.mode-easing, html.mode-easing *, html.mode-easing *::before, html.mode-easing *::after {
   transition: background-color 0.5s var(--ease-out), color 0.5s var(--ease-out), border-color 0.5s var(--ease-out), fill 0.5s var(--ease-out), stroke 0.5s var(--ease-out) !important;
 }
+
+/* the logo keeps a dark tile at night (a chalk one washes the dots out), lifted off the page by a hairline */
+html[data-theme="dark"] { --mark: #262624; }
+html[data-theme="dark"] .mark rect { stroke: rgba(243, 240, 231, 0.16); stroke-width: 1.2; }
+html[data-theme="dark"] .live-mark { box-shadow: inset 0 0 0 1px rgba(243, 240, 231, 0.16); }

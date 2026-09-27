@@ -15,9 +15,16 @@ export const missingConfig: string[] = usingEmulators ? [] : (
 
 export const firebaseInfo = { projectId, usingEmulators }
 
+/** Opened from the home screen (an installed web app) rather than in a browser tab. */
+export const installed = typeof window !== 'undefined' && (window.matchMedia('(display-mode: standalone)').matches || (navigator as Navigator & { standalone?: boolean }).standalone === true)
+// An installed app can't use sign-in pop-ups (iOS opens them where the app can't hear back), so it signs in
+// by redirect instead. That only works when the auth handler is on the app's own domain, which Firebase
+// Hosting serves on both of the project's domains.
+const hostedHere = typeof window !== 'undefined' && [`${projectId}.web.app`, `${projectId}.firebaseapp.com`].includes(window.location.hostname)
+
 export const app = initializeApp({
   apiKey: env.VITE_FIREBASE_API_KEY || 'demo-key',
-  authDomain: env.VITE_FIREBASE_AUTH_DOMAIN || `${projectId}.firebaseapp.com`,
+  authDomain: installed && hostedHere && !usingEmulators ? window.location.host : env.VITE_FIREBASE_AUTH_DOMAIN || `${projectId}.firebaseapp.com`,
   projectId,
   // must match the worker's bucket (swarm/cloud/firebase.py): new projects use .firebasestorage.app
   storageBucket: env.VITE_FIREBASE_STORAGE_BUCKET || `${projectId}.firebasestorage.app`,

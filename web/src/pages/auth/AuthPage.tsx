@@ -13,7 +13,7 @@ import { Roll } from '../../components/Roll'
 type Mode = 'signin' | 'signup'
 
 export default function AuthPage({ mode }: { mode: Mode }) {
-  const { user, signIn, signUp, withGitHub, withGoogle, withPasskey, resetPassword } = useAuth()
+  const { user, signIn, signUp, withGitHub, withGoogle, withPasskey, resetPassword, redirectError } = useAuth()
   const navigate = useNavigate()
   const location = useLocation()
   const next = (location.state as { from?: string } | null)?.from || '/app'
@@ -21,7 +21,9 @@ export default function AuthPage({ mode }: { mode: Mode }) {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [busy, setBusy] = useState<string | null>(null)
-  const [error, setError] = useState('')
+  const [typedError, setError] = useState('')
+  // the installed app signs in by redirect, so a Google or GitHub error arrives after the page reloads
+  const error = typedError || (redirectError && !busy ? friendlyAuthError(redirectError) : '')
   const [notice, setNotice] = useState('')
 
   useEffect(() => { if (user) navigate(next, { replace: true }) }, [user, next, navigate])

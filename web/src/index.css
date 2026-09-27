@@ -16,6 +16,9 @@ body {
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
 }
+/* on a phone with a notch and a home bar (the page runs edge to edge: viewport-fit=cover), keep the page,
+   the toasts and the drawer clear of them. They are all 0 everywhere else. */
+body { padding: 0 env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left); }
 h1, h2, h3, h4 { margin: 0; font-weight: 500; letter-spacing: -0.02em; text-wrap: balance; }
 p { margin: 0; }
 a { color: inherit; text-decoration: none; }
@@ -161,7 +164,7 @@ img, svg { display: block; max-width: 100%; }
 @media (max-width: 900px) { .bellows--pane { left: 0; } }
 
 /* ---------- toasts: stickers that roll in from the corner (components/Island.tsx) */
-.toasts { position: fixed; right: 22px; bottom: 22px; z-index: 250; display: flex; flex-direction: column; align-items: flex-end; gap: 14px; margin: 0; padding: 0; list-style: none; pointer-events: none; }
+.toasts { position: fixed; right: calc(22px + env(safe-area-inset-right)); bottom: calc(22px + env(safe-area-inset-bottom)); z-index: 250; display: flex; flex-direction: column; align-items: flex-end; gap: 14px; margin: 0; padding: 0; list-style: none; pointer-events: none; }
 .toast { position: relative; pointer-events: auto; width: min(380px, calc(100vw - 32px)); }
 .toast-shadow { position: absolute; inset: 0; border-radius: 22px; background: var(--ink); }
 .toast-card { position: relative; background: var(--white, #fff); color: var(--ink); border: 2px solid var(--ink); border-radius: 22px; overflow: hidden; cursor: pointer; }

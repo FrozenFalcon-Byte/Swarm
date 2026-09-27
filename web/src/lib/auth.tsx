@@ -1,18 +1,20 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from 'react'
 import {
-  EmailAuthProvider, GithubAuthProvider, GoogleAuthProvider, createUserWithEmailAndPassword, deleteUser, linkWithCredential,
-  linkWithPopup, onAuthStateChanged, reauthenticateWithCredential, reauthenticateWithPopup, sendPasswordResetEmail,
-  signInWithCustomToken, signInWithEmailAndPassword, signInWithPopup, signOut, unlink, updatePassword, updateProfile,
-  verifyBeforeUpdateEmail, type User, type UserCredential,
+  EmailAuthProvider, GithubAuthProvider, GoogleAuthProvider, createUserWithEmailAndPassword, deleteUser, getRedirectResult, linkWithCredential,
+  linkWithPopup, linkWithRedirect, onAuthStateChanged, reauthenticateWithCredential, reauthenticateWithPopup, reauthenticateWithRedirect,
+  sendPasswordResetEmail, signInWithCustomToken, signInWithEmailAndPassword, signInWithPopup, signInWithRedirect, signOut, unlink,
+  updatePassword, updateProfile, verifyBeforeUpdateEmail, type AuthProvider as Provider, type User, type UserCredential,
 } from 'firebase/auth'
 import { collection, deleteDoc, doc, getDocs, query, serverTimestamp, setDoc, where, writeBatch } from 'firebase/firestore'
 import { api, createPasskey, deviceLabel, getPasskey } from './api'
-import { auth, db } from './firebase'
+import { auth, db, installed } from './firebase'
 import { whoAmI } from './github'
 
 interface AuthCtx {
   user: User | null
   loading: boolean
+  /** A Google or GitHub redirect that came back with an error (the installed app signs in by redirect). */
+  redirectError: unknown
   signIn(email: string, password: string): Promise<void>
   signUp(name: string, email: string, password: string): Promise<void>
   withGoogle(): Promise<void>
@@ -69,6 +71,19 @@ async function fromOAuth(result: UserCredential) {
   if (token) await saveGithubLink(result.user.uid, token, 'oauth')
 }
 
+/** Google or GitHub: a pop-up in the browser. Installed on the home screen, pop-ups never report back, so
+ *  the whole app goes to the provider and comes back instead; getRedirectResult picks it up on return. */
+async function viaProvider(flow: 'signin' | 'link' | 'reauth', provider: Provider, user?: User): Promise<UserCredential> {
+  if (!installed) {
+    if (flow === 'signin') return signInWithPopup(auth, provider)
+    return flow === 'link' ? linkWithPopup(user!, provider) : reauthenticateWithPopup(user!, provider)
+  }
+  if (flow === 'signin') await signInWithRedirect(auth, provider)
+  else if (flow === 'link') await linkWithRedirect(user!, provider)
+  else await reauthenticateWithRedirect(user!, provider)
+  return new Promise<never>(() => {}) // the page is on its way to the provider
+}
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null)
   const [loading, setLoading] = useState(true)
@@ -76,10 +91,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const bump = async () => { await auth.currentUser?.reload(); setUser(auth.currentUser); setVersion((v) => v + 1) }
   const need = () => { if (!auth.currentUser) throw new Error('Sign in first.'); return auth.currentUser }
 
+  const [redirectError, setRedirectError] = useState<unknown>(null)
   useEffect(() => onAuthStateChanged(auth, (u) => { setUser(u); setLoading(false) }), [])
+  // back from a Google or GitHub redirect (the installed app): finish what the pop-up would have
+  useEffect(() => {
+    if (!installed) return
+    getRedirectResult(auth).then(async (result) => {
+      if (!result) return
+      await saveProfile(result.user)
+      if (result.providerId === 'github.com') await fromOAuth(result)
+      await bump()
+    }).catch(setRedirectError)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   const value: AuthCtx = {
-    user, loading,
+    user, loading, redirectError,
     async signIn(email, password) {
       const { user } = await signInWithEmailAndPassword(auth, email, password)
       await saveProfile(user)
@@ -90,11 +117,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       await saveProfile(user, { displayName: name, createdAt: serverTimestamp() })
     },
     async withGoogle() {
-      const { user } = await signInWithPopup(auth, new GoogleAuthProvider())
+      const { user } = await viaProvider('signin', new GoogleAuthProvider())
       await saveProfile(user)
     },
     async withGitHub() {
-      const result = await signInWithPopup(auth, githubProvider())
+      const result = await viaProvider('signin', githubProvider())
       await saveProfile(result.user)
       await fromOAuth(result)
     },
@@ -103,7 +130,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (!current) throw new Error('Sign in first.')
       const linked = current.providerData.some((p) => p.providerId === 'github.com')
       // Already linked: re-authenticate to get a fresh token. Otherwise attach GitHub to this account.
-      const result = linked ? await reauthenticateWithPopup(current, githubProvider()) : await linkWithPopup(current, githubProvider())
+      const result = await viaProvider(linked ? 'reauth' : 'link', githubProvider(), current)
       await fromOAuth(result)
     },
     async saveGithubToken(token) {
@@ -144,7 +171,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const via = u.providerData.find((p) => p.providerId === 'google.com') ? new GoogleAuthProvider()
         : u.providerData.find((p) => p.providerId === 'github.com') ? githubProvider() : null
       if (!via) throw Object.assign(new Error('Enter your password to confirm.'), { code: 'swarm/password-needed' })
-      await reauthenticateWithPopup(u, via)
+      await viaProvider('reauth', via, u)
     },
     async updateName(name) {
       const u = need()
@@ -165,7 +192,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     },
     async linkProvider(id) {
       const u = need()
-      const result = await linkWithPopup(u, id === 'github.com' ? githubProvider() : new GoogleAuthProvider())
+      const result = await viaProvider('link', id === 'github.com' ? githubProvider() : new GoogleAuthProvider(), u)
       if (id === 'github.com') await fromOAuth(result)
       await bump()
     },

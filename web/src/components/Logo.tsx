@@ -6,7 +6,7 @@ import { animate } from 'motion/react'
 export function Mark({ size = 28, animated = false }: { size?: number; animated?: boolean }) {
   return (
     <svg width={size} height={size} viewBox="0 0 32 32" aria-hidden="true" className={animated ? 'mark mark--live' : 'mark'}>
-      <rect width="32" height="32" rx="8" fill="var(--ink)" />
+      <rect width="32" height="32" rx="8" fill="var(--mark)" />
       <circle cx="11" cy="11" r="4" fill="var(--triager)" />
       <circle cx="21" cy="11" r="4" fill="var(--coder)" />
       <circle cx="11" cy="21" r="4" fill="var(--tester)" />

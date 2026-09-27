@@ -19,6 +19,7 @@
   --line: #d9ded9;
   --line-soft: #e7eae6;
   --ink: #0f0f0f;
+  --mark: #0f0f0f; /* the logo tile: stays dark in dark mode, where ink turns to chalk */
   --ink-2: #5a585a;
   --ink-3: #8a8d8a;
   --line-strong: #cfd4cf; /* hover borders, idle strokes */
