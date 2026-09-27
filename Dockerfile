@@ -10,7 +10,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends git ca-certific
 WORKDIR /app
 COPY pyproject.toml README.md ./
 COPY swarm ./swarm
-COPY docker ./docker
 COPY demo_repo ./demo_repo
 COPY demo_issues.json ./
 RUN pip install --no-cache-dir ".[server]"
