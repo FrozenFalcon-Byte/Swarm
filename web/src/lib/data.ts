@@ -128,6 +128,12 @@ export function queueRun(uid: string, repoId: string, trigger = 'manual') {
   return addDoc(collection(db, 'repos', repoId, 'runs'), { status: 'queued', trigger, requestedBy: uid, createdAt: serverTimestamp() })
 }
 
+/** Stop a run that's waiting or going. The page shows it stopped at once; a worker that's on it sees
+ *  stopRequested within a few seconds, lets the agents finish what they're on, and starts nothing new. */
+export function stopRun(uid: string, repoId: string, runId: string) {
+  return updateDoc(doc(db, 'repos', repoId, 'runs', runId), { status: 'stopped', stopRequested: true, stopRequestedBy: uid, finishedAt: serverTimestamp() })
+}
+
 export function requestAction(uid: string, userName: string, repoId: string, type: 'merge' | 'approve' | 'reject' | 'reopen' | 'close', taskId: string, comment = '') {
   wakeHub()
   return addDoc(collection(db, 'repos', repoId, 'actions'), {

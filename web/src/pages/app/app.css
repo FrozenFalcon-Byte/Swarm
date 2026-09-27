@@ -313,6 +313,11 @@
 .rp-bar i { display: block; height: 100%; background: var(--green); border-right: 1.5px solid var(--ink); }
 .rp-bar i.is-live { background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.6), transparent) no-repeat, var(--green); background-size: 45% 100%, 100% 100%; animation: bar-sheen 1.6s var(--ease-in-out) infinite; }
 .rp-in.is-bad .rp-bar i { background: var(--bad); animation: none; }
+.rp-in.is-stopped .rp-bar i { background: var(--grey-6); }
+.btn-stop { gap: 10px; }
+.stop-square { width: 11px; height: 11px; border-radius: 3px; background: var(--bad); flex: none; transition: transform 0.3s var(--spring); }
+.btn-stop:hover .stop-square { transform: rotate(90deg) scale(1.1); }
+.btn-stop.is-armed { border-color: var(--bad); color: var(--bad); }
 .rp-agents { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
 .rp-agent { display: flex; gap: 10px; align-items: flex-start; min-width: 0; padding: 10px 12px; border-radius: 16px; background: var(--grey-8); transition: background 0.3s var(--ease-out); }
 .rp-agent.is-busy { background: var(--grey-7); }
@@ -1833,3 +1838,15 @@ a:hover > .help-new-go span { transform: translateX(4px); }
 @keyframes armed { 0%, 100% { box-shadow: 0 0 0 0 var(--ink); } 50% { box-shadow: 0 0 0 4px rgba(15, 15, 15, 0.18); } }
 .pref--stack .pref-copy { flex: none; max-width: none; }
 .pref--stack .pref-act { width: 100%; }
+
+/* agent traffic, live: a pulsing Live badge, and a slow ring round each agent that's at work */
+.ho-head-act { display: inline-flex; align-items: center; gap: 10px; flex-wrap: wrap; justify-content: flex-end; }
+.ho-live { display: inline-flex; align-items: center; gap: 7px; height: 30px; padding: 0 12px; border-radius: var(--pill); border: 2px solid var(--ink);
+  background: var(--coral-soft); font-size: 13px; font-weight: 700; white-space: nowrap; }
+.ho-live i { width: 8px; height: 8px; border-radius: 50%; background: var(--bad); animation: ho-live 1.4s var(--ease-in-out) infinite; }
+@keyframes ho-live { 50% { opacity: 0.25; transform: scale(0.7); } }
+.ho-busy { fill: none; stroke-width: 2.5; stroke-dasharray: 5 6; transform-box: fill-box; transform-origin: center; animation: ho-busy 6s linear infinite; }
+@keyframes ho-busy { to { transform: rotate(360deg); } }
+.ho-waiting { display: flex; flex-direction: column; align-items: center; gap: 10px; text-align: center; padding: 48px 16px; }
+.ho-waiting b { font-size: 22px; font-weight: 600; letter-spacing: -0.02em; }
+.ho-waiting .muted { max-width: 420px; line-height: 1.5; }

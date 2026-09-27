@@ -55,8 +55,13 @@ STAGE = {TaskState.NEW: 0, TaskState.TRIAGED: 1, TaskState.IN_PROGRESS: 2, TaskS
 AT_REST = {TaskState.APPROVED, TaskState.HUMAN_REVIEW, TaskState.MERGED, TaskState.CLOSED}
 # where each phase sits on the bar; the agents' share is filled in by the tasks moving
 PHASES = {"preparing": (0, 4, "Getting the code"), "lab": (4, 8, "Making up bugs"), "reading": (8, 12, "Reading the issues"),
-          "agents": (12, 97, "Agents working"), "saving": (97, 99, "Saving results"), "done": (100, 100, "Done")}
+          "agents": (12, 97, "Agents working"), "saving": (97, 99, "Saving results"), "done": (100, 100, "Done"),
+          "stopped": (0, 0, "Stopped")}
 OVER = {"completed", "failed", "rejected", "input-required", "canceled"}
+
+
+class RunStopped(Exception):
+    """Someone pressed Stop on the run."""
 
 
 class RunProgress:
@@ -75,6 +80,8 @@ class RunProgress:
         self._lock = threading.Lock()
         self._dirty = True
         self._stop = threading.Event()
+        self.stopped = threading.Event()  # someone pressed Stop in the web app
+        self._swarm = None
         self._thread = threading.Thread(target=self._loop, name="run-progress", daemon=True)
 
     # -- inputs ------------------------------------------------------------------
@@ -83,10 +90,15 @@ class RunProgress:
         return self
 
     def set_phase(self, phase: str) -> None:
+        if self.stopped.is_set():
+            raise RunStopped()
         with self._lock:
             self.phase, self._dirty = phase, True
 
     def watch(self, swarm) -> None:
+        self._swarm = swarm
+        if self.stopped.is_set():
+            swarm.network.halt()
         tasks = swarm.board.list()
         with self._lock:
             self.states = {t.task_id: t.state for t in tasks}
@@ -152,8 +164,25 @@ class RunProgress:
             log.warning("couldn't write run progress: %s", e)
 
     def _loop(self) -> None:
+        ticks = 0
         while not self._stop.wait(self.every):
             self.flush()
+            ticks += 1
+            if ticks % 2 == 0 and not self.stopped.is_set():
+                self._check_stop()
+
+    def _check_stop(self) -> None:
+        """Stop pressed? Then no agent starts anything new; what's already under way finishes, and the run ends."""
+        try:
+            snap = self.ref.get(field_paths=["stopRequested"])
+            asked = snap.exists and snap.to_dict().get("stopRequested")
+        except Exception:  # a fake ref in tests, or a blip: try again next tick
+            return
+        if asked:
+            log.info("stop requested; letting the agents finish what they're on")
+            self.stopped.set()
+            if self._swarm is not None:
+                self._swarm.network.halt()
 
     def finish(self, phase: str = "done") -> dict:
         self._stop.set()
@@ -264,8 +293,13 @@ class Worker:
             progress = RunProgress(snap.reference).start()
             try:
                 summary = self.run_repo(repo_id, progress)
-                snap.reference.update({"status": "done", "finishedAt": gfs.SERVER_TIMESTAMP, "summary": summary,
-                                       "progress": progress.finish("done")})
+                stopped = progress.stopped.is_set()
+                snap.reference.update({"status": "stopped" if stopped else "done", "finishedAt": gfs.SERVER_TIMESTAMP,
+                                       "summary": summary, "progress": progress.finish("stopped" if stopped else "done")})
+            except RunStopped:
+                log.info("run for %s stopped before the agents started", repo_id)
+                snap.reference.update({"status": "stopped", "finishedAt": gfs.SERVER_TIMESTAMP, "progress": progress.finish("stopped")})
+                self.db.collection("repos").document(repo_id).update({"status": "idle"})
             except Exception as e:  # a failed run is reported, never retried silently
                 log.exception("run failed for %s", repo_id)
                 snap.reference.update({"status": "failed", "finishedAt": gfs.SERVER_TIMESTAMP, "error": str(e)[:500],

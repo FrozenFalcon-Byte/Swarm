@@ -51,23 +51,24 @@ export function RunProgressPanel({ runs }: { runs: Run[] }) {
 function Panel({ run }: { run: Run }) {
   const p = run.progress
   const failed = run.status === 'failed'
+  const stopped = run.status === 'stopped'
   const done = run.status === 'done'
   const percent = done ? 100 : p?.percent ?? 0
-  const label = failed ? 'The run stopped' : done ? 'All done' : run.status === 'queued' && !p ? 'Waiting for the worker' : p?.label || 'Starting'
+  const label = failed ? 'The run failed' : stopped ? 'Stopped' : done ? 'All done' : run.status === 'queued' && !p ? 'Waiting for the worker' : p?.label || 'Starting'
   const errors = p?.errors || run.summary?.errors || []
   return (
-    <div className={`rp-in ${failed ? 'is-bad' : ''}`}>
+    <div className={`rp-in ${failed ? 'is-bad' : ''} ${stopped ? 'is-stopped' : ''}`}>
       <div className="rp-top">
         <div className="rp-title">
           <b>{label}</b>
           <span className="muted">
-            {failed ? run.error || 'The worker hit a problem.' : p?.tasks ? `${p.settled} of ${p.tasks} tasks settled` : run.status === 'queued' ? 'The worker picks it up in a few seconds.' : 'Getting ready…'}
+            {failed ? run.error || 'The worker hit a problem.' : stopped ? 'The agents finish what they’re on and start nothing new.' : p?.tasks ? `${p.settled} of ${p.tasks} tasks settled` : run.status === 'queued' ? 'The worker picks it up in a few seconds.' : 'Getting ready…'}
           </span>
         </div>
         <span className="rp-pct"><CountUp value={percent} suffix="%" /></span>
       </div>
       <div className="rp-bar" role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={percent} aria-label={label}>
-        <motion.i className={done || failed ? '' : 'is-live'} initial={false} animate={{ width: `${Math.max(3, percent)}%` }} transition={{ duration: 0.9, ease: easeOut }} />
+        <motion.i className={done || failed || stopped ? '' : 'is-live'} initial={false} animate={{ width: `${Math.max(3, percent)}%` }} transition={{ duration: 0.9, ease: easeOut }} />
       </div>
       <ul className="rp-agents">
         {AGENTS.map((name) => {

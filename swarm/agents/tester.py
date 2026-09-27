@@ -14,6 +14,7 @@ import re
 from pathlib import Path
 
 from ..board import Task, TaskState
+from ..patching import PatchError, apply_diff
 from ..registry import ToolRecord, ToolRegistry
 from ..sandbox import Sandbox
 from ..toolgen import design_tool, spec_for, template_tool
@@ -39,6 +40,15 @@ class TesterAgent(Agent):
         diff = task.artifacts.get("diff_text", "")
         test_ids: list[str] = task.artifacts.get("test_ids", [])
         results: dict = {"sandbox": self.sandbox.backend}
+
+        # 0. A patch that doesn't apply to the code as it is now can't be tested: back to the coder to write
+        #    it again (its attempt budget keeps that from going round forever).
+        try:
+            with self.sandbox.workspace() as work:
+                apply_diff(diff, work)
+        except PatchError as e:
+            self._reject(task, results, f"the patch doesn't apply to the current code ({e}); write it again against the file as it is now")
+            return
 
         # 1. Full suite, patched vs. baseline, so pre-existing failures aren't blamed on this patch.
         with self.sandbox.workspace(diff) as work:

@@ -11,10 +11,11 @@ class InvalidTransition(ValueError):
 
 TRANSITIONS: dict[S, set[S]] = {
     S.NEW: {S.TRIAGED, S.HUMAN_REVIEW, S.CLOSED},
-    S.TRIAGED: {S.IN_PROGRESS, S.CLOSED},
+    S.TRIAGED: {S.IN_PROGRESS, S.CLOSED, S.HUMAN_REVIEW},
     S.IN_PROGRESS: {S.AWAITING_TESTS, S.HUMAN_REVIEW},
     # A failing test run sends the task back through Rejected with the failure as feedback.
-    S.AWAITING_TESTS: {S.IN_REVIEW, S.REJECTED},
+    # ...or, when the tester keeps crashing on it, goes to a person instead of round and round.
+    S.AWAITING_TESTS: {S.IN_REVIEW, S.REJECTED, S.HUMAN_REVIEW},
     S.IN_REVIEW: {S.APPROVED, S.REJECTED, S.HUMAN_REVIEW},
     S.REJECTED: {S.IN_PROGRESS, S.HUMAN_REVIEW},
     # Approved means "ready for a human to click merge", never auto-merged.

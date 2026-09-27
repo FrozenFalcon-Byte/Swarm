@@ -5,7 +5,7 @@ import { createPortal } from 'react-dom'
 import { agentColor } from '../../components/AgentDots'
 import { useAuth } from '../../lib/auth'
 import { useToast } from '../../components/Island'
-import { queueRun, removeRepo, requestAction, setAutoSync, useActionStatus, useIsAdmin, useActivity, usePrefs, useRepo, useRuns, useTasks } from '../../lib/data'
+import { queueRun, removeRepo, requestAction, setAutoSync, stopRun, useActionStatus, useIsAdmin, useActivity, usePrefs, useRepo, useRuns, useTasks } from '../../lib/data'
 import { easeInOut, easeOut } from '../../lib/motion'
 import type { Run, Task } from '../../lib/types'
 import { Handoffs } from './Handoffs'
@@ -29,6 +29,7 @@ export default function RepoView() {
   const admin = useIsAdmin(user?.uid)
   const navigate = useNavigate()
   const [queued, setQueued] = useState(false)
+  const [stopArmed, setStopArmed] = useState<string | null>(null)
   const toast = useToast()
   const prefs = usePrefs(user?.uid)
   const { data: runs, loading: runsLoading } = useRuns(repoId)
@@ -46,13 +47,23 @@ export default function RepoView() {
   if (!repo) return <div className="page"><Section title="Repository not found"><p className="muted">It may have been removed, or you aren’t a member. <Link className="link" to="/app/repos">Back to repositories</Link></p></Section></div>
 
   const needsYou = tasks.filter((t) => t.state === 'Approved' || t.state === 'Needs Human').length
-  const busy = repo.status === 'running' || repo.status === 'queued' || queued
+  // the latest run says whether anything is going; the repo's own status can be left behind by a worker that died
+  const current = runs[0]
+  const live = !!current && (current.status === 'queued' || current.status === 'running')
+  const busy = (runs.length ? live : repo.status === 'running' || repo.status === 'queued') || queued
   const runNow = async () => {
     if (!user) return
     setQueued(true)
     try { await queueRun(user.uid, repoId); toast.info('Run queued', 'The worker picks it up in a few seconds.') }
     catch (e) { toast.error('Couldn’t queue a run', (e as Error).message) }
     setTimeout(() => setQueued(false), 4000)
+  }
+  const stop = async () => {
+    if (!user || !current || !live) return
+    if (stopArmed !== current.id) { setStopArmed(current.id); window.setTimeout(() => setStopArmed(null), 3500); return }
+    setStopArmed(null)
+    try { await stopRun(user.uid, repoId, current.id); toast.info('Run stopped', 'The agents finish what they’re on and start nothing new.') }
+    catch (e) { toast.error('Couldn’t stop the run', (e as Error).message) }
   }
 
   return (
@@ -83,6 +94,14 @@ export default function RepoView() {
               await removeRepo(repoId); navigate('/app/repos')
             }}><Roll>Remove</Roll></button>
           )}
+          <AnimatePresence initial={false}>
+            {live && (
+              <motion.button key="stop" className={`btn btn-line btn-stop ${stopArmed ? 'is-armed' : ''}`} onClick={stop}
+                initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.9 }} transition={{ duration: 0.3, ease: easeOut }}>
+                <span className="stop-square" aria-hidden="true" /><Roll>{stopArmed ? 'Sure? Stop it' : 'Stop'}</Roll>
+              </motion.button>
+            )}
+          </AnimatePresence>
           <button className="btn btn-green" onClick={runNow} disabled={busy}>
             {busy ? <><motion.span animate={{ rotate: 360 }} transition={{ repeat: Infinity, duration: 1.2, ease: 'linear' }} style={{ display: 'inline-block' }}>◐</motion.span> Agents working</> : <Roll>Run the swarm</Roll>}
           </button>
@@ -107,7 +126,7 @@ export default function RepoView() {
       <AnimatePresence mode="wait">
         <motion.div key={tab} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -6 }} transition={{ duration: 0.35, ease: easeOut }}>
           {tab === 'board' && <Lanes tasks={tasks} running={busy} allOpen={prefs?.lanes === 'all'} onOpen={(id) => navigate(`/app/repos/${repoId}/tasks/${id}`)} />}
-          {tab === 'handoffs' && <Handoffs repoId={repoId} tasks={tasks} onOpen={(id) => navigate(`/app/repos/${repoId}/tasks/${id}`)} />}
+          {tab === 'handoffs' && <Handoffs repoId={repoId} tasks={tasks} run={live ? current : undefined} onOpen={(id) => navigate(`/app/repos/${repoId}/tasks/${id}`)} />}
           {tab === 'activity' && <ActivityFeed repoId={repoId} />}
           {tab === 'tools' && <ToolCards repoId={repoId} />}
           {tab === 'runs' && <Runs runs={runs} />}
@@ -250,7 +269,7 @@ function Runs({ runs: data }: { runs: Run[] }) {
         <div className="runs">
           {data.map((r) => (
             <div key={r.id} className="run">
-              <span className={`pill ${r.status === 'done' ? 'tone-ok' : r.status === 'failed' ? 'tone-bad' : 'tone-warn'}`}>{r.status}</span>
+              <span className={`pill ${r.status === 'done' ? 'tone-ok' : r.status === 'failed' ? 'tone-bad' : r.status === 'stopped' ? 'tone-mute' : 'tone-warn'}`}>{r.status}</span>
               <div className="run-main">
                 <b>{r.trigger === 'connect' ? 'First run after connecting' : r.trigger?.startsWith('action:') ? `After you chose “${r.trigger.slice(7)}”` : 'Manual run'}</b>
                 <span>{r.error ? r.error : r.summary ? `${r.summary.ingested} new issues · ${r.summary.tasksMoved} tasks moved${r.summary.toolsWritten ? ` · ${r.summary.toolsWritten} new tools` : ''} · ${r.summary.llm || 'heuristics'} · ${r.summary.sandbox} sandbox` : r.progress ? `${r.progress.label} · ${r.progress.settled} of ${r.progress.tasks} tasks settled` : 'Waiting for a worker…'}</span>

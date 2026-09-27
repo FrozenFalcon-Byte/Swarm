@@ -14,7 +14,7 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="default" />
     <script>
       /* light or dark before the first paint (lib/theme.ts owns it after that) */
-      try { var m = localStorage.getItem('swarm:mode'); var d = m === 'dark' || (m !== 'light' && matchMedia('(prefers-color-scheme: dark)').matches);
+      try { var m = localStorage.getItem('swarm:mode'); var d = m === 'dark' || (m === 'system' && matchMedia('(prefers-color-scheme: dark)').matches); // light until someone chooses
         document.documentElement.dataset.theme = d ? 'dark' : 'light'; document.documentElement.style.colorScheme = d ? 'dark' : 'light' } catch (e) {}
     </script>
     <meta name="description" content="Swarm is a team of AI agents that triages, fixes, proves and reviews flaky tests in your repository, then waits for you to merge." />

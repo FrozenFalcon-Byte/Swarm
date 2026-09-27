@@ -23,12 +23,14 @@ from ..agents.base import Agent
 from ..board import Task
 from ..board.models import TaskState as Col
 from ..board.models import utcnow
+from ..board.states import can_transition
 from .cards import AGENTS, DONE, NEEDS_PERSON, NEXT_SKILL
 
 if TYPE_CHECKING:
     from .network import AgentNetwork
 
 log = logging.getLogger("swarm.a2a")
+MAX_CRASHES = 2  # errors in a row on one card before it goes to a person
 TASK_ID = re.compile(r"\btask-\d+\b")
 
 
@@ -119,8 +121,8 @@ class BoardAgentExecutor(AgentExecutor):
                 self._crashed(card, e)
                 await up.failed(say(f"{self.agent.name} hit an error on {card.task_id}: {e}"))
                 return
-            if card.artifacts.get("last_error"):  # it went through this time
-                self.network.board.update(card.task_id, self.agent.name, artifacts={"last_error": None})
+            if card.artifacts.get("last_error") or card.artifacts.get("crashes"):  # it went through this time
+                self.network.board.update(card.task_id, self.agent.name, artifacts={"last_error": None, "crashes": 0})
             if self.network.delay:
                 await asyncio.sleep(self.network.delay)
 
@@ -141,15 +143,25 @@ class BoardAgentExecutor(AgentExecutor):
             await up.complete(say(f"{after.task_id} is {after.state.value}."))
 
     def _crashed(self, card: Task, e: Exception) -> None:
-        """The card stays in its column, so the next run tries it again; until then it says what went wrong
-        instead of "tester is on it", and the run reports the error."""
+        """The first time, the card stays in its column and gets one more go; until then it says what went
+        wrong instead of "tester is on it", and the run reports the error. A second crash on the same card
+        hands it to a person: trying again would only crash again, round and round."""
         swarm = self.network.swarm
         what = f"{type(e).__name__}: {e}".strip()[:300]
         swarm._record(self.agent.name, f"error: {what}", card.task_id)
         swarm.errors.append({"agent": self.agent.name, "task_id": card.task_id, "error": what})
+        crashes = int(card.artifacts.get("crashes") or 0) + 1
+        error = {"agent": self.agent.name, "error": what, "ts": utcnow()}
+        board = self.network.board
         try:
-            self.network.board.update(card.task_id, self.agent.name, f"hit an error: {what}", assigned_agent=None,
-                                      artifacts={"last_error": {"agent": self.agent.name, "error": what, "ts": utcnow()}})
+            if crashes >= MAX_CRASHES and can_transition(card.state, Col.HUMAN_REVIEW):
+                board.transition(card.task_id, Col.HUMAN_REVIEW, self.agent.name, f"stopped after {crashes} errors: {what}",
+                                 note=f"The {self.agent.name} hit an error {crashes} times in a row, so the agents stopped "
+                                      f"trying: {what}. Have a look, then send it back to the swarm.",
+                                 assigned_agent=None, artifacts={"last_error": error, "crashes": 0})
+            else:
+                board.update(card.task_id, self.agent.name, f"hit an error: {what}", assigned_agent=None,
+                             artifacts={"last_error": error, "crashes": crashes})
         except Exception:
             log.exception("couldn't note the error on %s", card.task_id)
 

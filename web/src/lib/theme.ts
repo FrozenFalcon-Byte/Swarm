@@ -1,7 +1,8 @@
 import { useSyncExternalStore } from 'react'
 
-/* Light or dark, for the whole site. The choice lives in this browser (index.html reads it before the first
-   paint, so a dark page never flashes white), and "system" follows the device as it changes. Switching
+/* Light or dark, for the whole site. Everyone starts in light; the choice lives in this browser (index.html
+   reads it before the first paint, so a dark page never flashes white), and "system" follows the device as it
+   changes once someone picks it. Switching
    opens the new look as a circle from wherever you clicked, over the old one. */
 
 export type Mode = 'light' | 'dark' | 'system'
@@ -10,8 +11,8 @@ const media = () => window.matchMedia('(prefers-color-scheme: dark)')
 const listeners = new Set<() => void>()
 
 export function getMode(): Mode {
-  try { const m = localStorage.getItem(KEY); if (m === 'light' || m === 'dark') return m } catch { /* private mode */ }
-  return 'system'
+  try { const m = localStorage.getItem(KEY); if (m === 'light' || m === 'dark' || m === 'system') return m } catch { /* private mode */ }
+  return 'light'
 }
 export const resolve = (m: Mode = getMode()): 'light' | 'dark' => (m === 'system' ? (media().matches ? 'dark' : 'light') : m)
 
@@ -57,7 +58,7 @@ export function morph(commit: () => void | Promise<void>, at?: { x: number; y: n
 
 export function setMode(m: Mode, at?: { x: number; y: number }) {
   const before = resolve()
-  try { if (m === 'system') localStorage.removeItem(KEY); else localStorage.setItem(KEY, m) } catch { /* private mode */ }
+  try { localStorage.setItem(KEY, m) } catch { /* private mode */ }
   if (resolve(m) === before) { listeners.forEach((f) => f()); return }
   morph(apply, at)
 }
@@ -70,7 +71,7 @@ export function toggleMode(e?: { clientX: number; clientY: number }) {
 const subscribe = (f: () => void) => { listeners.add(f); return () => { listeners.delete(f) } }
 /** The chosen mode and what it comes to right now. */
 export function useMode() {
-  const mode = useSyncExternalStore(subscribe, getMode, () => 'system' as Mode)
+  const mode = useSyncExternalStore(subscribe, getMode, () => 'light' as Mode)
   const dark = useSyncExternalStore(subscribe, () => resolve() === 'dark', () => false)
   return { mode, dark }
 }

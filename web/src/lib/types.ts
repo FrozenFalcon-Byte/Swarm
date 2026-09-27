@@ -118,13 +118,13 @@ export interface Activity { id: string; ts: string; agent: string; message: stri
 export interface RunError { agent: string; task: string | null; error: string }
 /** What the worker says about a run while it goes: the phase, how far along, and what each agent is doing. */
 export interface RunProgress {
-  phase: 'queued' | 'preparing' | 'lab' | 'reading' | 'agents' | 'saving' | 'done' | 'failed'
+  phase: 'queued' | 'preparing' | 'lab' | 'reading' | 'agents' | 'saving' | 'done' | 'failed' | 'stopped'
   label: string; percent: number; tasks: number; settled: number
   agents: Record<string, { task: string | null; state: string; busy: boolean; text: string }>
   errors: RunError[]; updatedAt?: string
 }
 export interface Run {
-  id: string; status: 'queued' | 'running' | 'done' | 'failed'; trigger?: string; error?: string
+  id: string; status: 'queued' | 'running' | 'done' | 'failed' | 'stopped'; trigger?: string; error?: string; stopRequested?: boolean
   summary?: { ingested: number; tasksMoved: number; llm: string | null; sandbox: string; toolsWritten?: number; errors?: RunError[] }
   progress?: RunProgress
   createdAt?: { toDate(): Date }; finishedAt?: { toDate(): Date }

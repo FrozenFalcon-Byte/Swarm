@@ -30,3 +30,15 @@ def test_refuses_paths_outside_root(tmp_path):
     diff = "--- a/../evil.py\n+++ b/../evil.py\n@@ -0,0 +1 @@\n+boom\n"
     with pytest.raises(PatchError):
         apply_diff(diff, tmp_path / "root")
+
+
+@pytest.mark.parametrize("old,new", [
+    ("def a():\n    return 1", "def a():\n    return 2"),  # neither ends in a newline (model-written files often don't)
+    ("a\nb", "a\nb\nc\n"),
+    ("a\nb\n", "a\nc"),
+])
+def test_files_without_a_final_newline_round_trip(tmp_path, old, new):
+    (tmp_path / "m.py").write_text(old)
+    diff = make_diff({"m.py": (old, new)})
+    apply_diff(diff, tmp_path)
+    assert (tmp_path / "m.py").read_text() == new

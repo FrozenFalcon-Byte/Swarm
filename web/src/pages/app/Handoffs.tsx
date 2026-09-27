@@ -4,7 +4,7 @@ import { Roll } from '../../components/Roll'
 import { CodeDialog } from '../../components/CodeWindow'
 import { useA2A } from '../../lib/data'
 import { easeInOut, easeOut } from '../../lib/motion'
-import type { A2AEvent, Task } from '../../lib/types'
+import type { A2AEvent, Run, Task } from '../../lib/types'
 import { EmptyState, Section, StatePill, timeAgo } from './ui'
 
 /*
@@ -12,6 +12,8 @@ import { EmptyState, Section, StatePill, timeAgo } from './ui'
  * peer offers the skill the task needs next and sends it a message; the peer streams back what it's doing,
  * its result, and how it ended. This view is that traffic: the network on top (thicker = more messages),
  * replayed in order, and below it every conversation about one task, down to the JSON on the wire.
+ * While a run is going it's live instead: it follows each message as it's sent and marks the agents at work;
+ * once the run ends it goes back to replaying.
  */
 
 interface Spot { x: number; y: number; label: string; color: string; r: number; order: number }
@@ -81,7 +83,7 @@ function exchangesOf(events: A2AEvent[]): Exchange[] {
   return out
 }
 
-export function Handoffs({ repoId, tasks, onOpen, events: given }: { repoId?: string; tasks: Task[]; onOpen: (id: string) => void; events?: A2AEvent[] }) {
+export function Handoffs({ repoId, tasks, onOpen, events: given, run }: { repoId?: string; tasks: Task[]; onOpen: (id: string) => void; events?: A2AEvent[]; run?: Run }) {
   const live = useA2A(given ? undefined : repoId)
   const events = given || live.data
   const loading = !given && live.loading
@@ -107,12 +109,27 @@ export function Handoffs({ repoId, tasks, onOpen, events: given }: { repoId?: st
   const max = Math.max(1, ...edges.map((e) => e.n))
 
   const replay = shown.slice(-40)
+  // live: sit on the newest message and move on as each new one arrives; otherwise loop through them
+  const following = !!run && !paused
+  const newest = replay[replay.length - 1]
+  const newestKey = newest ? `${newest.ts}|${newest.from}|${newest.to}|${newest.task}` : ''
   useEffect(() => {
-    if (!replay.length || paused) return
+    if (following && replay.length) setStep(replay.length - 1)
+  }, [following, newestKey]) // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    if (!replay.length || paused || run) return
     const id = window.setInterval(() => setStep((s) => (s + 1) % replay.length), 2600)
     return () => window.clearInterval(id)
-  }, [replay.length, paused])
+  }, [replay.length, paused, run])
+  // the run ending hands over to the replay, from the start
+  const wasLive = useRef(!!run)
+  useEffect(() => {
+    if (wasLive.current && !run) { setStep(0); setPaused(false) }
+    wasLive.current = !!run
+  }, [run])
   const now = replay[step % Math.max(1, replay.length)]
+  const beat = `${step}|${now?.ts}|${now?.from}|${picked || ''}` // a new message (or step) plays its animation again
+  const busy = new Set(Object.entries(run?.progress?.agents || {}).filter(([, a]) => a.busy).map(([n]) => n))
 
   const withTraffic = useMemo(() => {
     const last = new Map<string, string>()
@@ -124,6 +141,15 @@ export function Handoffs({ repoId, tasks, onOpen, events: given }: { repoId?: st
   const curve = (a: string, b: string) => bend(nodes[a], nodes[b], L.vertical)
 
   if (loading) return null
+  if (!events.length && run) return (
+    <Section>
+      <div className="ho-waiting">
+        <span className="ho-live"><i />Live</span>
+        <b>{run.progress?.label || 'Starting'}</b>
+        <span className="muted">The agents haven’t sent each other anything yet. Their messages show up here the moment they do.</span>
+      </div>
+    </Section>
+  )
   if (!events.length) return (
     <EmptyState title="No agent traffic yet"
       text="Each agent is an A2A service. When they start on an issue, every message they send each other shows up here: who asked whom, what they said while working, what they handed back." />
@@ -131,9 +157,15 @@ export function Handoffs({ repoId, tasks, onOpen, events: given }: { repoId?: st
 
   return (
     <div className="handoffs">
-      <Section title={picked ? `How ${picked} moved` : 'Who talks to whom'} action={picked
-        ? <button className="btn btn-line btn-sm" onClick={() => setPicked(null)}><Roll>All tasks</Roll></button>
-        : <span className="muted">{all.filter((h) => h.kind === 'message').length} A2A messages about {withTraffic.length} tasks</span>}>
+      <Section title={picked ? `How ${picked} moved` : run ? 'Who’s talking now' : 'Who talks to whom'} action={
+        <span className="ho-head-act">
+          {run && (following
+            ? <span className="ho-live"><i />Live{run.progress ? ` · ${run.progress.percent}%` : ''}</span>
+            : <button className="btn btn-line btn-sm" onClick={() => setPaused(false)}><Roll>Back to live</Roll></button>)}
+          {picked
+            ? <button className="btn btn-line btn-sm" onClick={() => setPicked(null)}><Roll>All tasks</Roll></button>
+            : <span className="muted">{all.filter((h) => h.kind === 'message').length} A2A messages about {withTraffic.length} tasks</span>}
+        </span>}>
         <div className="ho-stage">
           <div className="ho-canvas" style={{ aspectRatio: `${L.w} / ${L.h}`, maxWidth: L.vertical ? 340 : undefined }}>
             <svg viewBox={`0 0 ${L.w} ${L.h}`} className={`ho-svg ${L.vertical ? 'ho-svg--v' : ''}`} role="img" aria-label="Messages between agents">
@@ -158,9 +190,10 @@ export function Handoffs({ repoId, tasks, onOpen, events: given }: { repoId?: st
                 const lw = label.length * 7.6 + 22
                 return (
                   <g key={id} transform={`translate(${p.x},${p.y})`}>
-                    <motion.g className={`ho-n ${used ? '' : 'idle'} ${lit ? 'lit' : ''} ${now?.to === id ? 'gets' : ''}`}
+                    <motion.g className={`ho-n ${used || busy.has(id) ? '' : 'idle'} ${lit ? 'lit' : ''} ${now?.to === id ? 'gets' : ''} ${busy.has(id) ? 'busy' : ''}`}
                       initial={{ scale: 0 }} animate={{ scale: 1 }} transition={{ type: 'spring', stiffness: 380, damping: 18, delay: 0.1 + i * 0.06 }}>
-                      {lit && <circle key={step} r={p.r} className="ho-pulse" style={{ stroke: p.color }} />}
+                      {lit && <circle key={beat} r={p.r} className="ho-pulse" style={{ stroke: p.color }} />}
+                      {busy.has(id) && <circle r={p.r + 6} className="ho-busy" style={{ stroke: p.color }} />}
                       <circle r={p.r} cx={3} cy={3} className="ho-shadow" />
                       <g className="ho-body">
                         <circle r={p.r} className={`ho-node ${id === 'human' ? 'ho-you' : ''}`} style={{ fill: p.color }} />
@@ -176,7 +209,7 @@ export function Handoffs({ repoId, tasks, onOpen, events: given }: { repoId?: st
                 )
               })}
               {now && (
-                <motion.g key={step + (picked || '')} style={{ offsetPath: `path("${curve(now.from, now.to).d}")`, offsetRotate: '0deg' }}
+                <motion.g key={beat} style={{ offsetPath: `path("${curve(now.from, now.to).d}")`, offsetRotate: '0deg' }}
                   initial={{ offsetDistance: '0%', scale: 0.3 }} animate={{ offsetDistance: '100%', scale: [0.3, 1.1, 1, 0.5] }}
                   transition={{ duration: 1.2, ease: easeInOut, scale: { duration: 1.2, times: [0, 0.25, 0.8, 1] } }}>
                   <rect x={-noteW(now.task) / 2} y={-11} width={noteW(now.task)} height={22} rx={11} className="ho-note" style={{ fill: nodes[now.from].color }} />
@@ -187,7 +220,7 @@ export function Handoffs({ repoId, tasks, onOpen, events: given }: { repoId?: st
             {!L.vertical && (
               <AnimatePresence mode="popLayout">
                 {now && (
-                  <motion.div key={step + (picked || '')} className="ho-bubble" style={{ left: `clamp(150px, ${(nodes[now.to].x / L.w) * 100}%, calc(100% - 150px))`, bottom: `${(1 - (nodes[now.to].y - nodes[now.to].r - 14) / L.h) * 100}%` }}
+                  <motion.div key={beat} className="ho-bubble" style={{ left: `clamp(150px, ${(nodes[now.to].x / L.w) * 100}%, calc(100% - 150px))`, bottom: `${(1 - (nodes[now.to].y - nodes[now.to].r - 14) / L.h) * 100}%` }}
                     initial={{ opacity: 0, y: 10, scale: 0.9 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: -6, scale: 0.96 }} transition={{ duration: 0.35, ease: easeOut, delay: 0.75 }}>
                     <b><i style={{ background: nodes[now.from].color }} />{nodes[now.from].label}<span className="ho-to">to</span>{nodes[now.to].label}<span className="mono">{timeAgo(now.ts)}</span></b>
                     <span>{now.text}</span>

@@ -117,6 +117,7 @@ class AgentNetwork:
         self._inflight: set[asyncio.Future] = set()
         self._carrying: Counter[str] = Counter()
         self._halt = False
+        self._stop_asked = False  # Stop pressed: unlike _halt, it lasts for this network's life
         self.app: Starlette | None = None
 
     # -- exchange log -------------------------------------------------------------
@@ -235,7 +236,7 @@ class AgentNetwork:
 
     def hand_off(self, sender: str, t: Task, a2a_task: str | None) -> str | None:
         """Called by an agent that just finished: pass the task to whoever offers the skill it needs now."""
-        if self._halt or (a2a_task and a2a_task in self.cancelled):
+        if self._halt or self._stop_asked or (a2a_task and a2a_task in self.cancelled):
             return None
         skill = NEXT_SKILL.get(t.state)
         peer = self.find(skill) if skill else None
@@ -271,7 +272,7 @@ class AgentNetwork:
                 return await self.run_until_idle(max_messages)
         start, seen = self.sent, set()
         while True:
-            if not self._halt:
+            if not (self._halt or self._stop_asked):
                 self.pump(seen)
             if not self._inflight:
                 break
@@ -281,6 +282,10 @@ class AgentNetwork:
             await asyncio.wait(set(self._inflight), return_when=asyncio.FIRST_COMPLETED)
         self._halt = False
         return self.sent - start
+
+    def halt(self) -> None:
+        """Start nothing new; run_until_idle returns once what's under way has finished."""
+        self._stop_asked = True
 
     def run_sync(self, max_messages: int = 400) -> int:
         """run_until_idle from ordinary code, including code that is itself inside an event loop."""

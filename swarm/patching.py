@@ -18,15 +18,15 @@ def make_diff(changes: dict[str, tuple[str, str]]) -> str:
         old, new = changes[path]
         if old == new:
             continue
-        out.extend(
-            difflib.unified_diff(
-                old.splitlines(keepends=True),
-                new.splitlines(keepends=True),
-                fromfile=f"a/{path}",
-                tofile=f"b/{path}",
-                n=3,
-            )
-        )
+        for line in difflib.unified_diff(
+            old.splitlines(keepends=True),
+            new.splitlines(keepends=True),
+            fromfile=f"a/{path}",
+            tofile=f"b/{path}",
+            n=3,
+        ):
+            # a last line with no newline would run into the next one; mark it the way git does
+            out.append(line if line.endswith("\n") else line + "\n\\ No newline at end of file\n")
     text = "".join(out)
     return text if text.endswith("\n") or not text else text + "\n"
 
@@ -56,7 +56,9 @@ def parse_diff(diff: str) -> dict[str, list[tuple[int, list[str]]]]:
         if hunk is not None and line[:1] in (" ", "-", "+"):
             hunk.append(line)
         elif hunk is not None and line.startswith("\\"):
-            continue
+            # "\ No newline at end of file": the line before it has no newline in the file itself
+            if hunk and hunk[-1].endswith("\n"):
+                hunk[-1] = hunk[-1][:-1]
     return files
 
 

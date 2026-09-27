@@ -63,6 +63,13 @@ service cloud.firestore {
         allow create: if isMember(repoId)
           && request.resource.data.status == 'queued'
           && request.resource.data.requestedBy == request.auth.uid;
+        // Stop: a member may end a run that's waiting or going; the worker sees stopRequested and winds down
+        allow update: if isMember(repoId)
+          && resource.data.status in ['queued', 'running']
+          && request.resource.data.status == 'stopped'
+          && request.resource.data.stopRequested == true
+          && request.resource.data.stopRequestedBy == request.auth.uid
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'stopRequested', 'stopRequestedBy', 'finishedAt']);
       }
       match /actions/{actionId} {
         allow read: if isMember(repoId);
