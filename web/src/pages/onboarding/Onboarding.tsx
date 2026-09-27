@@ -1,5 +1,6 @@
 import { AnimatePresence, motion } from 'motion/react'
 import { useEffect, useRef, useState } from 'react'
+import { flushSync } from 'react-dom'
 import { Navigate, useNavigate } from 'react-router-dom'
 import { useToast } from '../../components/Island'
 import { Logo } from '../../components/Logo'
@@ -7,8 +8,11 @@ import { PageTransition } from '../../components/PageTransition'
 import { Roll } from '../../components/Roll'
 import { Splash } from '../../components/Splash'
 import { useAuth } from '../../lib/auth'
-import { ONB_GOALS, ONB_ROLES } from '../../lib/types'
-import { finishOnboarding, saveOnboarding, useIsAdmin, useProfile, useRepos } from '../../lib/data'
+import { LookFx } from '../../components/LookFx'
+import { finishOnboarding, saveOnboarding, savePrefs, useIsAdmin, usePrefs, useProfile, useRepos } from '../../lib/data'
+import { THEMES } from '../../lib/looks'
+import { morph, setMode, useMode, type Mode } from '../../lib/theme'
+import type { Prefs } from '../../lib/types'
 import { easeOut } from '../../lib/motion'
 import type { Onboarding as Saved } from '../../lib/types'
 import ConnectRepo from '../app/ConnectRepo'
@@ -17,18 +21,16 @@ import './onboarding.css'
 /*
  * First-time setup. It runs once: until it is finished, every visit to the dashboard lands back here, at the
  * step you left (the step and your answers are saved on your profile as you go). Steps change with the same
- * bellows as the rest of the app.
+ * bellows as the rest of the app. Every question maps to something real: your name, a repository, and the
+ * settings you'd otherwise hunt for later (theme, light or dark, where the dashboard opens, alerts, merging).
  */
 
 const STEPS = [
   { title: 'Your name', colour: 'var(--triager)' },
-  { title: 'What you need', colour: 'var(--coder)' },
-  { title: 'Meet the agents', colour: 'var(--tester)' },
-  { title: 'A repository', colour: 'var(--reviewer)' },
-  { title: 'How you review', colour: 'var(--lab)' },
+  { title: 'Meet the agents', colour: 'var(--coder)' },
+  { title: 'A repository', colour: 'var(--tester)' },
+  { title: 'Make it yours', colour: 'var(--reviewer)' },
 ]
-const ROLES = ONB_ROLES
-const GOALS = ONB_GOALS
 
 export default function Onboarding() {
   const { user } = useAuth()
@@ -46,18 +48,16 @@ function Flow({ uid, initialName, saved }: { uid: string; initialName: string; s
   const admin = useIsAdmin(uid)
   const [step, setStep] = useState(Math.min(saved.step ?? 0, STEPS.length - 1))
   const [name, setName] = useState(initialName)
-  const [role, setRole] = useState(saved.role || '')
-  const [goals, setGoals] = useState<string[]>(saved.goals || [])
   const [repoId, setRepoId] = useState<string | null>(saved.repoId || null)
-  const [review, setReview] = useState<'every' | 'batch'>(saved.review || 'every')
+  const prefs = usePrefs(uid) ?? {}
   const [saving, setSaving] = useState(false)
   const hasRepo = !!repoId || repos.length > 0
 
-  const can = [name.trim().length > 0, !!role && goals.length > 0, true, hasRepo, true][step]
+  const can = [name.trim().length > 0, true, hasRepo, true][step]
   const go = async (to: number) => {
     setSaving(true)
     try {
-      await saveOnboarding(uid, { step: to, role, goals, repoId, review }, name.trim())
+      await saveOnboarding(uid, { step: to, repoId }, name.trim())
       if (step === 0 && name.trim() !== user?.displayName) await updateName(name.trim())
       setStep(to)
     } catch (e) { toast.error('Couldn’t save that', (e as Error).message) }
@@ -66,7 +66,7 @@ function Flow({ uid, initialName, saved }: { uid: string; initialName: string; s
   const finish = async () => {
     setSaving(true)
     try {
-      await saveOnboarding(uid, { step: STEPS.length - 1, role, goals, repoId, review }, name.trim())
+      await saveOnboarding(uid, { step: STEPS.length - 1, repoId }, name.trim())
       await finishOnboarding(uid)
       toast.ok(`Welcome, ${name.trim().split(' ')[0]}`, 'Your dashboard is ready.')
       navigate(repoId ? `/app/repos/${repoId}` : '/app', { replace: true })
@@ -74,7 +74,7 @@ function Flow({ uid, initialName, saved }: { uid: string; initialName: string; s
   }
 
   return (
-    <div className="onb">
+    <div className="onb" style={{ ['--font-sans' as string]: prefs.font && prefs.font !== 'mono' ? `var(--ff-${prefs.font})` : undefined }}>
       <aside className="onb-rail">
         <Logo to="/" />
         <div className="onb-rail-mid">
@@ -98,6 +98,7 @@ function Flow({ uid, initialName, saved }: { uid: string; initialName: string; s
       </aside>
 
       <main className="onb-main">
+        <LookFx look={prefs.look ?? 'plain'} />
         <div className="onb-progress" aria-hidden="true">
           <motion.span animate={{ scaleX: (step + 1) / STEPS.length }} transition={{ duration: 0.8, ease: easeOut }} />
         </div>
@@ -106,18 +107,17 @@ function Flow({ uid, initialName, saved }: { uid: string; initialName: string; s
             <section className="onb-card">
               <p className="onb-count mono">Step {step + 1} of {STEPS.length}</p>
               {step === 0 && <StepName name={name} setName={setName} onEnter={() => can && go(1)} />}
-              {step === 1 && <StepNeeds role={role} setRole={setRole} goals={goals} setGoals={setGoals} />}
-              {step === 2 && <StepAgents />}
-              {step === 3 && <StepRepo repos={repos.length} loading={reposLoading} repoId={repoId} admin={!!admin}
-                onAdded={async (id) => { setRepoId(id); await saveOnboarding(uid, { step: 3, repoId: id }); toast.ok('Repository added', 'The agents start on it as soon as you finish.') }} />}
-              {step === 4 && <StepReview review={review} setReview={setReview} />}
+              {step === 1 && <StepAgents />}
+              {step === 2 && <StepRepo repos={repos.length} loading={reposLoading} repoId={repoId} admin={!!admin}
+                onAdded={async (id) => { setRepoId(id); await saveOnboarding(uid, { step: 2, repoId: id }); toast.ok('Repository added', 'The agents start on it as soon as you finish.') }} />}
+              {step === 3 && <StepYours uid={uid} prefs={prefs} />}
 
               <div className="onb-nav">
                 {step > 0 && <button className="btn btn-line" onClick={() => go(step - 1)} disabled={saving}><Roll>Back</Roll></button>}
                 {step < STEPS.length - 1
                   ? <button className="btn btn-dark onb-next" onClick={() => go(step + 1)} disabled={!can || saving}><Roll>{saving ? 'Saving…' : 'Continue'}</Roll></button>
                   : <button className="btn btn-dark onb-next" onClick={finish} disabled={saving}><Roll>{saving ? 'Opening your dashboard…' : 'Open my dashboard'}</Roll></button>}
-                {!can && step === 3 && <span className="muted">Add a repository, or try the demo, to go on.</span>}
+                {!can && step === 2 && <span className="muted">Add a repository, or try the demo, to go on.</span>}
               </div>
             </section>
           </PageTransition>
@@ -151,34 +151,6 @@ function StepName({ name, setName, onEnter }: { name: string; setName: (s: strin
       <Rise className="onb-field">
         <label htmlFor="onb-name">Your name</label>
         <input id="onb-name" ref={ref} value={name} onChange={(e) => setName(e.target.value.slice(0, 60))} onKeyDown={(e) => { if (e.key === 'Enter') onEnter() }} placeholder="Ada Lovelace" autoComplete="name" />
-      </Rise>
-    </>
-  )
-}
-
-function StepNeeds({ role, setRole, goals, setGoals }: { role: string; setRole: (s: string) => void; goals: string[]; setGoals: (g: string[]) => void }) {
-  return (
-    <>
-      <Heading title="What brings you here?" sub="So the dashboard shows what matters to you first. Pick one, then as many goals as fit." />
-      <Rise className="onb-group">
-        <span className="onb-label">You</span>
-        <div className="onb-options">
-          {ROLES.map((r) => (
-            <button key={r} className={`onb-option ${role === r ? 'on' : ''}`} onClick={() => setRole(r)} aria-pressed={role === r}>
-              <span className="onb-radio" />{r}
-            </button>
-          ))}
-        </div>
-      </Rise>
-      <Rise className="onb-group" i={1}>
-        <span className="onb-label">Goals</span>
-        <div className="onb-options">
-          {GOALS.map((g) => (
-            <button key={g} className={`onb-option ${goals.includes(g) ? 'on' : ''}`} onClick={() => setGoals(goals.includes(g) ? goals.filter((x) => x !== g) : [...goals, g])} aria-pressed={goals.includes(g)}>
-              <span className="onb-check"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3.2" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12l5 5L20 7" /></svg></span>{g}
-            </button>
-          ))}
-        </div>
       </Rise>
     </>
   )
@@ -230,22 +202,71 @@ function StepRepo({ repos, loading, repoId, admin, onAdded }: { repos: number; l
   )
 }
 
-function StepReview({ review, setReview }: { review: 'every' | 'batch'; setReview: (r: 'every' | 'batch') => void }) {
-  const opts = [
-    { id: 'every' as const, t: 'Show me each fix as it’s ready', d: 'Fixes appear under “Waiting for you” one by one, with the evidence.' },
-    { id: 'batch' as const, t: 'I’ll go through them in batches', d: 'The overview groups everything waiting for you in one place.' },
-  ]
+const SUN = <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><circle cx="12" cy="12" r="4.2" />{[0, 45, 90, 135, 180, 225, 270, 315].map((r) => <path key={r} d="M12 2.6v2.2" transform={`rotate(${r} 12 12)`} />)}</svg>
+const MOON = <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinejoin="round"><path d="M19.5 14.6A7.8 7.8 0 0 1 9.4 4.5a7.8 7.8 0 1 0 10.1 10.1Z" /></svg>
+const AUTO = <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="8" /><path d="M12 4a8 8 0 0 1 0 16Z" fill="currentColor" /></svg>
+
+/** The settings people otherwise go looking for, asked once. Each applies the moment you pick it. */
+function StepYours({ uid, prefs }: { uid: string; prefs: Prefs }) {
+  const toast = useToast()
+  const { mode } = useMode()
+  const save = (p: Prefs) => savePrefs(uid, p).catch(() => toast.error('Couldn’t save that', 'Check your connection and try again.'))
+  const look = prefs.look ?? 'plain'
+  const start = prefs.startPage ?? 'overview'
+  const notify = async () => {
+    if (prefs.notify) return save({ notify: false })
+    if (!('Notification' in window)) return toast.error('Not available here', 'This browser can’t show notifications.')
+    const p = await Notification.requestPermission()
+    if (p !== 'granted') return toast.error('Notifications are blocked', 'Allow them for this site in your browser settings.')
+    save({ notify: true })
+  }
   return (
     <>
-      <Heading title="How do you review?" sub="The agents never merge on their own. A fix waits for you with its diff, the test evidence and the reviewer’s checks." />
-      <Rise className="onb-options onb-options--big">
-        {opts.map((o) => (
-          <button key={o.id} className={`onb-option ${review === o.id ? 'on' : ''}`} onClick={() => setReview(o.id)} aria-pressed={review === o.id}>
-            <span className="onb-radio" /><span><b>{o.t}</b><span className="muted">{o.d}</span></span>
-          </button>
-        ))}
+      <Heading title="Make it yours" sub="A few choices that take effect right away. Every one of them is in Settings later." />
+      <Rise className="onb-group">
+        <span className="onb-label">Theme</span>
+        <div className="onb-themes" role="radiogroup" aria-label="Theme">
+          {THEMES.map((t) => (
+            <button key={t.id} role="radio" aria-checked={look === t.id} className={`onb-theme canvas-${t.look.canvas} ${look === t.id ? 'on' : ''}`} data-accent={t.look.accent}
+              onClick={(e) => look !== t.id && morph(() => flushSync(() => { void save(t.look) }), { x: e.clientX, y: e.clientY })}>
+              <span className="onb-theme-face"><LookFx look={t.id} mini /><b style={{ fontFamily: `var(--ff-${t.look.font})` }}>Aa</b></span>
+              <span className="onb-theme-name">{t.name}</span>
+            </button>
+          ))}
+        </div>
       </Rise>
-      <Rise i={1}><p className="muted onb-note">That’s everything. You can change any of this later in Settings.</p></Rise>
+      <Rise className="onb-group" i={1}>
+        <span className="onb-label">Light or dark</span>
+        <div className="onb-options onb-options--three">
+          {([['light', 'Light', SUN], ['dark', 'Dark', MOON], ['system', 'Match my device', AUTO]] as const).map(([id, label, icon]) => (
+            <button key={id} className={`onb-option ${mode === id ? 'on' : ''}`} aria-pressed={mode === id}
+              onClick={(e) => setMode(id as Mode, { x: e.clientX, y: e.clientY })}><span className="onb-ic">{icon}</span>{label}</button>
+          ))}
+        </div>
+      </Rise>
+      <Rise className="onb-group" i={2}>
+        <span className="onb-label">When you sign in, open</span>
+        <div className="onb-options onb-options--three">
+          {([['overview', 'Overview', 'Everything waiting for you'], ['repos', 'Repositories', 'All your repos at once'], ['last', 'My last repo', 'Back where you were']] as const).map(([id, label, hint]) => (
+            <button key={id} className={`onb-option ${start === id ? 'on' : ''}`} aria-pressed={start === id} onClick={() => save({ startPage: id })}>
+              <span className="onb-radio" /><span><b>{label}</b><span className="muted">{hint}</span></span>
+            </button>
+          ))}
+        </div>
+      </Rise>
+      <Rise className="onb-group" i={3}>
+        <span className="onb-label">When a fix is ready</span>
+        <div className="onb-options">
+          <button className={`onb-option ${prefs.notify ? 'on' : ''}`} aria-pressed={!!prefs.notify} onClick={() => void notify()}>
+            <span className="onb-check"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3.2" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12l5 5L20 7" /></svg></span>
+            <span><b>Notify me</b><span className="muted">A browser notification when a fix waits for you</span></span>
+          </button>
+          <button className={`onb-option ${(prefs.confirm ?? 'ask') === 'ask' ? 'on' : ''}`} aria-pressed={(prefs.confirm ?? 'ask') === 'ask'} onClick={() => save({ confirm: (prefs.confirm ?? 'ask') === 'ask' ? 'off' : 'ask' })}>
+            <span className="onb-check"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3.2" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12l5 5L20 7" /></svg></span>
+            <span><b>Ask before merging</b><span className="muted">One more check before a fix goes in</span></span>
+          </button>
+        </div>
+      </Rise>
     </>
   )
 }

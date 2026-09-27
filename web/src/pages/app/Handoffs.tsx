@@ -1,5 +1,5 @@
 import { AnimatePresence, motion } from 'motion/react'
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Roll } from '../../components/Roll'
 import { CodeDialog } from '../../components/CodeWindow'
 import { useA2A } from '../../lib/data'
@@ -109,7 +109,7 @@ export function Handoffs({ repoId, tasks, onOpen, events: given }: { repoId?: st
   const replay = shown.slice(-40)
   useEffect(() => {
     if (!replay.length || paused) return
-    const id = window.setInterval(() => setStep((s) => (s + 1) % replay.length), 1700)
+    const id = window.setInterval(() => setStep((s) => (s + 1) % replay.length), 2600)
     return () => window.clearInterval(id)
   }, [replay.length, paused])
   const now = replay[step % Math.max(1, replay.length)]
@@ -135,79 +135,84 @@ export function Handoffs({ repoId, tasks, onOpen, events: given }: { repoId?: st
         ? <button className="btn btn-line btn-sm" onClick={() => setPicked(null)}><Roll>All tasks</Roll></button>
         : <span className="muted">{all.filter((h) => h.kind === 'message').length} A2A messages about {withTraffic.length} tasks</span>}>
         <div className="ho-stage">
-          <svg viewBox={`0 0 ${L.w} ${L.h}`} className={`ho-svg ${L.vertical ? 'ho-svg--v' : ''}`} role="img" aria-label="Messages between agents">
-            <defs>
-              <marker id="ho-arrow" viewBox="0 0 10 10" refX="7" refY="5" markerWidth="9" markerHeight="9" markerUnits="userSpaceOnUse" orient="auto">
-                <path d="M0,1 L9,5 L0,9 z" className="ho-arrowhead" />
-              </marker>
-              <marker id="ho-arrow-on" viewBox="0 0 10 10" refX="7" refY="5" markerWidth="9" markerHeight="9" markerUnits="userSpaceOnUse" orient="auto">
-                <path d="M0,1 L9,5 L0,9 z" className="ho-arrowhead on" />
-              </marker>
-            </defs>
-            {edges.map((e) => {
-              const c = curve(e.from, e.to)
-              const active = now && now.from === e.from && now.to === e.to
-              return (
-                <g key={`${e.from}>${e.to}`} className={`ho-e ${active ? 'on' : ''}`}>
-                  <motion.path d={c.d} className={`ho-edge ${active ? 'on' : ''} ho-${e.kind}`} strokeWidth={1.5 + (e.n / max) * 2.5}
-                    markerEnd={active ? 'url(#ho-arrow-on)' : 'url(#ho-arrow)'}
-                    initial={{ pathLength: 0, opacity: 0 }} animate={{ pathLength: 1, opacity: 1 }} transition={{ duration: 0.9, ease: easeInOut }} />
-                  <g className="ho-count" transform={`translate(${c.lx},${c.ly})`}>
-                    <rect x={-13} y={-10} width={26} height={20} rx={10} /><text dy="4">{e.n}</text>
+          <div className="ho-canvas" style={{ aspectRatio: `${L.w} / ${L.h}`, maxWidth: L.vertical ? 340 : undefined }}>
+            <svg viewBox={`0 0 ${L.w} ${L.h}`} className={`ho-svg ${L.vertical ? 'ho-svg--v' : ''}`} role="img" aria-label="Messages between agents">
+              {edges.map((e, i) => {
+                const c = curve(e.from, e.to)
+                const active = now && now.from === e.from && now.to === e.to
+                return (
+                  <g key={`${e.from}>${e.to}`} className={`ho-e ho-${e.kind} ${active ? 'on' : ''}`} style={{ ['--c' as string]: nodes[e.from].color }}>
+                    <motion.path d={c.d} className="ho-lane" strokeWidth={5 + (e.n / max) * 7}
+                      initial={{ pathLength: 0 }} animate={{ pathLength: 1 }} transition={{ duration: 0.9, ease: easeInOut, delay: 0.2 + i * 0.05 }} />
+                    <path d={c.d} className="ho-flow" />
+                    <g className="ho-count" transform={`translate(${c.lx},${c.ly})`}>
+                      <circle r={11} /><text dy="4">{e.n}</text>
+                    </g>
                   </g>
-                </g>
-              )
-            })}
-            {now && (
-              <motion.g key={step + (picked || '')} style={{ offsetPath: `path("${curve(now.from, now.to).d}")`, offsetRotate: '0deg' }}
-                initial={{ offsetDistance: '0%', scale: 0.4 }} animate={{ offsetDistance: '100%', scale: 1 }} transition={{ duration: 1.15, ease: easeInOut }}>
-                <rect x={-10} y={-7} width={20} height={14} rx={3} className="ho-envelope" style={{ fill: nodes[now.from].color }} />
-                <path d="M-10,-6 L0,1.5 L10,-6" className="ho-envelope-flap" />
-              </motion.g>
-            )}
-            {Object.entries(nodes).map(([id, p]) => {
-              const lit = now && (now.from === id || now.to === id)
-              const used = all.some((h) => h.from === id || h.to === id)
-              const label = p.label.length > 14 ? p.label.slice(0, 13) + '…' : p.label
-              return (
-                <g key={id} transform={`translate(${p.x},${p.y})`} className={`ho-n ${used ? '' : 'idle'}`}>
-                  <motion.circle r={p.r} className={`ho-node ${id === 'human' ? 'ho-you' : ''}`} style={{ fill: p.color }}
-                    animate={{ scale: lit ? 1.12 : 1 }} transition={{ type: 'spring', stiffness: 300, damping: 18 }} />
-                  {id === 'intake' && <g transform="translate(-9,-9) scale(0.75)"><path className="ho-gh" d={GITHUB} /></g>}
-                  {id === 'human' && <g className="ho-glyph"><circle cy={-4} r={4.2} /><path d="M-8,9 a8,7 0 0,1 16,0" /></g>}
-                  {L.vertical
-                    ? <text x={-p.r - 12} y={5} className="ho-label" textAnchor="end">{label}</text>
-                    : <text y={p.r + 24} className="ho-label">{label}</text>}
-                </g>
-              )
-            })}
-          </svg>
-        </div>
-        <div className="ho-now" aria-live="polite">
-          <div className="ho-now-ctl">
-            <button className="icon-btn" onClick={() => setStep((s) => (s - 1 + replay.length) % Math.max(1, replay.length))} aria-label="Previous message">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M15 18l-6-6 6-6" /></svg>
-            </button>
-            <button className="icon-btn ho-play" onClick={() => setPaused((x) => !x)} aria-label={paused ? 'Play' : 'Pause'}>
-              {paused ? <svg width="14" height="14" viewBox="0 0 24 24"><path d="M7 4l13 8-13 8z" fill="currentColor" /></svg>
-                : <svg width="14" height="14" viewBox="0 0 24 24"><path d="M6 4h4v16H6zM14 4h4v16h-4z" fill="currentColor" /></svg>}
-            </button>
-            <button className="icon-btn" onClick={() => setStep((s) => (s + 1) % Math.max(1, replay.length))} aria-label="Next message">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 6l6 6-6 6" /></svg>
-            </button>
-            <span className="mono muted ho-now-n">{replay.length ? (step % replay.length) + 1 : 0}/{replay.length}</span>
-          </div>
-          <div className="ho-now-msg">
-            <AnimatePresence mode="wait" initial={false}>
+                )
+              })}
+              {Object.entries(nodes).map(([id, p], i) => {
+                const lit = !!now && (now.from === id || now.to === id)
+                const used = all.some((h) => h.from === id || h.to === id)
+                const label = p.label.length > 14 ? p.label.slice(0, 13) + '…' : p.label
+                const lw = label.length * 7.6 + 22
+                return (
+                  <g key={id} transform={`translate(${p.x},${p.y})`}>
+                    <motion.g className={`ho-n ${used ? '' : 'idle'} ${lit ? 'lit' : ''} ${now?.to === id ? 'gets' : ''}`}
+                      initial={{ scale: 0 }} animate={{ scale: 1 }} transition={{ type: 'spring', stiffness: 380, damping: 18, delay: 0.1 + i * 0.06 }}>
+                      {lit && <circle key={step} r={p.r} className="ho-pulse" style={{ stroke: p.color }} />}
+                      <circle r={p.r} cx={3} cy={3} className="ho-shadow" />
+                      <g className="ho-body">
+                        <circle r={p.r} className={`ho-node ${id === 'human' ? 'ho-you' : ''}`} style={{ fill: p.color }} />
+                        {id === 'intake' && <g transform="translate(-9,-9) scale(0.75)"><path className="ho-gh" d={GITHUB} /></g>}
+                        {id === 'human' && <g className="ho-glyph"><circle cy={-4} r={4.2} /><path d="M-8,9 a8,7 0 0,1 16,0" /></g>}
+                        {id !== 'intake' && id !== 'human' && <g className="ho-eyes"><circle cx={-5} cy={-2} r={2.2} /><circle cx={5} cy={-2} r={2.2} /></g>}
+                      </g>
+                    </motion.g>
+                    {L.vertical
+                      ? <text x={-p.r - 14} y={5} className="ho-label" textAnchor="end">{label}</text>
+                      : <g className={`ho-tag ${lit ? 'lit' : ''}`} transform={`translate(0,${p.r + 22})`}><rect x={-lw / 2} y={-12} width={lw} height={24} rx={12} /><text dy="4.5">{label}</text></g>}
+                  </g>
+                )
+              })}
               {now && (
-                <motion.div key={step} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -6 }} transition={{ duration: 0.3, ease: easeOut }}>
-                  <b><i style={{ background: nodes[now.from].color }} />{nodes[now.from].label}<span className="ho-to">→</span><i style={{ background: nodes[now.to].color }} />{nodes[now.to].label}
-                    <span className="mono muted">{now.task} · {timeAgo(now.ts)}</span></b>
-                  <span>{now.text}</span>
-                </motion.div>
+                <motion.g key={step + (picked || '')} style={{ offsetPath: `path("${curve(now.from, now.to).d}")`, offsetRotate: '0deg' }}
+                  initial={{ offsetDistance: '0%', scale: 0.3 }} animate={{ offsetDistance: '100%', scale: [0.3, 1.1, 1, 0.5] }}
+                  transition={{ duration: 1.2, ease: easeInOut, scale: { duration: 1.2, times: [0, 0.25, 0.8, 1] } }}>
+                  <rect x={-noteW(now.task) / 2} y={-11} width={noteW(now.task)} height={22} rx={11} className="ho-note" style={{ fill: nodes[now.from].color }} />
+                  <text dy="4" className="ho-note-t">{short(now.task)}</text>
+                </motion.g>
               )}
-            </AnimatePresence>
+            </svg>
+            {!L.vertical && (
+              <AnimatePresence mode="popLayout">
+                {now && (
+                  <motion.div key={step + (picked || '')} className="ho-bubble" style={{ left: `clamp(150px, ${(nodes[now.to].x / L.w) * 100}%, calc(100% - 150px))`, bottom: `${(1 - (nodes[now.to].y - nodes[now.to].r - 14) / L.h) * 100}%` }}
+                    initial={{ opacity: 0, y: 10, scale: 0.9 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: -6, scale: 0.96 }} transition={{ duration: 0.35, ease: easeOut, delay: 0.75 }}>
+                    <b><i style={{ background: nodes[now.from].color }} />{nodes[now.from].label}<span className="ho-to">to</span>{nodes[now.to].label}<span className="mono">{timeAgo(now.ts)}</span></b>
+                    <span>{now.text}</span>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            )}
           </div>
+          {L.vertical && now && (
+            <div className="ho-now-msg">
+              <b><i style={{ background: nodes[now.from].color }} />{nodes[now.from].label}<span className="ho-to">to</span><i style={{ background: nodes[now.to].color }} />{nodes[now.to].label}</b>
+              <span>{now.text}</span>
+            </div>
+          )}
+        </div>
+        <div className="ho-tape-row" aria-live="polite">
+          <button className="ho-play" onClick={() => setPaused((x) => !x)} aria-label={paused ? 'Play' : 'Pause'}>
+            <AnimatePresence mode="wait" initial={false}>
+              <motion.svg key={paused ? 'play' : 'pause'} width="14" height="14" viewBox="0 0 24 24" initial={{ scale: 0, rotate: -90 }} animate={{ scale: 1, rotate: 0 }} exit={{ scale: 0, rotate: 90 }} transition={{ duration: 0.2 }}>
+                {paused ? <path d="M7 4l13 8-13 8z" fill="currentColor" /> : <path d="M6 4h4v16H6zM14 4h4v16h-4z" fill="currentColor" />}
+              </motion.svg>
+            </AnimatePresence>
+          </button>
+          <Tape hops={replay} at={step % Math.max(1, replay.length)} nodes={nodes} onPick={(i) => { setStep(i); setPaused(true) }} />
+          <span className="mono muted ho-now-n">{replay.length ? (step % replay.length) + 1 : 0}/{replay.length}</span>
         </div>
       </Section>
 
@@ -241,7 +246,7 @@ export function Handoffs({ repoId, tasks, onOpen, events: given }: { repoId?: st
         <Section title={focus ? `Conversation · ${focus}` : 'Conversation'} action={<span className="muted mono">context swarm-{focus}</span>}>
           <ol className="a2a-thread">
             {convo.map((x, i) => (
-              <motion.li key={x.msg.id} className="a2a-x" initial={{ opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4, ease: easeOut, delay: Math.min(i, 8) * 0.04 }}>
+              <motion.li key={x.msg.id} className="a2a-x" style={{ ['--c' as string]: nodes[x.msg.from]?.color || 'var(--grey-7)' }} initial={{ opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4, ease: easeOut, delay: Math.min(i, 8) * 0.04 }}>
                 <header>
                   <Who id={x.msg.from} nodes={nodes} /><span className="a2a-arrow">→</span><Who id={x.msg.to} nodes={nodes} />
                   <span className="muted mono a2a-ts">{x.msg.ts?.slice(11, 19)}</span>
@@ -274,6 +279,29 @@ export function Handoffs({ repoId, tasks, onOpen, events: given }: { repoId?: st
     </div>
   )
 }
+
+/** Every message in the replay as a strip of little chips (who sent it, to whom): the playing one is marked, and
+ *  the strip keeps it in view. Click any chip to jump there. */
+function Tape({ hops, at, nodes, onPick }: { hops: Hop[]; at: number; nodes: Record<string, Spot>; onPick: (i: number) => void }) {
+  const ref = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    const el = ref.current, chip = el?.children[at] as HTMLElement | undefined
+    if (el && chip) el.scrollTo({ left: chip.offsetLeft - el.clientWidth / 2 + chip.offsetWidth / 2, behavior: 'smooth' })
+  }, [at])
+  return (
+    <div className="ho-tape" ref={ref} data-lenis-prevent>
+      {hops.map((h, i) => (
+        <button key={i} className={`ho-chip ${i === at ? 'on' : ''} ${i < at ? 'past' : ''}`} onClick={() => onPick(i)} title={`${nodes[h.from]?.label} to ${nodes[h.to]?.label}: ${h.text}`}>
+          {i === at && <motion.span layoutId="ho-chip-on" className="ho-chip-on" transition={{ type: 'spring', stiffness: 420, damping: 32 }} />}
+          <i style={{ background: nodes[h.from]?.color }} /><i style={{ background: nodes[h.to]?.color }} />
+        </button>
+      ))}
+    </div>
+  )
+}
+
+const short = (task: string) => (task.length > 8 ? task.slice(0, 7) + '…' : task)
+const noteW = (task: string) => short(task).length * 7 + 20
 
 function Who({ id, nodes }: { id: string; nodes: Record<string, Spot> }) {
   const n = nodes[id]

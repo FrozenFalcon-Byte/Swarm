@@ -1,11 +1,15 @@
 import { AnimatePresence, motion } from 'motion/react'
 import { useEffect, useState } from 'react'
+import { flushSync } from 'react-dom'
 import { useToast } from '../../components/Island'
 import { Select } from '../../components/Select'
 import { useAuth } from '../../lib/auth'
-import { savePrefs, useProfile, useRepos } from '../../lib/data'
+import { savePrefs, usePrefs, useRepos } from '../../lib/data'
 import type { Prefs } from '../../lib/types'
 import { pop } from '../../lib/sound'
+import { LookFx } from '../../components/LookFx'
+import { morph, setMode, useMode, type Mode } from '../../lib/theme'
+import { FONTS, THEMES } from '../../lib/looks'
 import { NAV } from './nav'
 import { PrefRow, Seg } from './ProfileExtras'
 import { Section } from './ui'
@@ -17,28 +21,20 @@ const ACCENTS: [NonNullable<Prefs['accent']>, string, string][] = [
   ['green', 'Mint', 'var(--green)'], ['sky', 'Sky', 'var(--coder)'], ['pink', 'Blush', 'var(--lab)'],
   ['yellow', 'Sun', 'var(--triager)'], ['coral', 'Coral', 'var(--tester)'], ['ink', 'Ink', 'var(--ink)'],
 ]
-// whole looks in one click: each sets the colour, canvas, typeface and corners together
-const THEMES: { id: string; name: string; look: Prefs; bg: string; dot: string; font: string; r: number }[] = [
-  { id: 'swarm', name: 'Swarm', look: { accent: 'green', canvas: 'white', font: 'grotesk', corners: 'round' }, bg: '#ffffff', dot: 'var(--green)', font: 'var(--font-sans)', r: 14 },
-  { id: 'studio', name: 'Studio', look: { accent: 'ink', canvas: 'mist', font: 'mono', corners: 'sharp' }, bg: '#f6f8fa', dot: 'var(--ink)', font: 'var(--font-mono)', r: 4 },
-  { id: 'paper', name: 'Paper', look: { accent: 'coral', canvas: 'paper', font: 'grotesk', corners: 'soft' }, bg: '#fbf8f1', dot: 'var(--tester)', font: 'var(--font-sans)', r: 9 },
-  { id: 'candy', name: 'Candy', look: { accent: 'pink', canvas: 'white', font: 'rounded', corners: 'round' }, bg: '#ffffff', dot: 'var(--lab)', font: 'ui-rounded, "SF Pro Rounded", system-ui', r: 14 },
-  { id: 'harbour', name: 'Harbour', look: { accent: 'sky', canvas: 'mist', font: 'system', corners: 'soft' }, bg: '#f6f8fa', dot: 'var(--coder)', font: 'system-ui', r: 9 },
-  { id: 'sunny', name: 'Sunny', look: { accent: 'yellow', canvas: 'paper', font: 'rounded', corners: 'round' }, bg: '#fbf8f1', dot: 'var(--triager)', font: 'ui-rounded, "SF Pro Rounded", system-ui', r: 14 },
-]
 const exampleTime = (clock?: string) => new Date(2026, 0, 1, 14, 32).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit', hour12: clock === '12h' })
 const DEFAULTS: Prefs = {
-  accent: 'green', canvas: 'white', font: 'grotesk', corners: 'round', textSize: 'default', density: 'comfortable',
+  look: 'plain', accent: 'green', canvas: 'white', font: 'grotesk', corners: 'round', textSize: 'default', density: 'comfortable',
   sidebar: 'full', logo: 'alive', toasts: 'br', cursor: 'swarm', sounds: 'off', confirm: 'ask', times: 'relative', pins: [], motion: 'system', clock: '24h', weekStart: 'mon',
 }
 
 export function Appearance() {
   const { user } = useAuth()
   const toast = useToast()
-  const prefs = useProfile(user?.uid)?.prefs ?? {}
+  const prefs = usePrefs(user?.uid) ?? {}
   const { data: repos } = useRepos(user?.uid)
   const save = (patch: Prefs) => { if (user) savePrefs(user.uid, patch).catch(() => toast.error('Couldn’t save that', 'Check your connection and try again.')) }
   const accent = prefs.accent ?? 'green'
+  const { mode } = useMode()
   // the colour well updates the preview as you drag, and saves once you let go
   const [hex, setHex] = useState(prefs.accentHex || '#7c5cff')
   useEffect(() => { if (prefs.accentHex) setHex(prefs.accentHex) }, [prefs.accentHex])
@@ -55,20 +51,32 @@ export function Appearance() {
       <Section title="Look" action={<button className="link" onClick={reset}>Reset everything</button>}>
         <Preview prefs={{ ...prefs, accentHex: accent === 'custom' ? hex : prefs.accentHex }} />
         <div className="prefs">
+          <PrefRow title="Mode" text="Light or dark, for the whole site. Auto follows your device as it changes.">
+            <Seg id="ap-mode" value={mode} onPick={(v) => setMode(v as Mode)} options={[['light', 'Light'], ['dark', 'Dark'], ['system', 'Auto']]} />
+          </PrefRow>
           <div className="pref pref--stack">
-            <div className="pref-copy"><b>Themes</b><span>A whole look in one click. Fine-tune any part of it below.</span></div>
+            <div className="pref-copy"><b>Themes</b><span>A whole look in one click, each with a backdrop of its own. Fine-tune any part of it below.</span></div>
             <div className="ap-themes" role="radiogroup" aria-label="Theme">
               {THEMES.map((t) => {
-                const on = (Object.keys(t.look) as (keyof Prefs)[]).every((k) => (prefs[k] ?? DEFAULTS[k]) === t.look[k])
+                const on = (prefs.look ?? 'plain') === t.id
                 return (
-                  <motion.button key={t.id} role="radio" aria-checked={on} className={`ap-theme ${on ? 'on' : ''}`} whileTap={{ scale: 0.95 }}
-                    onClick={() => { save(t.look); if (!on) toast.ok(`${t.name} it is`, 'Colour, canvas, type and corners changed together.') }}>
-                    <span className="ap-theme-face" style={{ background: t.bg, borderRadius: t.r + 4 }}>
-                      <b style={{ fontFamily: t.font }}>Aa</b>
-                      <i style={{ background: t.dot, borderRadius: t.r > 6 ? '50%' : 3 }} />
-                      <em style={{ borderRadius: t.r / 2 }} /><em style={{ borderRadius: t.r / 2, width: '44%' }} />
+                  <motion.button key={t.id} role="radio" aria-checked={on} className={`ap-theme look-${t.id} canvas-${t.look.canvas} ${on ? 'on' : ''}`} data-accent={t.look.accent} whileTap={{ scale: 0.96 }}
+                    onClick={(e) => {
+                      if (on) return
+                      // painted synchronously inside the transition (the save shows before Firestore answers)
+                      morph(() => flushSync(() => save(t.look)), { x: e.clientX, y: e.clientY })
+                      toast.ok(`${t.name} it is`, t.says + '.')
+                    }}>
+                    <span className="ap-theme-face">
+                      <LookFx look={t.id} mini />
+                      <span className="ap-theme-ui" style={{ fontFamily: `var(--ff-${t.look.font})` }}>
+                        <b>Aa</b>
+                        <em /><em />
+                      </span>
+                      <span className="ap-theme-swatch">{t.swatch.map((c, k) => <i key={k} style={{ background: c }} />)}</span>
+                      <AnimatePresence>{on && <motion.span className="ap-theme-tick" initial={{ scale: 0, rotate: -90 }} animate={{ scale: 1, rotate: 0 }} exit={{ scale: 0 }} transition={{ type: 'spring', stiffness: 500, damping: 20 }}>✓</motion.span>}</AnimatePresence>
                     </span>
-                    <span className="ap-theme-name">{on && <motion.span layoutId="theme-tick" className="ap-theme-tick">✓</motion.span>}{t.name}</span>
+                    <span className="ap-theme-name"><b>{t.name}</b><small>{t.says}</small></span>
                   </motion.button>
                 )
               })}
@@ -90,11 +98,15 @@ export function Appearance() {
               </label>
             </div>
           </PrefRow>
-          <PrefRow title="Canvas" text="The ground behind every page. Paper is warmer, Mist is cooler and makes the cards stand out.">
-            <Seg id="ap-canvas" value={prefs.canvas ?? 'white'} onPick={(v) => save({ canvas: v })} options={[['white', 'White'], ['paper', 'Paper'], ['mist', 'Mist']]} />
-          </PrefRow>
-          <PrefRow title="Typeface" text="The letters everything is set in. Mono is for people who live in a terminal.">
-            <Seg id="ap-font" value={prefs.font ?? 'grotesk'} onPick={(v) => save({ font: v })} options={[['grotesk', 'Grotesk'], ['system', 'System'], ['rounded', 'Rounded'], ['mono', 'Mono']]} />
+          <PrefRow title="Typeface" text="The letters everything is set in. Each theme brings its own; pick another any time." stack>
+            <div className="ap-fonts" role="radiogroup" aria-label="Typeface">
+              {FONTS.map(([id, name]) => (
+                <button key={id} role="radio" aria-checked={(prefs.font ?? 'grotesk') === id} className={`ap-font ${(prefs.font ?? 'grotesk') === id ? 'on' : ''}`}
+                  onClick={() => save({ font: id })} style={{ fontFamily: id === 'mono' ? 'var(--font-mono)' : `var(--ff-${id})` }}>
+                  <b>Ag</b><span>{name}</span>
+                </button>
+              ))}
+            </div>
           </PrefRow>
           <PrefRow title="Corners" text="How round the cards and buttons are.">
             <Seg id="ap-corners" value={prefs.corners ?? 'round'} onPick={(v) => save({ corners: v })} options={[['round', 'Round'], ['soft', 'Soft'], ['sharp', 'Sharp']]} />
@@ -181,7 +193,7 @@ function Preview({ prefs }: { prefs: Prefs }) {
   return (
     <div className={`ap-preview ${rail ? 'ap-rail' : ''} ${prefs.density === 'compact' ? 'compact' : ''} canvas-${prefs.canvas ?? 'white'} corners-${prefs.corners ?? 'round'} font-${prefs.font ?? 'grotesk'}`}
       data-accent={prefs.accent ?? 'green'} aria-hidden="true"
-      style={custom ? { ['--accent' as string]: prefs.accentHex, ['--accent-soft' as string]: `color-mix(in srgb, ${prefs.accentHex} 22%, white)`, ['--accent-line' as string]: `color-mix(in srgb, ${prefs.accentHex} 55%, transparent)` } : undefined}>
+      style={custom ? { ['--accent' as string]: prefs.accentHex, ['--accent-soft' as string]: `color-mix(in srgb, ${prefs.accentHex} 22%, var(--white))`, ['--accent-line' as string]: `color-mix(in srgb, ${prefs.accentHex} 55%, transparent)` } : undefined}>
       <motion.div className="ap-side" layout transition={{ duration: 0.45, ease: [0.65, 0, 0.35, 1] }}>
         <span className="ap-logo" />
         {[0, 1, 2, 3].map((k) => (

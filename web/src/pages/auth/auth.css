@@ -13,12 +13,12 @@
 .field-row { display: flex; justify-content: space-between; align-items: baseline; }
 .field input { height: 54px; padding: 0 20px; border-radius: var(--pill); border: 2px solid var(--line); background: var(--grey-8); font-size: 16px; font-weight: 400;
   transition: border-color var(--t) var(--ease-out), background-color var(--t) var(--ease-out), box-shadow var(--t) var(--ease-out); }
-.field input:hover { border-color: #bfc5bf; }
+.field input:hover { border-color: var(--line-strong); }
 .field input:focus { outline: none; border-color: var(--ink); background: var(--white); box-shadow: 0 0 0 4px var(--grey-6); }
 .link-btn { font-size: 13px; color: var(--ink-2); text-decoration: underline; text-underline-offset: 3px; }
 .link-btn:hover { color: var(--ink); }
 .auth-submit { height: 54px; margin-top: 6px; }
-.auth-error { color: #b3261e; background: var(--coral-soft); border-radius: 12px; padding: 10px 14px; font-size: 14px; }
+.auth-error { color: var(--danger); background: var(--coral-soft); border-radius: 12px; padding: 10px 14px; font-size: 14px; }
 .auth-notice { color: var(--ok); background: var(--mint); border-radius: 12px; padding: 10px 14px; font-size: 14px; }
 .auth-switch { font-size: 15px; color: var(--ink-2); text-align: center; }
 .auth-switch a { color: var(--ink); font-weight: 600; text-decoration: underline; text-underline-offset: 3px; }

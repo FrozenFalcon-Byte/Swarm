@@ -4,10 +4,16 @@
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#ffffff" />
+    <script>
+      /* light or dark before the first paint (lib/theme.ts owns it after that) */
+      try { var m = localStorage.getItem('swarm:mode'); var d = m === 'dark' || (m !== 'light' && matchMedia('(prefers-color-scheme: dark)').matches);
+        document.documentElement.dataset.theme = d ? 'dark' : 'light'; document.documentElement.style.colorScheme = d ? 'dark' : 'light' } catch (e) {}
+    </script>
     <meta name="description" content="Swarm is a team of AI agents that triages, fixes, proves and reviews flaky tests in your repository, then waits for you to merge." />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Schibsted+Grotesk:wght@400;500;600;700&family=Geist+Mono:wght@400;500&display=swap" />
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Schibsted+Grotesk:wght@400;500;600;700&family=Geist+Mono:wght@400;500&family=Geist:wght@400..700&family=Outfit:wght@400..700&family=Nunito:wght@400..800&family=Fraunces:opsz,wght@9..144,400..700&family=Bricolage+Grotesque:opsz,wght@12..96,400..700&display=swap" />
     <title>Swarm</title>
     <style>
       /* boot screen: on screen before any JS. Four agent dots chase each other round a square;
@@ -34,6 +40,10 @@
       @keyframes boot-breathe { 0%, 100% { opacity: 0.45; } 50% { opacity: 1; } }
       #boot .boot-wash { position: fixed; border-radius: 50%; border: 3px solid #0f0f0f; box-sizing: border-box; will-change: transform; }
       #boot.boot--hole { -webkit-mask-image: radial-gradient(circle at 50% 50%, transparent var(--hole), #000 calc(var(--hole) + 1px)); mask-image: radial-gradient(circle at 50% 50%, transparent var(--hole), #000 calc(var(--hole) + 1px)); }
+      html[data-theme="dark"] body { background: #121212; }
+      html[data-theme="dark"] #boot { background: #121212; }
+      html[data-theme="dark"] #boot .boot-dot, html[data-theme="dark"] #boot .boot-wash { border-color: #121212; }
+      html[data-theme="dark"] #boot .boot-word { color: #8c8a84; }
       @media (prefers-reduced-motion: reduce) { #boot .boot-dot, #boot .boot-word { animation: none; } #boot .boot-dot:nth-child(2) { left: 74px; } #boot .boot-dot:nth-child(3) { left: 74px; top: 74px; } #boot .boot-dot:nth-child(4) { top: 74px; } }
     </style>
   </head>

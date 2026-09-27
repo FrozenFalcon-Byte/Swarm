@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useSyncExternalStore } from 'react'
 import {
   addDoc, collection, deleteDoc, deleteField, doc, getDoc, limit, onSnapshot, orderBy, query, serverTimestamp, setDoc, updateDoc, where,
   type DocumentData, type Query,
@@ -261,8 +261,34 @@ export function saveOnboarding(uid: string, patch: Onboarding, displayName?: str
   return setDoc(doc(db, 'users', uid), unflatten(data), { merge: true })
 }
 
+/* Prefs you just changed show at once: they wait here while the write goes to Firestore, and drop out as soon
+   as the saved profile agrees (or the write fails). So a new theme can be painted inside a view transition
+   without waiting on the network, and nothing flickers back to the old value on the way. */
+let pending: Prefs = {}
+const pendingSubs = new Set<() => void>()
+const setPending = (p: Prefs) => { pending = p; pendingSubs.forEach((f) => f()) }
+const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b)
+
 export function savePrefs(uid: string, patch: Prefs) {
-  return setDoc(doc(db, 'users', uid), { prefs: patch }, { merge: true })
+  setPending({ ...pending, ...patch })
+  return setDoc(doc(db, 'users', uid), { prefs: patch }, { merge: true }).catch((e) => {
+    setPending(Object.fromEntries(Object.entries(pending).filter(([k]) => !(k in patch))) as Prefs)
+    throw e
+  })
+}
+
+/** Your prefs as saved, with anything you just changed already applied. */
+export function usePrefs(uid: string | undefined): Prefs | undefined {
+  const profile = useProfile(uid)
+  const draft = useSyncExternalStore((f) => { pendingSubs.add(f); return () => { pendingSubs.delete(f) } }, () => pending)
+  const saved = profile?.prefs
+  useEffect(() => {
+    if (!saved) return
+    const left = Object.entries(pending).filter(([k, v]) => !same((saved as Record<string, unknown>)[k], v))
+    if (left.length !== Object.keys(pending).length) setPending(Object.fromEntries(left) as Prefs)
+  }, [saved, draft])
+  if (profile === undefined && !Object.keys(draft).length) return undefined
+  return { ...(saved ?? {}), ...draft }
 }
 
 export function finishOnboarding(uid: string) {

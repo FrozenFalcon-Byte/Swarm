@@ -3,9 +3,11 @@ import { lazy, Suspense, useEffect, useRef, useState } from 'react'
 import { PageTransition, routeLabel } from '../../components/PageTransition'
 import { Link, NavLink, Route, Routes, useLocation, useNavigate } from 'react-router-dom'
 import { LiveLogo, Logo } from '../../components/Logo'
+import { ModeToggle } from '../../components/ModeToggle'
+import { LookFx } from '../../components/LookFx'
 import { useAuth } from '../../lib/auth'
 import { wakeHub } from '../../lib/api'
-import { savePrefs, useAllTasks, useIsAdmin, useProfile, useRepos } from '../../lib/data'
+import { savePrefs, useAllTasks, useIsAdmin, usePrefs, useRepos } from '../../lib/data'
 import { Avatar } from '../../components/Avatar'
 import { usingEmulators } from '../../lib/firebase'
 import { easeOut } from '../../lib/motion'
@@ -89,7 +91,7 @@ export default function AppShell() {
   const [cmdOpen, setCmdOpen] = useCommandBar()
   const needsYou = repos.reduce((n, r) => n + (r.stats?.needsYou || 0), 0)
   const nav = NAV.filter((n) => !n.admin || admin)
-  const prefs = useProfile(user?.uid)?.prefs
+  const prefs = usePrefs(user?.uid)
   // the sidebar folds the moment you ask; the saved preference catches up behind it
   const [rail, setRail] = useState(prefs?.sidebar === 'icons')
   useEffect(() => { setRail(prefs?.sidebar === 'icons') }, [prefs?.sidebar])
@@ -133,8 +135,9 @@ export default function AppShell() {
   }, [])
 
   return (
-    <div ref={shellRef} className={`shell ${rail ? 'side-rail' : ''} text-${prefs?.textSize ?? 'default'} canvas-${prefs?.canvas ?? 'white'} font-${prefs?.font ?? 'grotesk'} corners-${prefs?.corners ?? 'round'}`}
+    <div ref={shellRef} className={`shell ${rail ? 'side-rail' : ''} text-${prefs?.textSize ?? 'default'} canvas-${prefs?.canvas ?? 'white'} font-${prefs?.font ?? 'grotesk'} corners-${prefs?.corners ?? 'round'} look-${prefs?.look ?? 'plain'}`}
       data-accent={prefs?.accent ?? 'green'} style={accentStyle(prefs?.accent, prefs?.accentHex)}>
+      <LookFx look={prefs?.look ?? 'plain'} />
       <header className="mtop">
         <Logo to="/app" />
         <span className="mtop-where">{routeLabel(key, (id) => repos.find((r) => r.id === id)?.displayName)}</span>
@@ -169,6 +172,7 @@ export default function AppShell() {
               </motion.div>
             )}
             <motion.div className="msheet-foot" initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.5, duration: 0.4 }}>
+              <ModeToggle className="msheet-mode" labels />
               <NavLink to="/app/profile" className="side-user-link"><Avatar size={38} /><span className="side-user-text"><b>{user?.displayName || 'You'}</b><span>{user?.email}</span></span></NavLink>
               <Link to="/" className="btn btn-line btn-sm">Swarm home</Link>
               <button className="btn btn-dark btn-sm" onClick={signOut}>Sign out</button>
@@ -217,6 +221,7 @@ export default function AppShell() {
           </div>
         )}
         <div className="side-foot">
+          <ModeToggle className="side-mode" labels />
           <nav className="side-nav" aria-label="More">
             {nav.filter((n) => n.group === 'foot').map((n) => <SideLink key={n.to} to={n.to} icon={n.icon}>{n.label}</SideLink>)}
           </nav>
@@ -264,7 +269,7 @@ export default function AppShell() {
 /** Your own highlight colour: the accent itself, a pale wash of it, and a middling line. */
 function accentStyle(accent?: string, hex?: string): React.CSSProperties | undefined {
   if (accent !== 'custom' || !hex) return undefined
-  return { ['--accent' as string]: hex, ['--accent-soft' as string]: `color-mix(in srgb, ${hex} 22%, white)`, ['--accent-line' as string]: `color-mix(in srgb, ${hex} 55%, transparent)` }
+  return { ['--accent' as string]: hex, ['--accent-soft' as string]: `color-mix(in srgb, ${hex} 22%, var(--white))`, ['--accent-line' as string]: `color-mix(in srgb, ${hex} 55%, transparent)` }
 }
 
 function SideLink({ to, end, icon, count = 0, children }: { to: string; end?: boolean; icon: string; count?: number; children: string }) {

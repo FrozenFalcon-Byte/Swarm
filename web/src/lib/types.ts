@@ -148,9 +148,7 @@ export interface A2AEvent {
 export interface SecondOpinion { url: string; agent: string; state: string; verdict: 'approve' | 'reject' | 'comment' | 'no answer'; text: string; at: string }
 
 type Stamp = { toDate(): Date } | null
-export interface Onboarding { step?: number; role?: string; goals?: string[]; repoId?: string | null; review?: 'every' | 'batch' }
-export const ONB_ROLES = ['I maintain an open-source project', 'I lead a team', 'I work on my own', 'I’m just looking around']
-export const ONB_GOALS = ['Fix tests that fail at random', 'Sort and triage issues', 'Review fixes before they merge', 'Connect my own agents over A2A']
+export interface Onboarding { step?: number; repoId?: string | null }
 /** How the app behaves for this person, saved on their profile so it follows them between devices. */
 export interface Prefs {
   motion?: 'system' | 'less' | 'full'; notify?: boolean; startPage?: 'overview' | 'repos' | 'last'
@@ -175,13 +173,15 @@ export interface Prefs {
   times?: 'relative' | 'exact'
   /** which corner notifications arrive in */
   toasts?: 'br' | 'bl' | 'top'
+  /** the theme picked in Settings → Appearance; it brings its own animated backdrop */
+  look?: 'plain' | 'swarm' | 'studio' | 'paper' | 'candy' | 'harbour' | 'sunny'
   /** the dashboard's highlight colour: the sidebar's active pill, selections, the save chip */
   accent?: 'green' | 'sky' | 'pink' | 'yellow' | 'coral' | 'ink' | 'custom'
   /** the colour picked when accent is 'custom', as #rrggbb */
   accentHex?: string
   /** the ground behind every page */
   canvas?: 'white' | 'paper' | 'mist'
-  font?: 'grotesk' | 'system' | 'rounded' | 'mono'
+  font?: 'grotesk' | 'geist' | 'outfit' | 'rounded' | 'serif' | 'bricolage' | 'mono' | 'system'
   corners?: 'round' | 'soft' | 'sharp'
   /** sidebar groups you've switched off */
   hideGuardrails?: boolean

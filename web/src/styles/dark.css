@@ -1,0 +1,66 @@
+/* Swarm after dark. Every surface is a token, so dark mode is mostly the tokens turned over: the page goes to
+   a warm near-black, ink becomes chalk (text, outlines and the hard sticker shadows all follow), and the soft
+   washes deepen. The agents keep their own pastels, and anything painted in one stays a little island of the
+   light theme (dark ink on a bright sticker), which is what makes the pastels glow against the dark. */
+
+html[data-theme="dark"] {
+  --white: #121212;
+  --grey-8: #1a1a19;
+  --grey-7: #212120;
+  --grey-6: #292927;
+  --line: #3d3d3a;
+  --line-soft: #2d2d2b;
+  --line-strong: #4b4b47;
+  --ink: #f3f0e7;
+  --ink-2: #bdbab1;
+  --ink-3: #8c8a83;
+  --dot: rgba(243, 240, 231, 0.1);
+
+  --mint: #173220;
+  --sky-soft: #172538;
+  --yellow-soft: #342e12;
+  --coral-soft: #3e1f1b;
+  --pink: #47202f;
+
+  --ok: #6fdc7b;
+  --warn: #f2c94c;
+  --bad: #ff7b6f;
+  --danger: #ff8b80;
+  --shadow-card: 0 1px 0 rgba(0, 0, 0, 0.5), 0 14px 34px -14px rgba(0, 0, 0, 0.7);
+  color-scheme: dark;
+}
+html[data-theme="dark"] body { background: var(--white); }
+html[data-theme="dark"] ::selection { color: #0f0f0f; }
+
+/* islands of the light theme: anything painted in an agent's pastel keeps dark ink on it */
+html[data-theme="dark"] :is(
+  .btn-green, .side-count, .tab-count, .msheet-count, .tile-coral, .tile-green, .tile-yellow, .tile-sky,
+  .pill:is(.tone-ok, .tone-go, .tone-warn, .tone-bad, .tone-work), .connect-gh, .connect-demo, .profile-hero, .help-hero, .help-agent,
+  .key-ic, .mcp-n, .a2a-state.s-completed, .a2a-state.s-input-required, .pdata-export.done,
+  .ov-wait, .cx-demo, .idc, .qh-hero, .avatar, .faq mark, .wire-state, .scr-approve, .mergebox-btn.is-done, .faq-item.is-open .faq-btn,
+  .scn-tool, .dupes-newchip, .stepper .now span, .onb-option.on .onb-check, .onb-steps li.now .onb-step-dot, .onb-steps li.done .onb-step-dot,
+  .screens-title-box, .stat-card-inner, .vcard-agent, .agent-card-av, .sec-stage, .vcard-visual, .auth-panel-frame,
+  .ag-card, .chip-pick.solid, .toggle input:checked + .toggle-track, .hr-zone-ic, .hr-chip-n, .hr-node-tag, .ov-agent i,
+  [style*="background: var(--triager)"], [style*="background: var(--coder)"], [style*="background: var(--tester)"],
+  [style*="background: var(--reviewer)"], [style*="background: var(--green)"], [style*="background: var(--lab)"],
+  [style*="background: var(--sky-card)"], [style*="background: var(--pink-card)"], [style*="background: var(--yellow-card)"],
+  [style*="background: var(--mint-strong)"], [style*="background-color: var(--triager)"], [style*="background-color: var(--coder)"],
+  [style*="background-color: var(--tester)"], [style*="background-color: var(--reviewer)"], [style*="background-color: var(--green)"]
+) {
+  --ink: #0f0f0f; --ink-2: #3f3d3f; --ink-3: #5c5e5c; --white: #ffffff; --grey-8: #f9faf9; --grey-7: #f0f2ef; --grey-6: #eceFec;
+  --line: #d9ded9; --line-soft: #e7eae6; --line-strong: #cfd4cf; --dot: rgba(15, 15, 15, 0.14);
+  --mint: #e2f2e5; --sky-soft: #e3eefc; --yellow-soft: #fdf6c4; --coral-soft: #ffe3df; --ok: #169b3b; --danger: #b3261e;
+  color: var(--ink);
+}
+/* the pastels themselves, a touch softer so a whole card of one isn't glaring at night */
+html[data-theme="dark"] { --sky-card: #93bbee; --pink-card: #f5bdd2; --yellow-card: #f1dc55; --mint-strong: #a9dfb2; }
+
+/* switching: the new look opens as a circle from the switch (lib/theme.ts). Old and new are both whole
+   screenshots, so nothing on the page animates underneath the reveal. */
+html.vt-morph::view-transition-old(root), html.vt-morph::view-transition-new(root) { animation: none; mix-blend-mode: normal; }
+html.vt-morph::view-transition-old(root) { z-index: 1; }
+html.vt-morph::view-transition-new(root) { z-index: 2; }
+/* browsers without view transitions: the colours ease across instead */
+html.mode-easing, html.mode-easing *, html.mode-easing *::before, html.mode-easing *::after {
+  transition: background-color 0.5s var(--ease-out), color 0.5s var(--ease-out), border-color 0.5s var(--ease-out), fill 0.5s var(--ease-out), stroke 0.5s var(--ease-out) !important;
+}

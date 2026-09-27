@@ -184,9 +184,9 @@ export function Preferences({ prefs }: { prefs: Prefs }) {
   )
 }
 
-export function PrefRow({ title, text, children }: { title: string; text: string; children: React.ReactNode }) {
+export function PrefRow({ title, text, stack, children }: { title: string; text: string; stack?: boolean; children: React.ReactNode }) {
   return (
-    <div className="pref">
+    <div className={`pref ${stack ? 'pref--stack' : ''}`}>
       <div className="pref-copy"><b>{title}</b><span>{text}</span></div>
       <div className="pref-act">{children}</div>
     </div>

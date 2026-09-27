@@ -4,7 +4,10 @@ import { BrowserRouter } from 'react-router-dom'
 import App from './App'
 import { IslandProvider } from './components/Island'
 import { AuthProvider } from './lib/auth'
+import { installButtons } from './lib/buttons'
 import './index.css'
+
+installButtons()
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>

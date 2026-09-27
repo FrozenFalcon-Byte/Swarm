@@ -10,3 +10,9 @@ export function Roll({ children }: { children: string }) {
     </span>
   )
 }
+
+const ARROW = <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14M13 6l6 6-6 6" /></svg>
+/** An arrow for a button that goes somewhere: on hover it slides out and a fresh one slides in behind it. */
+export function Go() {
+  return <span className="btn-go" aria-hidden="true">{ARROW}{ARROW}</span>
+}

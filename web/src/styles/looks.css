@@ -1,0 +1,88 @@
+/* The dashboard's themes (Settings → Appearance). A theme is a whole look: highlight colour, canvas, type
+   and corners, plus a living backdrop of its own (components/LookFx.tsx) that sits behind every page.
+   Everything is drawn from tokens, so each one has a night version for free. */
+
+.look-fx { position: fixed; inset: 0; z-index: 0; overflow: hidden; pointer-events: none; }
+.look-fx--mini { position: absolute; border-radius: inherit; }
+.look-fx i { position: absolute; display: block; }
+.shell > .side { z-index: 2; }
+.shell > .main { position: relative; z-index: 1; }
+.shell > .look-fx { left: var(--side-w); transition: left 0.55s var(--ease-in-out), opacity 0.6s var(--ease-out); }
+@media (max-width: 900px) { .shell > .look-fx { left: 0; } }
+html.less-motion .look-fx *, html.less-motion .look-fx *::before { animation-play-state: paused !important; }
+@media (prefers-reduced-motion: reduce) { .look-fx *, .look-fx *::before { animation-play-state: paused !important; } }
+
+/* Swarm: the four agents as soft glows along the top, drifting past each other */
+.fx-orb { top: -24vmax; width: 34vmax; height: 34vmax; border-radius: 50%; filter: blur(80px); opacity: 0.16; animation: fx-drift 34s var(--ease-in-out) infinite alternate; }
+.fx-orb--0 { left: 4%; background: var(--triager); }
+.fx-orb--1 { left: 28%; background: var(--coder); animation-delay: -9s; animation-duration: 40s; }
+.fx-orb--2 { left: 52%; background: var(--tester); animation-delay: -18s; }
+.fx-orb--3 { left: 74%; background: var(--reviewer); animation-delay: -27s; animation-duration: 44s; }
+@keyframes fx-drift { from { transform: translate(-4vmax, 0) scale(1); } to { transform: translate(5vmax, 3vmax) scale(1.1); } }
+
+/* the pastel wash the quieter looks share, tinted per look */
+.fx-wash { inset: 0; background: radial-gradient(ellipse 70% 45% at 85% -10%, color-mix(in srgb, var(--wash) 30%, transparent), transparent 70%),
+  radial-gradient(ellipse 50% 40% at 0% 110%, color-mix(in srgb, var(--wash-2, var(--wash)) 22%, transparent), transparent 70%); }
+
+/* Mint: a faint dot grid, and a soft light that wanders over it bringing the dots up */
+.look-fx--studio { --wash: #9fe0b4; --wash-2: #bfe6ff; }
+.fx-dotgrid { inset: 0; background-image: radial-gradient(color-mix(in srgb, #2f8f55 40%, transparent) 1.2px, transparent 1.5px); background-size: 22px 22px;
+  -webkit-mask-image: radial-gradient(circle 30vmax at var(--mx, 70%) var(--my, 20%), #000, transparent 75%); mask-image: radial-gradient(circle 30vmax at var(--mx, 70%) var(--my, 20%), #000, transparent 75%);
+  animation: fx-wander 30s var(--ease-in-out) infinite alternate; opacity: 0.55; }
+@property --mx { syntax: "<percentage>"; inherits: false; initial-value: 70%; }
+@property --my { syntax: "<percentage>"; inherits: false; initial-value: 20%; }
+@keyframes fx-wander { 0% { --mx: 75%; --my: 15%; } 50% { --mx: 30%; --my: 35%; } 100% { --mx: 85%; --my: 70%; } }
+html[data-theme="dark"] .fx-dotgrid { opacity: 0.35; background-image: radial-gradient(#9fe0b4 1.1px, transparent 1.4px); }
+
+/* Paper: warm paper, a peach glow breathing in the corner, and grain that stays still */
+.fx-warm { left: -20vmax; bottom: -24vmax; width: 60vmax; height: 60vmax; border-radius: 50%; background: radial-gradient(circle, color-mix(in srgb, var(--tester) 26%, transparent), transparent 65%);
+  animation: fx-breathe 14s var(--ease-in-out) infinite alternate; }
+.fx-grain { inset: 0; opacity: 0.22; mix-blend-mode: multiply;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 0.35 0 0 0 0 0.28 0 0 0 0 0.18 0 0 0 0.55 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E"); }
+html[data-theme="dark"] .fx-grain { mix-blend-mode: screen; opacity: 0.07; }
+@keyframes fx-breathe { to { transform: scale(1.15) translate(3vmax, -2vmax); opacity: 0.7; } }
+
+/* Candy: pastel sprinkles in the top corner, each bobbing and turning a little on its own clock */
+.look-fx--candy { --wash: var(--lab); --wash-2: #c9c2f5; }
+.fx-sprinkle { width: 16px; height: 5px; border-radius: 3px; background: var(--c); opacity: 0.75; transform: rotate(var(--r));
+  animation: fx-bob var(--d) var(--ease-in-out) infinite alternate; animation-delay: var(--delay); }
+.fx-sprinkle.t0 { --c: var(--lab); } .fx-sprinkle.t1 { --c: #c9c2f5; } .fx-sprinkle.t2 { --c: var(--coder); } .fx-sprinkle.t3 { --c: var(--mint-strong); }
+.look-fx--candy::after { content: ""; position: absolute; inset: 0; background: linear-gradient(200deg, transparent 30%, var(--canvas, var(--white)) 75%); }
+@keyframes fx-bob { from { transform: rotate(var(--r)) translateY(0); } to { transform: rotate(calc(var(--r) + 24deg)) translateY(-7px); } }
+.look-fx--mini .fx-sprinkle { width: 9px; height: 3px; }
+html[data-theme="dark"] .fx-sprinkle { opacity: 0.45; }
+
+/* Harbour: a band of calm sea at the foot of the page, with light glinting on it */
+.fx-sea { left: 0; right: 0; bottom: 0; height: 34%; background: linear-gradient(180deg, transparent, color-mix(in srgb, var(--coder) 16%, transparent) 55%, color-mix(in srgb, #8fe1d0 22%, transparent)); }
+.fx-sea::before { content: ""; position: absolute; left: 0; right: 0; top: 0; height: 60%; background: radial-gradient(ellipse 40% 60% at 70% 100%, color-mix(in srgb, #fff6d6 60%, transparent), transparent 70%); opacity: 0.6; }
+.fx-glint { height: 2px; border-radius: 2px; background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--white) 90%, var(--coder)), transparent); opacity: 0;
+  animation: fx-glint var(--d) var(--ease-in-out) infinite; animation-delay: var(--delay); }
+@keyframes fx-glint { 0% { opacity: 0; transform: translateX(-16px) scaleX(0.4); } 40% { opacity: 0.95; transform: translateX(0) scaleX(1); } 100% { opacity: 0; transform: translateX(22px) scaleX(0.5); } }
+html[data-theme="dark"] .fx-sea { opacity: 0.55; }
+html[data-theme="dark"] .fx-glint { background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--coder) 70%, transparent), transparent); }
+
+/* Sunny: soft morning light in the corner, sending out slow rings */
+.fx-glow { right: -22vmax; top: -22vmax; width: 56vmax; height: 56vmax; border-radius: 50%; background: radial-gradient(circle, color-mix(in srgb, var(--triager) 40%, transparent), transparent 65%);
+  animation: fx-breathe 10s var(--ease-in-out) infinite alternate; }
+.fx-ring { right: -6vmax; top: -6vmax; width: 12vmax; height: 12vmax; border-radius: 50%; border: 1.5px solid color-mix(in srgb, #e0b400 45%, transparent); opacity: 0;
+  animation: fx-ring 12s var(--ease-out) infinite; animation-delay: calc(var(--k) * -4s); }
+@keyframes fx-ring { 0% { transform: scale(0.6); opacity: 0; } 15% { opacity: 0.8; } 100% { transform: scale(5); opacity: 0; } }
+html[data-theme="dark"] .fx-glow { opacity: 0.45; }
+
+/* dark: every wash a little lower, so the page stays dark */
+html[data-theme="dark"] .fx-orb { opacity: 0.09; }
+html[data-theme="dark"] .fx-wash, html[data-theme="dark"] .fx-warm { opacity: 0.5; }
+
+/* the minis in Settings play faster, so you see each theme move at a glance */
+.look-fx--mini .fx-orb { top: -70px; width: 110px; height: 110px; filter: blur(24px); opacity: 0.4; animation-duration: 8s; }
+html[data-theme="dark"] .look-fx--mini .fx-orb { opacity: 0.25; }
+.look-fx--mini .fx-dotgrid { background-size: 11px 11px; animation-duration: 8s; -webkit-mask-image: radial-gradient(circle 90px at var(--mx, 70%) var(--my, 20%), #000, transparent 75%); mask-image: radial-gradient(circle 90px at var(--mx, 70%) var(--my, 20%), #000, transparent 75%); }
+.look-fx--mini .fx-warm { width: 200px; height: 200px; left: -70px; bottom: -90px; animation-duration: 4s; }
+.look-fx--mini .fx-glow { width: 200px; height: 200px; right: -80px; top: -80px; animation-duration: 4s; }
+.look-fx--mini .fx-ring { width: 50px; height: 50px; right: -25px; top: -25px; animation-duration: 5s; animation-delay: calc(var(--k) * -1.66s); }
+
+/* the looks' own canvases, by day and by night */
+.shell.look-studio, .shell.look-harbour { --canvas: #f6f8fa; }
+html[data-theme="dark"] .shell.canvas-paper { --canvas: #17140f; --grey-8: #1f1b15; --grey-6: #2c271e; --line-soft: #332d23; }
+html[data-theme="dark"] .shell.canvas-mist { --canvas: #0f1318; --grey-8: #161c23; --grey-6: #222a33; --line-soft: #28303a; }
+html[data-theme="dark"] [data-accent="pink"] { --accent-soft: #47202f; }

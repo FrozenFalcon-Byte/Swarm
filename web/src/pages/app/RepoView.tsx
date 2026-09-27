@@ -5,7 +5,7 @@ import { createPortal } from 'react-dom'
 import { agentColor } from '../../components/AgentDots'
 import { useAuth } from '../../lib/auth'
 import { useToast } from '../../components/Island'
-import { queueRun, removeRepo, requestAction, setAutoSync, useActionStatus, useIsAdmin, useActivity, useProfile, useRepo, useRuns, useTasks } from '../../lib/data'
+import { queueRun, removeRepo, requestAction, setAutoSync, useActionStatus, useIsAdmin, useActivity, usePrefs, useRepo, useRuns, useTasks } from '../../lib/data'
 import { easeInOut, easeOut } from '../../lib/motion'
 import type { Task } from '../../lib/types'
 import { Handoffs } from './Handoffs'
@@ -29,7 +29,7 @@ export default function RepoView() {
   const navigate = useNavigate()
   const [queued, setQueued] = useState(false)
   const toast = useToast()
-  const prefs = useProfile(user?.uid)?.prefs
+  const prefs = usePrefs(user?.uid)
   // open on the tab you chose in your profile, the first time you arrive at this repo (clicking Board later stays on Board)
   useEffect(() => {
     if (!prefs) return
@@ -269,7 +269,7 @@ function TaskDrawer({ repoId, task, onClose }: { repoId: string; task?: Task; on
   const last = actions.find((a) => task && a.taskId === task.task_id)
 
   // Settings → Appearance → Confirm: merging and closing take a second click, within a few seconds
-  const confirm = (useProfile(user?.uid)?.prefs?.confirm ?? 'ask') === 'ask'
+  const confirm = (usePrefs(user?.uid)?.confirm ?? 'ask') === 'ask'
   const [armed, setArmed] = useState<string | null>(null)
   useEffect(() => { if (!armed) return; const id = window.setTimeout(() => setArmed(null), 3500); return () => window.clearTimeout(id) }, [armed])
   const label = (type: string, text: string) => (armed === type ? `Sure? ${text}` : text)

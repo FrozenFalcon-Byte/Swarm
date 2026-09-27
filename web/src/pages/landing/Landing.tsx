@@ -10,7 +10,8 @@ import { finishBoot, takeOverBoot, type BootDot } from '../../lib/boot'
 import { easeInOut, easeOut } from '../../lib/motion'
 import { Glyph, type GlyphName } from './glyphs'
 import './landing.css'
-import { Roll } from '../../components/Roll'
+import { Go, Roll } from '../../components/Roll'
+import { ModeToggle } from '../../components/ModeToggle'
 import { HeroWorld } from './HeroWorld'
 import { Security } from './Security'
 
@@ -70,7 +71,9 @@ const MARK = [
 ]
 const BOOT_TO_MARK = [0, 1, 3, 2] // the boot screen goes yellow, sky, green, coral round the square
 // the timeline, in ms: gather into a row, pass the task along, fold into the mark, then fly into the headline
-const T_ROW = 700, T_RELAY = 560, T_STEP = 470, T_FOLD = T_RELAY + 4 * T_STEP + 40, T_LIFT = T_FOLD + 1050
+// each agent's turn is long enough to read what it says
+// the thread carries the task to the next dot in T_PASS; that dot lights up and speaks the moment it arrives
+const T_ROW = 800, T_RELAY = 900, T_STEP = 1900, T_PASS = 520, T_FOLD = T_RELAY + 4 * T_STEP + 200, T_LIFT = T_FOLD + 1150
 const SHADOW = (px: number) => `inset 0 0 0 ${px}px #0f0f0f`
 
 /** The headline's size, read off the stylesheet, so the intro builds the very headline it lands in. */
@@ -108,6 +111,7 @@ function Intro({ from, lifting, onLift, onLanded }: { from: BootDot[]; lifting: 
   })
   const rows = MARK.map((m, i) => { const h = markAt(m), r = rowAt(i); return { x: r.x - h.x, y: r.y - h.y } })
   const [step, setStep] = useState(-1) // -1 gathering, 0–3 whose turn it is, 4 folded into the mark
+  const [say, setSay] = useState(-1) // whose words are showing (none while the thread is between two dots)
   const stage = useRef<HTMLDivElement>(null)
   const ink = useRef<HTMLElement>(null)
   const fill = useRef<HTMLElement>(null)
@@ -123,16 +127,25 @@ function Intro({ from, lifting, onLift, onLanded }: { from: BootDot[]; lifting: 
     // 1. the chase becomes a line
     dots.current.forEach((el, i) => run(el, [{ transform: `translate(${starts[i].x}px, ${starts[i].y}px) scale(${starts[i].scale})`, boxShadow: SHADOW(3 / Math.max(starts[i].scale, 0.01)) }, inRow(i)],
       { duration: T_ROW, delay: i * 50, easing: 'cubic-bezier(0.34, 1.3, 0.5, 1)' }))
-    run(fill.current, [{ transform: 'scaleX(0)' }, { transform: 'scaleX(1)' }], { duration: 3 * T_STEP + 200, delay: T_RELAY, easing: 'cubic-bezier(0.45, 0, 0.25, 1)' })
-    // 2. each takes its turn: a hop and a ring going out
-    MARK.forEach((_, i) => at(T_RELAY + i * T_STEP, () => {
-      setStep(i)
-      run(dots.current[i], [inRow(i), { ...inRow(i, rowScale * 1.45), offset: 0.35 }, inRow(i)], { duration: 520, easing: 'cubic-bezier(0.34, 1.5, 0.5, 1)' })
-      run(pings.current[i], [{ transform: 'scale(1)', opacity: 0.55 }, { transform: 'scale(3.2)', opacity: 0 }], { duration: 900, easing: 'cubic-bezier(0.2, 0.6, 0.3, 1)', fill: 'none' })
-    }))
+    // 2. each takes its turn: the thread runs on to it (the last one's words leave as it sets off), then it hops,
+    //    rings, and says its piece, all on the same beat
+    MARK.forEach((_, i) => {
+      const t = T_RELAY + i * T_STEP
+      if (i > 0) at(t, () => {
+        setSay(-1)
+        run(fill.current, [{ transform: `scaleX(${(i - 1) / 3})` }, { transform: `scaleX(${i / 3})` }], { duration: T_PASS, easing: 'cubic-bezier(0.65, 0, 0.35, 1)' })
+      })
+      at(t + (i ? T_PASS : 0), () => {
+        setStep(i)
+        setSay(i)
+        run(dots.current[i], [inRow(i), { ...inRow(i, rowScale * 1.45), offset: 0.35 }, inRow(i)], { duration: 520, easing: 'cubic-bezier(0.34, 1.5, 0.5, 1)' })
+        run(pings.current[i], [{ transform: 'scale(1)', opacity: 0.55 }, { transform: 'scale(3.2)', opacity: 0 }], { duration: 900, easing: 'cubic-bezier(0.2, 0.6, 0.3, 1)', fill: 'none' })
+      })
+    })
     // 3. fold into the mark
     at(T_FOLD, () => {
       setStep(4)
+      setSay(-1)
       dots.current.forEach((el, i) => run(el, [inRow(i), { transform: 'translate(0, 0) scale(1)', boxShadow: SHADOW(0) }],
         { duration: 820, delay: i * 60, easing: 'cubic-bezier(0.34, 1.35, 0.5, 1)' }))
       run(ink.current, [{ transform: 'scale(0)', borderRadius: '50%' }, { transform: 'scale(1.06)', borderRadius: '28%', offset: 0.7 }, { transform: 'scale(1)', borderRadius: '25%' }],
@@ -156,7 +169,7 @@ function Intro({ from, lifting, onLift, onLanded }: { from: BootDot[]; lifting: 
     return () => { cancelled = true }
   }, [onLift, onLanded, left, top, tile])
 
-  const now = step >= 0 && step < 4 ? MARK[step] : null
+  const now = say >= 0 && say < 4 ? MARK[say] : null
   return (
     <>
       <motion.div className="intro" initial={false} animate={{ opacity: lifting ? 0 : 1 }} transition={{ duration: 0.8, ease: easeInOut, delay: lifting ? 0.2 : 0 }}>
@@ -173,7 +186,7 @@ function Intro({ from, lifting, onLift, onLanded }: { from: BootDot[]; lifting: 
         <div className="intro-thought" style={{ top: cy + 30 }}>
           <AnimatePresence mode="wait" initial={false}>
             {now && (
-              <motion.p key={now.who} initial={{ opacity: 0, y: 18 }} animate={{ opacity: 1, y: 0, transition: { duration: 0.4, ease: easeOut, delay: 0.14 } }} exit={{ opacity: 0, y: -12, transition: { duration: 0.14 } }}>
+              <motion.p key={now.who} initial={{ opacity: 0, y: 18 }} animate={{ opacity: 1, y: 0, transition: { duration: 0.45, ease: easeOut, delay: 0.04 } }} exit={{ opacity: 0, y: -12, transition: { duration: 0.22, ease: easeInOut } }}>
                 <span className="intro-who" style={{ ['--c' as string]: now.c }}>{now.who}</span>
                 <span className="intro-says">{now.thought}</span>
               </motion.p>
@@ -226,8 +239,9 @@ export function Nav() {
           {links.map(([href, label], i) => <span key={href} className="nav-pill-item">{i > 0 && <i />}<Link to={href} className={path === href ? 'on' : ''} aria-current={path === href ? 'page' : undefined}>{label}</Link></span>)}
         </nav>
         <div className="nav-cta">
-          {user ? <Link to="/app" className="btn btn-dark"><Roll>Dashboard</Roll></Link> : (
-            <><Link to="/signin" className="nav-signin">Sign in</Link><Link to="/signup" className="btn btn-dark"><Roll>Get started</Roll></Link></>
+          <ModeToggle className="nav-mode" />
+          {user ? <Link to="/app" className="btn btn-dark"><Roll>Dashboard</Roll><Go /></Link> : (
+            <><Link to="/signin" className="nav-signin">Sign in</Link><Link to="/signup" className="btn btn-dark"><Roll>Get started</Roll><Go /></Link></>
           )}
           <button className="nav-burger" aria-label="Menu" aria-expanded={menu} onClick={() => setMenu(!menu)}>
             <motion.span animate={menu ? { rotate: 45, y: 4 } : { rotate: 0, y: 0 }} /><motion.span animate={menu ? { rotate: -45, y: -4 } : { rotate: 0, y: 0 }} />
@@ -239,6 +253,7 @@ export function Nav() {
           <motion.nav className="nav-sheet" initial={{ opacity: 0, y: -16 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -16 }} transition={{ duration: 0.4, ease: easeOut }}>
             {links.map(([href, label]) => <Link key={href} to={href} onClick={() => setMenu(false)}>{label}</Link>)}
             {!user && <Link to="/signin">Sign in</Link>}
+            <div className="nav-sheet-mode"><span>Dark mode</span><ModeToggle /></div>
           </motion.nav>
         )}
       </AnimatePresence>
@@ -281,7 +296,7 @@ function Hero({ ready, tileShown, fromIntro }: { ready: boolean; tileShown: bool
             : <span className="word-mask"><motion.span className="word" {...rise(0.32)}>builds.</motion.span></span>}
         </h1>
         <motion.div initial="hidden" animate={show} variants={{ hidden: { opacity: 0, y: 20 }, show: { opacity: 1, y: 0, transition: { duration: 0.9, ease: easeOut, delay: 0.7 } } }}>
-          <Link to="/signup" className="btn btn-green btn-xl"><AgentDots size={22} /> <Roll>Connect a repo</Roll></Link>
+          <Link to="/signup" className="btn btn-green btn-xl"><AgentDots size={22} /> <Roll>Connect a repo</Roll><Go /></Link>
         </motion.div>
       </motion.div>
       <Ticker ready={ready} />
@@ -411,10 +426,9 @@ function HandoffRail({ i }: { i: number }) {
     <div className="rail" aria-hidden="true">
       <div className="rail-line"><motion.i animate={{ width: pos(i + 1) }} transition={{ duration: 0.8, ease: easeOut }} /></div>
       {RAIL.map((a, k) => (
-        <motion.span key={a} className={`rail-node ${k <= i + 1 ? 'on' : ''}`} style={{ left: pos(k), background: a === 'you' ? 'var(--white)' : `var(--${a})` }}
-          animate={{ scale: k === i || k === i + 1 ? 1.15 : 1 }} transition={{ type: 'spring', stiffness: 320, damping: 18 }}>
+        <span key={a} className={`rail-node ${k <= i + 1 ? 'on' : ''} ${k === i || k === i + 1 ? 'now' : ''}`} style={{ left: pos(k), background: a === 'you' ? 'var(--white)' : `var(--${a})` }}>
           <b>{a === 'you' ? 'You' : a[0].toUpperCase() + a.slice(1)}</b>
-        </motion.span>
+        </span>
       ))}
       <span key={i} className="rail-env" style={{ ['--a' as string]: pos(i), ['--b' as string]: pos(i + 1) }}>✉</span>
     </div>
@@ -1058,7 +1072,7 @@ export function Footer() {
           <span className="footer-tile"><Mark size={140} /></span>
           <SplitWords as="p" text="builds." className="inline-split" delay={0.15} />
         </h2>
-        <Link to="/signup" className="btn btn-green btn-xl"><AgentDots size={22} /> <Roll>Get started free</Roll></Link>
+        <Link to="/signup" className="btn btn-green btn-xl"><AgentDots size={22} /> <Roll>Get started free</Roll><Go /></Link>
       </div>
       <div className="footer-cols">
         <div><b>Product</b><Link to="/#how">How it works</Link><Link to="/#patterns">Patterns</Link><Link to="/playground">Playground</Link><Link to="/cost">Cost calculator</Link></div>

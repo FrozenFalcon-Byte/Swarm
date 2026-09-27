@@ -3,6 +3,14 @@
 :root {
   --font-sans: "Schibsted Grotesk", "Helvetica Neue", Arial, sans-serif;
   --font-mono: "Geist Mono", ui-monospace, "SF Mono", Menlo, monospace;
+  /* the typefaces you can pick in Settings (only the one in use is ever downloaded) */
+  --ff-grotesk: "Schibsted Grotesk", "Helvetica Neue", Arial, sans-serif;
+  --ff-geist: "Geist", "Helvetica Neue", Arial, sans-serif;
+  --ff-outfit: "Outfit", "Helvetica Neue", Arial, sans-serif;
+  --ff-rounded: "Nunito", ui-rounded, "SF Pro Rounded", system-ui, sans-serif;
+  --ff-serif: "Fraunces", Georgia, "Times New Roman", serif;
+  --ff-bricolage: "Bricolage Grotesque", "Helvetica Neue", Arial, sans-serif;
+  --ff-system: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
 
   --white: #ffffff;
   --grey-8: #f9faf9;   /* section ground */
@@ -13,6 +21,9 @@
   --ink: #0f0f0f;
   --ink-2: #5a585a;
   --ink-3: #8a8d8a;
+  --line-strong: #cfd4cf; /* hover borders, idle strokes */
+  --dot: rgba(15, 15, 15, 0.14); /* dotted grounds */
+  --danger: #b3261e; /* text and outlines for destructive things */
 
   /* one pastel per agent — they recur everywhere the agents appear */
   --triager: #fbe74e;  /* yellow */

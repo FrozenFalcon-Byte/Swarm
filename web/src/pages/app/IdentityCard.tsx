@@ -58,157 +58,86 @@ export function IdentityCard({ uid, name, sub, chips, photo, onPhoto, onRemove, 
 }
 
 /* The live backdrop: a few chunky stickers in the agents' colours, drawn like the rest of Swarm (ink outline,
-   hard shadow). They drift on their own and bounce off the card's edges, each other and your name, photo and
-   numbers. Move near one and it shies away; grab one and throw it; click empty space and the nearby ones hop.
-   They sit still for reduced motion, and the loop pauses off screen. */
+   hard shadow). Each has a home on the card and bobs there on its own clock; they lean a little as your
+   pointer crosses the banner (nearer ones more), hop and spin when clicked, and can be dragged anywhere,
+   springing home when let go. No physics loop, so nothing jitters, tunnels or gets stuck. */
 type Kind = 'dot' | 'pill' | 'ring' | 'square' | 'mark'
-const STICKERS: { kind: Kind; size: number; color: string; x: number; y: number }[] = [
-  { kind: 'mark', size: 46, color: 'var(--ink)', x: 0.47, y: 0.22 },
-  { kind: 'dot', size: 34, color: 'var(--triager)', x: 0.58, y: 0.78 },
-  { kind: 'pill', size: 30, color: 'var(--coder)', x: 0.66, y: 0.3 },
-  { kind: 'ring', size: 38, color: 'var(--tester)', x: 0.52, y: 0.62 },
-  { kind: 'square', size: 30, color: 'var(--reviewer)', x: 0.72, y: 0.72 },
-  { kind: 'dot', size: 20, color: 'var(--white)', x: 0.62, y: 0.12 },
+const STICKERS: { kind: Kind; size: number; color: string; x: number; y: number; depth: number }[] = [
+  { kind: 'mark', size: 46, color: 'var(--ink)', x: 0.5, y: 0.2, depth: 1 },
+  { kind: 'dot', size: 34, color: 'var(--triager)', x: 0.6, y: 0.8, depth: 0.6 },
+  { kind: 'pill', size: 30, color: 'var(--coder)', x: 0.68, y: 0.3, depth: 1.3 },
+  { kind: 'ring', size: 38, color: 'var(--tester)', x: 0.55, y: 0.6, depth: 0.8 },
+  { kind: 'square', size: 30, color: 'var(--reviewer)', x: 0.74, y: 0.7, depth: 1.1 },
+  { kind: 'dot', size: 20, color: 'var(--white)', x: 0.64, y: 0.1, depth: 1.6 },
 ]
 
 function SwarmField() {
   const box = useRef<HTMLDivElement>(null)
+  // each sticker's home: the free spot nearest where it would like to be, clear of your name, photo and numbers
+  // (and of the others). Worked out on mount and whenever the banner changes size; one with no room hides.
+  const [homes, setHomes] = useState<({ x: number; y: number } | null)[]>(() => STICKERS.map(() => null))
   useEffect(() => {
     const layer = box.current, host = layer?.parentElement
     if (!layer || !host) return
-    const els = [...layer.querySelectorAll<HTMLElement>('.idc-sticker')]
-    const calm = window.matchMedia('(prefers-reduced-motion: reduce)').matches || document.documentElement.classList.contains('less-motion')
-    let w = 0, h = 0, raf = 0, visible = true, last = performance.now()
-    let walls: { l: number; t: number; r: number; b: number }[] = []
-    const bodies = STICKERS.map((st, i) => ({
-      el: els[i], rad: (st.kind === 'pill' ? st.size * 1.5 : st.size) / 2 + 2, x: 0, y: 0, vx: (i % 2 ? 1 : -1) * 14, vy: (i % 3 ? -1 : 1) * 10,
-      rot: (i * 37) % 30 - 15, spin: (i % 2 ? 1 : -1) * 6, seed: i * 1.93, placed: false,
-    }))
-    const pointer = { x: -999, y: -999, in: false, px: 0, py: 0, vx: 0, vy: 0 }
-    let held: (typeof bodies)[number] | null = null
-
-    const measure = () => {
+    const place = () => {
       const r = host.getBoundingClientRect()
-      w = r.width; h = r.height
-      walls = [...host.querySelectorAll<HTMLElement>('.idc-photo, .idc-id h1, .idc-sub, .idc-chips, .idc-stat')].map((el) => {
-        const b = el.getBoundingClientRect(); return { l: b.left - r.left - 4, t: b.top - r.top - 4, r: b.right - r.left + 4, b: b.bottom - r.top + 4 }
+      // what's actually drawn: the text itself, not the full-width lines it sits on
+      const box = (el: Element) => {
+        if (el.matches('.idc-id h1, .idc-sub')) { const rg = document.createRange(); rg.selectNodeContents(el); return rg.getBoundingClientRect() }
+        if (el.matches('.idc-chips') && el.children.length) {
+          const bs = [...el.children].map((c) => c.getBoundingClientRect())
+          return { left: Math.min(...bs.map((b) => b.left)), top: Math.min(...bs.map((b) => b.top)), right: Math.max(...bs.map((b) => b.right)), bottom: Math.max(...bs.map((b) => b.bottom)) }
+        }
+        return el.getBoundingClientRect()
+      }
+      const walls = [...host.querySelectorAll('.idc-photo, .idc-id h1, .idc-sub, .idc-chips, .idc-stat')].map((el) => {
+        const b = box(el); return { l: b.left - r.left, t: b.top - r.top, r: b.right - r.left, b: b.bottom - r.top }
       })
-      // anything sitting on the content (or not placed yet) moves to the nearest free spot to where it wants to be
-      STICKERS.forEach((st, i) => { const o = bodies[i]; if (!o.placed || blocked(o, o.x, o.y)) { home(o, o.placed ? o.x : st.x * w, o.placed ? o.y : st.y * h); o.placed = true } })
-    }
-    const blocked = (o: (typeof bodies)[number], x: number, y: number) =>
-      x < o.rad || x > w - o.rad || y < o.rad || y > h - o.rad ||
-      walls.some((b) => Math.hypot(x - Math.max(b.l, Math.min(x, b.r)), y - Math.max(b.t, Math.min(y, b.b))) < o.rad + 4) ||
-      bodies.some((q) => q !== o && q.placed && Math.hypot(q.x - x, q.y - y) < q.rad + o.rad)
-    const home = (o: (typeof bodies)[number], wantX: number, wantY: number) => {
-      let best: [number, number] | null = null, bestD = Infinity
-      for (let k = 0; k < 160; k++) {
-        const x = o.rad + Math.random() * Math.max(1, w - 2 * o.rad), y = o.rad + Math.random() * Math.max(1, h - 2 * o.rad)
-        if (blocked(o, x, y)) continue
-        const d = Math.hypot(x - wantX, y - wantY)
-        if (d < bestD) { bestD = d; best = [x, y] }
-      }
-      if (best) { o.x = best[0]; o.y = best[1] } else { o.x = Math.min(Math.max(wantX, o.rad), w - o.rad); o.y = Math.min(Math.max(wantY, o.rad), h - o.rad) }
-      o.vx *= 0.2; o.vy *= 0.2
-    }
-    let stuck = 0
-    const draw = () => { for (const o of bodies) o.el.style.transform = `translate(${(o.x - o.rad).toFixed(1)}px, ${(o.y - o.rad).toFixed(1)}px) rotate(${o.rot.toFixed(1)}deg)` }
-
-    const step = (now: number) => {
-      const dt = Math.min(0.033, (now - last) / 1000); last = now
-      const t = now / 1000
-      for (const o of bodies) {
-        if (o === held) {
-          o.vx = (pointer.x - o.x) / Math.max(dt, 0.008); o.vy = (pointer.y - o.y) / Math.max(dt, 0.008)
-          o.x = pointer.x; o.y = pointer.y; o.rot += o.vx * 0.002; continue
+      const taken: { x: number; y: number; rad: number }[] = []
+      setHomes(STICKERS.map((st) => {
+        const rad = (st.kind === 'pill' ? st.size * 1.5 : st.size) / 2 + 10
+        const free = (x: number, y: number) => x > rad && x < r.width - rad && y > rad && y < r.height - rad &&
+          !walls.some((w) => Math.hypot(x - Math.max(w.l, Math.min(x, w.r)), y - Math.max(w.t, Math.min(y, w.b))) < rad) &&
+          !taken.some((q) => Math.hypot(q.x - x, q.y - y) < q.rad + rad)
+        const want = { x: st.x * r.width, y: st.y * r.height }
+        let best: { x: number; y: number } | null = null, bestD = Infinity
+        for (let x = rad; x < r.width - rad; x += 10) for (let y = rad; y < r.height - rad; y += 10) {
+          const d = Math.hypot(x - want.x, y - want.y)
+          if (d < bestD && free(x, y)) { bestD = d; best = { x, y } }
         }
-        // a slow drift of its own, so the card never goes still
-        o.vx += Math.cos(t * 0.4 + o.seed) * 6 * dt; o.vy += Math.sin(t * 0.5 + o.seed * 1.3) * 6 * dt
-        // shy of the pointer
-        if (pointer.in) {
-          const dx = o.x - pointer.x, dy = o.y - pointer.y, d = Math.hypot(dx, dy)
-          if (d < o.rad + 70 && d > 0.1) { const f = (1 - d / (o.rad + 70)) * 900 * dt; o.vx += (dx / d) * f; o.vy += (dy / d) * f }
-        }
-        const damp = Math.exp(-0.9 * dt); o.vx *= damp; o.vy *= damp; o.spin = Math.max(-140, Math.min(140, o.spin * Math.exp(-1.4 * dt)))
-        const sp = Math.hypot(o.vx, o.vy); if (sp > 900) { o.vx *= 900 / sp; o.vy *= 900 / sp }
-        o.x += o.vx * dt; o.y += o.vy * dt; o.rot = (o.rot + (o.spin + o.vx * 0.04) * dt) % 360
-        // your name, photo and numbers: solid, and they bounce off them
-        for (const b of walls) {
-          const cx = Math.max(b.l, Math.min(o.x, b.r)), cy = Math.max(b.t, Math.min(o.y, b.b))
-          let dx = o.x - cx, dy = o.y - cy, d = Math.hypot(dx, dy)
-          if (d >= o.rad) continue
-          if (d < 0.01) { // centre inside the box: leave by the nearest side
-            const exits = [[o.x - b.l, -1, 0], [b.r - o.x, 1, 0], [o.y - b.t, 0, -1], [b.b - o.y, 0, 1]].sort((p, q) => p[0] - q[0])[0]
-            dx = exits[1]; dy = exits[2]; d = 0
-          } else { dx /= d; dy /= d }
-          o.x += dx * (o.rad - d); o.y += dy * (o.rad - d)
-          const vn = o.vx * dx + o.vy * dy
-          if (vn < 0) { o.vx -= 1.7 * vn * dx; o.vy -= 1.7 * vn * dy; o.spin += (o.vx * dy - o.vy * dx) * 0.05 }
-        }
-        // the card's edges, last, so nothing ever leaves the card
-        if (o.x < o.rad) { o.x = o.rad; o.vx = Math.abs(o.vx) * 0.7; o.spin += o.vy * 0.05 }
-        if (o.x > w - o.rad) { o.x = w - o.rad; o.vx = -Math.abs(o.vx) * 0.7; o.spin -= o.vy * 0.05 }
-        if (o.y < o.rad) { o.y = o.rad; o.vy = Math.abs(o.vy) * 0.7; o.spin -= o.vx * 0.05 }
-        if (o.y > h - o.rad) { o.y = h - o.rad; o.vy = -Math.abs(o.vy) * 0.7; o.spin += o.vx * 0.05 }
-      }
-      // and each other
-      for (let i = 0; i < bodies.length; i++) for (let j = i + 1; j < bodies.length; j++) {
-        const a = bodies[i], c = bodies[j], dx = c.x - a.x, dy = c.y - a.y, d = Math.hypot(dx, dy), min = a.rad + c.rad
-        if (d >= min || d < 0.01) continue
-        const nx = dx / d, ny = dy / d, push = (min - d) / 2
-        if (a !== held) { a.x -= nx * push; a.y -= ny * push }
-        if (c !== held) { c.x += nx * push; c.y += ny * push }
-        const rel = (c.vx - a.vx) * nx + (c.vy - a.vy) * ny
-        if (rel < 0) { const k = -1.6 * rel / 2; if (a !== held) { a.vx -= k * nx; a.vy -= k * ny } if (c !== held) { c.vx += k * nx; c.vy += k * ny } }
-      }
-      // one wedged between the card's edge and the content (it can't fit there) goes somewhere roomier
-      if (++stuck % 30 === 0) for (const o of bodies) if (o !== held && blocked(o, o.x, o.y)) home(o, o.x, o.y)
-      draw()
-      if (visible && !document.hidden) raf = requestAnimationFrame(step)
+        if (best) taken.push({ ...best, rad })
+        return best
+      }))
     }
-    const start = () => { cancelAnimationFrame(raf); last = performance.now(); if (!calm) raf = requestAnimationFrame(step) }
-
-    const at = (e: PointerEvent) => { const r = host.getBoundingClientRect(); return { x: e.clientX - r.left, y: e.clientY - r.top } }
-    const move = (e: PointerEvent) => { const p = at(e); pointer.x = p.x; pointer.y = p.y; pointer.in = true
-      const hit = bodies.some((o) => Math.hypot(o.x - p.x, o.y - p.y) < o.rad)
-      host.classList.toggle('idc-grab', !!held || (hit && !(e.target as HTMLElement).closest('button, a, input'))) }
-    const leave = () => { pointer.in = false; if (!held) host.classList.remove('idc-grab') }
-    const down = (e: PointerEvent) => {
-      if ((e.target as HTMLElement).closest('button, a, input, .idc-stat')) return
-      const p = at(e)
-      held = bodies.find((o) => Math.hypot(o.x - p.x, o.y - p.y) < o.rad + 4) ?? null
-      if (held) { e.preventDefault(); host.setPointerCapture(e.pointerId); held.el.classList.add('held'); host.classList.add('idc-grab'); return }
-      // a click on empty card: everything nearby hops away from it
-      for (const o of bodies) { const dx = o.x - p.x, dy = o.y - p.y, d = Math.hypot(dx, dy) || 1; if (d < 260) { const f = (1 - d / 260) * 520; o.vx += (dx / d) * f; o.vy += (dy / d) * f - 80; o.spin += (Math.random() - 0.5) * 200 } }
+    const move = (e: PointerEvent) => {
+      const r = host.getBoundingClientRect()
+      layer.style.setProperty('--px', (((e.clientX - r.left) / r.width) * 2 - 1).toFixed(3))
+      layer.style.setProperty('--py', (((e.clientY - r.top) / r.height) * 2 - 1).toFixed(3))
     }
-    const up = () => { if (held) { held.el.classList.remove('held'); held.spin += held.vx * 0.3; held = null } }
-
-    measure(); draw()
-    const settle = window.setTimeout(measure, 1100) // the banner's own entrance has moved things by then
-    const ro = new ResizeObserver(() => { measure(); draw() })
+    const leave = () => { layer.style.setProperty('--px', '0'); layer.style.setProperty('--py', '0') }
+    place()
+    const settle = window.setTimeout(place, 1000) // after the banner's own entrance
+    const ro = new ResizeObserver(place)
     ro.observe(host)
-    const io = new IntersectionObserver(([e]) => { visible = e.isIntersecting; if (visible) start() })
-    io.observe(host)
-    const vis = () => { if (!document.hidden) start() }
-    if (!calm) {
-      host.addEventListener('pointermove', move); host.addEventListener('pointerleave', leave)
-      host.addEventListener('pointerdown', down); host.addEventListener('pointerup', up); host.addEventListener('pointercancel', up)
-    }
-    document.addEventListener('visibilitychange', vis)
-    start()
-    return () => {
-      cancelAnimationFrame(raf); window.clearTimeout(settle); ro.disconnect(); io.disconnect()
-      host.removeEventListener('pointermove', move); host.removeEventListener('pointerleave', leave)
-      host.removeEventListener('pointerdown', down); host.removeEventListener('pointerup', up); host.removeEventListener('pointercancel', up)
-      document.removeEventListener('visibilitychange', vis)
-    }
+    host.addEventListener('pointermove', move); host.addEventListener('pointerleave', leave)
+    return () => { window.clearTimeout(settle); ro.disconnect(); host.removeEventListener('pointermove', move); host.removeEventListener('pointerleave', leave) }
   }, [])
+  const hop = (el: HTMLElement | null) => el?.animate(
+    [{ transform: 'none' }, { transform: 'translateY(-22px) rotate(200deg) scale(1.15)', offset: 0.45 }, { transform: 'translateY(2px) rotate(350deg) scale(0.95)', offset: 0.8 }, { transform: 'rotate(360deg)' }],
+    { duration: 760, easing: 'cubic-bezier(0.3, 0.7, 0.3, 1)' })
   return (
     <div ref={box} className="idc-stickers" aria-hidden="true">
-      {STICKERS.map((st, i) => (
-        <span key={i} className={`idc-sticker idc-sticker--${st.kind}`} style={{ ['--c' as string]: st.color, ['--s' as string]: `${st.size}px`, animationDelay: `${0.35 + i * 0.07}s` }}>
-          {st.kind === 'mark' && <><i /><i /><i /><i /></>}
-        </span>
+      {STICKERS.map((st, i) => homes[i] && (
+        <motion.span key={i} className={`idc-sticker idc-sticker--${st.kind}`}
+          style={{ left: homes[i].x, top: homes[i].y, ['--c' as string]: st.color, ['--s' as string]: `${st.size}px`, ['--d' as string]: st.depth,
+            ['--bob' as string]: `${2.6 + (i % 3) * 0.7}s`, ['--delay' as string]: `${-i * 0.6}s`, animationDelay: `${0.35 + i * 0.07}s` }}
+          drag dragSnapToOrigin dragElastic={0.5} dragTransition={{ bounceStiffness: 260, bounceDamping: 12 }}
+          whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.92 }} whileDrag={{ scale: 1.18, rotate: i % 2 ? 12 : -12, zIndex: 5 }}
+          onTap={(e) => hop((e.currentTarget as HTMLElement | null)?.querySelector<HTMLElement>('.idc-sticker-body') ?? null)}>
+          <span className="idc-sticker-lean">
+            <span className="idc-sticker-body">{st.kind === 'mark' && <><i /><i /><i /><i /></>}</span>
+          </span>
+        </motion.span>
       ))}
     </div>
   )

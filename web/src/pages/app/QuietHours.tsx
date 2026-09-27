@@ -5,7 +5,7 @@ import { useToast } from '../../components/Island'
 import { Select } from '../../components/Select'
 import { useAuth } from '../../lib/auth'
 import { useBootHold } from '../../lib/boot'
-import { setSchedule, useProfile, useRepos } from '../../lib/data'
+import { setSchedule, usePrefs, useRepos } from '../../lib/data'
 import { weekHour } from '../../lib/houserules'
 import type { Schedule } from '../../lib/types'
 import { PageHead } from './Overview'
@@ -43,7 +43,7 @@ const hourTick = (h: number, clock: Clock) => (clock === '12h' ? `${h % 12 || 12
 export default function QuietHours() {
   const { user } = useAuth()
   const toast = useToast()
-  const prefs = useProfile(user?.uid)?.prefs
+  const prefs = usePrefs(user?.uid)
   const clock: Clock = prefs?.clock ?? '24h'
   const order = prefs?.weekStart === 'sun' ? [6, 0, 1, 2, 3, 4, 5] : [0, 1, 2, 3, 4, 5, 6]
   const { data: repos, loading } = useRepos(user?.uid)
