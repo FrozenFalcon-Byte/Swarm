@@ -147,7 +147,7 @@ export function routeLabel(path: string, repoName?: (id: string) => string | und
   if (path.startsWith('/onboarding')) return 'Welcome'
   if (path.startsWith('/docs')) return 'MCP docs'
   if (path.startsWith('/jam')) return 'The Jam'
-  if (path.startsWith('/maker')) return 'Agent maker'
+  if (path.startsWith('/merge')) return 'Merge'
   if (path.startsWith('/island')) return 'The Island'
   if (path.startsWith('/app/rules')) return 'House rules'
   if (path.startsWith('/app/quiet-hours')) return 'Quiet hours'

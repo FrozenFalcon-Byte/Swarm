@@ -72,7 +72,7 @@ function Bar({ onClose, repos, pages, onSignOut }: { onClose: () => void; repos:
       onClose(); if (!user) return
       queueRun(user.uid, r.id, 'command').then(() => toast.ok('Run queued', `${name(r)} · a worker picks it up next`), (e) => toast.error('Couldn’t queue it', e.message))
     }, words: `run start sync ${r.fullName}` })),
-    { id: 'a:maker', group: 'Actions', label: 'Make your own agent', hint: 'public page', icon: 'flask', run: go('/maker'), words: 'maker agent character avatar build dress fun picture' },
+    { id: 'a:merge', group: 'Actions', label: 'Play Merge', hint: 'public page', icon: 'flask', run: go('/merge'), words: 'merge game jar drop play fun score' },
     { id: 'a:jam', group: 'Actions', label: 'Jam with the agents', hint: 'public page', icon: 'flask', run: go('/jam'), words: 'jam music beat band play playground fun' },
     { id: 'a:home', group: 'Actions', label: 'Swarm home', icon: 'home', run: go('/'), words: 'home landing website' },
     { id: 'a:out', group: 'Actions', label: 'Sign out', icon: 'out', run: () => { onClose(); onSignOut() }, words: 'sign out log out logout' },
