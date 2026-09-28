@@ -114,9 +114,10 @@ async function exit(boot: HTMLElement) {
   await Promise.all(washes.map((w, k) => w.animate(
     [{ transform: `translate(${w.dataset.dx}px, ${w.dataset.dy}px) scale(1)` }, { transform: 'translate(0, 0) scale(1.15)', offset: 0.8 }, { transform: 'translate(0, 0) scale(1)' }],
     { duration: 420, delay: k * 40, easing: EASE, fill: 'forwards' }).finished))
-  // 2. flood, one colour after another
-  const scale = cover / radius
-  const floods = washes.map((w, k) => w.animate([{ transform: 'scale(1)' }, { transform: `scale(${scale})` }],
+  // 2. flood, one colour after another. The circle grows by its real size, not a transform: scaling a 34px dot
+  //    thirty times over stretches its bitmap, which shows as a blurry, jagged edge on phones.
+  const box = (r: number) => ({ left: `${cx - r}px`, top: `${cy - r}px`, width: `${r * 2}px`, height: `${r * 2}px` })
+  const floods = washes.map((w, k) => w.animate([{ ...box(radius), transform: 'none' }, { ...box(cover), transform: 'none' }],
     { duration: 640, delay: k * 110, easing: 'cubic-bezier(0.7, 0, 0.2, 1)', fill: 'forwards' }).finished)
   await sleep(3 * 110 + 520)
   // 3. open a hole onto the app, which rises into place behind it

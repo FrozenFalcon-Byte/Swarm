@@ -72,7 +72,8 @@ function Bar({ onClose, repos, pages, onSignOut }: { onClose: () => void; repos:
       onClose(); if (!user) return
       queueRun(user.uid, r.id, 'command').then(() => toast.ok('Run queued', `${name(r)} · a worker picks it up next`), (e) => toast.error('Couldn’t queue it', e.message))
     }, words: `run start sync ${r.fullName}` })),
-    { id: 'a:playground', group: 'Actions', label: 'Open the playground', hint: 'public page', icon: 'flask', run: go('/playground'), words: 'playground try test analyse' },
+    { id: 'a:maker', group: 'Actions', label: 'Make your own agent', hint: 'public page', icon: 'flask', run: go('/maker'), words: 'maker agent character avatar build dress fun picture' },
+    { id: 'a:jam', group: 'Actions', label: 'Jam with the agents', hint: 'public page', icon: 'flask', run: go('/jam'), words: 'jam music beat band play playground fun' },
     { id: 'a:home', group: 'Actions', label: 'Swarm home', icon: 'home', run: go('/'), words: 'home landing website' },
     { id: 'a:out', group: 'Actions', label: 'Sign out', icon: 'out', run: () => { onClose(); onSignOut() }, words: 'sign out log out logout' },
     ...tasks.map((t) => ({ id: `t:${t.repoId}/${t.task_id}`, group: 'Tasks', label: t.title, icon: 'task', hint: `${t.task_id} · ${t.state === 'Needs Human' ? 'needs you' : t.state.toLowerCase()}`,

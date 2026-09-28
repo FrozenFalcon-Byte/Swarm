@@ -1,0 +1,187 @@
+/* ---------- The Island (pages/site/Island.tsx): a paper-craft diorama, a scroll film, then a sandbox */
+.isl { overflow-x: clip; }
+.isl-title { max-width: 13ch; }
+.isl-kicker { display: inline-flex; align-items: center; gap: 8px; padding: 6px 14px 6px 10px; border: 2px solid var(--ink); border-radius: 999px; background: var(--white); font-size: 13.5px; font-weight: 600; box-shadow: 2px 3px 0 var(--ink); }
+.isl-kicker i { width: 10px; height: 10px; border-radius: 50%; background: var(--reviewer); border: 1.5px solid var(--ink); animation: isl-blink 1.8s var(--ease-in-out) infinite; }
+@keyframes isl-blink { 50% { transform: scale(0.6); opacity: 0.5; } }
+
+/* the diorama: fixed paper colours with ink outlines, sitting on the page in either theme */
+.isl-svg { display: block; width: 100%; height: 100%; overflow: visible; user-select: none; -webkit-user-select: none; }
+.isl-svg .ink { stroke: #0f0f0f; stroke-width: 3; stroke-linejoin: round; stroke-linecap: round; }
+.isl-shadow { fill: color-mix(in srgb, var(--ink) 12%, transparent); }
+.isl-cloud { fill: #fff; stroke: #0f0f0f; stroke-width: 2.5; animation: isl-float 7s calc(var(--k) * -2.3s) ease-in-out infinite alternate; }
+@keyframes isl-float { to { translate: 30px 6px; } }
+.isl-wave { stroke: #fff; stroke-width: 3; fill: none; stroke-linecap: round; opacity: 0.7; animation: isl-wave 3.2s calc(var(--k) * -0.7s) ease-in-out infinite alternate; }
+@keyframes isl-wave { to { translate: 14px 0; opacity: 0.25; } }
+.isl-path { fill: none; stroke: #f3e2b8; stroke-width: 9; stroke-linecap: round; stroke-dasharray: 2 16; }
+.isl-tree { transform-box: fill-box; transform-origin: 50% 100%; animation: isl-sway 3s calc(var(--k) * -0.6s) ease-in-out infinite alternate; }
+@keyframes isl-sway { from { rotate: -2deg; } to { rotate: 2.5deg; } }
+.isl-boat { animation: isl-bob 1.6s ease-in-out infinite alternate; }
+@keyframes isl-bob { to { translate: 0 -3px; rotate: 1.5deg; } }
+.isl-boat-t, .isl-token-t { font: 700 12px var(--font-mono); fill: #0f0f0f; }
+.isl-token { animation: isl-bob 0.9s ease-in-out infinite alternate; }
+.isl-token-t { font-size: 11px; }
+.bd-code rect { transform-box: fill-box; transform-origin: 0 50%; animation: isl-type 2.4s calc(var(--k) * -0.8s) steps(6) infinite; }
+.bd-workshop.is-working .bd-code rect { animation-duration: 0.7s; }
+@keyframes isl-type { from { scale: 0.1 1; } }
+
+.isl-wait-t { font: 700 13px var(--font-sans); fill: #0f0f0f; }
+
+.isl-road-edge { fill: none; stroke: #0f0f0f; stroke-width: 17; stroke-linecap: round; stroke-linejoin: round; opacity: 0.85; pointer-events: none; }
+.isl-road { fill: none; stroke: #f3e2b8; stroke-width: 12; stroke-linecap: round; stroke-linejoin: round; pointer-events: none; }
+.isl-plot { cursor: pointer; }
+.isl-plot ellipse { fill: rgba(255, 255, 255, 0.35); stroke: #0f0f0f; stroke-width: 2; stroke-dasharray: 6 6; transition: fill 0.2s; animation: isl-march 1.2s linear infinite; }
+.isl-plot path { stroke: #0f0f0f; stroke-width: 2.5; stroke-linecap: round; opacity: 0.45; pointer-events: none; }
+.isl-plot:hover ellipse { fill: rgba(255, 255, 255, 0.8); }
+.isl-plot.is-on ellipse { fill: rgba(255, 216, 90, 0.85); }
+.bd-swing { transform-origin: 0 -76px; }
+.is-working .bd-swing { animation: isl-ring 0.5s var(--ease-in-out) infinite alternate; }
+@keyframes isl-ring { from { transform: rotate(-14deg); } to { transform: rotate(14deg); } }
+@keyframes isl-march { to { stroke-dashoffset: -12; } }
+
+/* buildings: each has an idle life and a busier one while it works */
+.bd { cursor: inherit; }
+.bd-sails { animation: isl-spin calc(7s / var(--speed, 1)) linear infinite; }
+@keyframes isl-spin { to { rotate: 1turn; } }
+.bd-lamp { animation: isl-lamp 2.4s ease-in-out infinite alternate; }
+@keyframes isl-lamp { to { fill: #fff4c8; } }
+.isl-beam { transform-origin: 0 0; animation: isl-sweep 5s ease-in-out infinite alternate; opacity: 0.55; transition: opacity 0.4s; mix-blend-mode: screen; }
+.isl-beam-at.is-on .isl-beam { opacity: 1; animation-duration: 1.6s; }
+@keyframes isl-sweep { 0% { scale: 1 1; rotate: 8deg; } 50% { scale: 0.08 1; rotate: 0deg; } 100% { scale: -1 1; rotate: -8deg; } }
+.bd-smoke circle { fill: #fff; stroke: #0f0f0f; stroke-width: 2; opacity: 0; transform-box: fill-box; transform-origin: center; animation: isl-smoke 3s calc(var(--k) * -1s) ease-out infinite; }
+.bd-workshop.is-working .bd-smoke circle { animation-duration: 1.1s; }
+@keyframes isl-smoke { 0% { opacity: 0.9; translate: 0 0; scale: 0.5; } 100% { opacity: 0; translate: 10px -40px; scale: 1.3; } }
+.bd-sparks { opacity: 0; }
+.bd-workshop.is-working .bd-sparks { animation: isl-flash 0.3s steps(2) infinite; }
+.bd-workshop.is-working .bd-window { fill: #ffe27a; }
+@keyframes isl-flash { 50% { opacity: 1; } }
+.bd-bubbles circle { fill: #bde8c4; stroke: #0f0f0f; stroke-width: 1.5; opacity: 0; }
+.bd-lab.is-working .bd-bubbles circle { animation: isl-bubble 0.9s calc(var(--k) * -0.22s) ease-out infinite; }
+@keyframes isl-bubble { 0% { opacity: 1; translate: 0 10px; } 100% { opacity: 0; translate: 0 -28px; } }
+.bd-flag { transform-box: fill-box; transform-origin: 0 50%; animation: isl-flag 1.2s ease-in-out infinite alternate; }
+@keyframes isl-flag { to { transform: skewY(8deg) scaleX(0.9); } }
+.bd-stamp { opacity: 0; transform-box: fill-box; transform-origin: center; }
+.bd-tower.is-working .bd-stamp { animation: isl-stamp 1.7s var(--spring) forwards; }
+@keyframes isl-stamp { 0% { opacity: 0; scale: 2.4; } 30% { opacity: 1; scale: 1; } 100% { opacity: 1; scale: 1; } }
+.bd-lighthouse.is-working .bd-lamp { animation-duration: 0.3s; }
+.bd.is-still *, .bd.is-still { animation: none !important; }
+
+/* ---------- the film: pinned while you scroll through it */
+.isl-film { position: relative; height: 620vh; }
+.isl-intro { position: absolute; z-index: 2; top: 0; left: 50%; translate: -50% 0; width: min(1280px, 100%); padding: clamp(110px, 16svh, 150px) var(--gutter) 0; display: flex; flex-direction: column; align-items: flex-start; gap: 18px; pointer-events: none; }
+.isl-intro > * { pointer-events: auto; }
+.isl-intro.is-gone { visibility: hidden; }
+.isl-intro .site-lede { max-width: 44ch; }
+.isl-caption { transition: opacity 0.4s, translate 0.4s; }
+.isl-caption.is-hidden { opacity: 0; translate: 0 16px; pointer-events: none; }
+.isl-film-pin { position: sticky; top: 0; height: 100svh; display: grid; place-items: center; overflow: hidden; }
+.isl-film-stage { width: min(1200px, 100% - 2 * var(--gutter)); height: min(76svh, 760px); display: grid; place-items: center; }
+.isl-film-stage .isl-svg { max-height: 100%; }
+.isl-caption { position: absolute; left: max(var(--gutter), calc(50% - 600px)); bottom: clamp(20px, 5svh, 56px); width: min(420px, calc(100% - 2 * var(--gutter)));
+  padding: 18px 20px; border-radius: 24px; background: var(--white); border: 2px solid var(--ink); box-shadow: 5px 6px 0 var(--ink); }
+.isl-caption b { display: block; font-size: clamp(20px, 2vw, 26px); font-weight: 600; letter-spacing: -0.03em; }
+.isl-caption p { margin-top: 6px; font-size: 15px; line-height: 1.45; color: var(--ink-2); }
+.isl-caption-tag { display: inline-block; margin-bottom: 8px; padding: 2px 10px; border-radius: 999px; border: 1.5px solid #0f0f0f; color: #0f0f0f; font-size: 12px; font-weight: 700; }
+.isl-rail { position: absolute; right: max(var(--gutter), calc(50% - 600px)); top: 50%; translate: 0 -50%; list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
+.isl-rail li { width: 12px; height: 12px; border-radius: 50%; border: 2px solid var(--ink); background: var(--white); transition: background-color 0.3s, transform 0.4s var(--spring); }
+.isl-rail li.done { background: var(--c); }
+.isl-rail li.on { background: var(--c); transform: scale(1.5); }
+.isl-film-bar { position: absolute; left: 0; right: 0; bottom: 0; height: 4px; background: var(--ink); transform-origin: 0 50%; }
+
+/* ---------- the sandbox */
+.isl-play { max-width: 1280px; margin: 0 auto; padding: clamp(60px, 7vw, 110px) var(--gutter) 0; }
+.isl-play-head { display: flex; flex-direction: column; gap: 12px; margin-bottom: clamp(20px, 3vw, 32px); }
+.isl-num span { font: 700 12px var(--font-mono); text-transform: uppercase; letter-spacing: 0.06em; padding: 4px 10px; border-radius: 8px; border: 1.5px solid var(--ink); background: var(--triager); color: #0f0f0f; }
+.isl-sub { max-width: 62ch; font-size: clamp(16px, 1.25vw, 19px); line-height: 1.5; color: var(--ink-2); font-weight: 500; }
+/* the game view: the island fills the screen edge to edge, the buildings float in a dock over the sea */
+.isl-play-deck { position: relative; width: 100vw; margin: 0 calc(50% - 50vw); height: max(620px, 100svh); scroll-margin-top: 0; }
+.isl-play-stage { position: absolute; inset: 0; padding: 76px 3vw 176px; transition: background-color 0.3s; }
+.isl-play-stage .isl-svg { height: 100%; }
+.isl-play-stage.is-drop { background-color: color-mix(in srgb, var(--triager) 10%, transparent); }
+.isl-hud { position: absolute; left: 20px; top: 18px; right: 140px; display: flex; flex-wrap: wrap; gap: 8px; z-index: 2; pointer-events: none; }
+.isl-chip { display: inline-flex; align-items: center; gap: 7px; padding: 7px 13px 7px 10px; border-radius: 12px; background: var(--white); border: 2px solid var(--ink); box-shadow: 2px 3px 0 var(--ink); font-size: 13px; font-weight: 600; overflow: hidden; }
+.isl-chip i { width: 10px; height: 10px; border-radius: 50%; background: var(--c); border: 1.5px solid var(--ink); }
+.isl-chip b { font: 700 15px var(--font-mono); min-width: 2ch; display: inline-block; }
+.isl-reset { position: absolute; right: 20px; top: 18px; z-index: 3; padding: 7px 14px; border-radius: 12px; background: var(--white); color: var(--ink); border: 2px solid var(--ink);
+  font-size: 13px; font-weight: 600; cursor: pointer; transition: transform 0.2s var(--spring), box-shadow 0.2s, opacity 0.2s; }
+.isl-reset:hover:not(:disabled) { transform: translateY(-2px); box-shadow: 2px 3px 0 var(--ink); }
+.isl-reset:disabled { opacity: 0; pointer-events: none; }
+.isl-line { position: absolute; left: 50%; bottom: 186px; translate: -50% 0; width: calc(100% - 40px); display: flex; justify-content: center; z-index: 2; pointer-events: none; }
+.isl-line p { padding: 9px 16px; border-radius: 14px; background: var(--c, var(--white)); color: #0f0f0f; border: 2px solid #0f0f0f; box-shadow: 2px 3px 0 #0f0f0f; font-size: 14px; font-weight: 600; text-align: center; max-width: 100%; }
+.isl-line p.is-empty { background: var(--white); color: var(--ink-2); border-color: var(--ink); box-shadow: none; font-weight: 500; }
+.isl-perks { position: absolute; right: 20px; top: 70px; z-index: 2; display: flex; flex-direction: column; align-items: flex-end; gap: 6px; pointer-events: none; }
+.isl-perk { display: inline-flex; gap: 6px; align-items: center; padding: 4px 10px; border-radius: 10px; font-size: 12px; font-weight: 500; background: var(--white); border: 2px solid var(--ink); border-left: 8px solid var(--c); }
+.isl-perk b { font-weight: 700; }
+
+/* a building you tapped on the island */
+.isl-pick { position: absolute; left: 20px; top: 72px; z-index: 4; width: min(280px, calc(100% - 40px)); display: flex; flex-direction: column; gap: 6px; padding: 14px 16px;
+  border-radius: 18px; background: var(--white); border: 2px solid var(--ink); border-left: 10px solid var(--c); box-shadow: 4px 5px 0 var(--ink); }
+.isl-pick b { font-size: 18px; font-weight: 700; letter-spacing: -0.02em; }
+.isl-pick p { font-size: 13.5px; line-height: 1.4; color: var(--ink-2); }
+.isl-pick-tag { align-self: flex-start; font: 700 11px var(--font-mono); text-transform: uppercase; letter-spacing: 0.05em; padding: 2px 8px; border-radius: 999px; background: var(--c); color: #0f0f0f; border: 1.5px solid #0f0f0f; }
+.isl-pick-row { display: flex; gap: 8px; align-items: center; margin-top: 4px; }
+.isl-pick-row .btn { height: 38px; padding: 0 14px; font-size: 13.5px; }
+.isl-pick-x { margin-left: auto; width: 32px; height: 32px; display: grid; place-items: center; border-radius: 50%; border: 2px solid var(--ink); background: var(--white); color: var(--ink); }
+
+/* the dock */
+.isl-dock { position: absolute; left: 50%; bottom: 20px; translate: -50% 0; z-index: 5; display: flex; gap: 14px; max-width: calc(100% - 32px);
+  padding: 10px 14px 12px; border-radius: 26px; background: var(--white); border: 2px solid var(--ink); box-shadow: 5px 6px 0 var(--ink); }
+.isl-group { display: flex; flex-direction: column; gap: 6px; }
+.isl-group + .isl-group { padding-left: 14px; border-left: 2px dashed var(--line); }
+.isl-cards { display: flex; gap: 8px; }
+.isl-card { position: relative; width: 84px; display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 6px 6px 8px; border-radius: 16px; text-align: center;
+  background: color-mix(in srgb, var(--c) 38%, var(--white)); color: var(--ink); border: 2px solid var(--ink); box-shadow: 2px 3px 0 var(--ink); cursor: grab; touch-action: none; transition: box-shadow 0.2s, opacity 0.2s, filter 0.2s; }
+.isl-card:hover:not(:disabled) { box-shadow: 3px 7px 0 var(--ink); }
+.isl-card:active:not(:disabled) { cursor: grabbing; }
+.isl-card-art { position: relative; display: grid; place-items: center; width: 100%; height: 54px; }
+.isl-card-art svg { height: 50px; width: auto; max-width: 100%; overflow: visible; }
+.isl-card-art .ink { stroke: #0f0f0f; stroke-width: 3.5; stroke-linejoin: round; }
+.isl-card-cost { display: inline-flex; align-items: center; gap: 4px; font: 700 11.5px var(--font-mono); padding: 1px 7px 1px 4px; border-radius: 999px; background: #fff; color: #0f0f0f; border: 1.5px solid #0f0f0f; }
+.isl-card-cost i { width: 10px; height: 10px; border-radius: 50%; background: #ffd85a; border: 1.5px solid #0f0f0f; }
+.isl-card-n { position: absolute; right: -4px; top: -6px; font: 700 11px var(--font-mono); padding: 1px 6px; border-radius: 999px; background: #0f0f0f; color: #fff; }
+.isl-card b { max-width: 100%; font-size: 12px; font-weight: 700; line-height: 1.2; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.isl-card:disabled { cursor: default; box-shadow: none; }
+.isl-card.is-poor { opacity: 0.5; filter: grayscale(0.4); }
+.isl-card.is-poor .isl-card-cost { background: #ffd2cb; }
+.isl-card.is-built .isl-card-cost { padding-left: 7px; background: var(--reviewer); }
+.isl-card.is-built { filter: saturate(0.5); }
+.isl-dock { flex-direction: column; gap: 8px; }
+.isl-dock-row { display: flex; gap: 14px; }
+.isl-dock-say { height: 20px; overflow: hidden; padding: 0 4px; }
+.isl-dock-say p { display: flex; align-items: center; gap: 8px; font-size: 13px; line-height: 20px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--ink-2); }
+.isl-dock-say i { flex: none; width: 10px; height: 10px; border-radius: 50%; border: 1.5px solid var(--ink); }
+.isl-dock-say b { color: var(--ink); font-weight: 700; }
+.isl-dock-say span { overflow: hidden; text-overflow: ellipsis; }
+
+@media (max-width: 900px) {
+  .isl-card { width: 70px; } .isl-card-art { height: 44px; } .isl-card-art svg { height: 40px; }
+  .isl-dock { padding: 8px 10px 10px; } .isl-dock-row { gap: 10px; } .isl-group + .isl-group { padding-left: 10px; }
+  .isl-play-stage { padding-bottom: 160px; } .isl-line { bottom: 168px; }
+}
+@media (max-width: 760px) {
+  .isl-film { height: 560vh; }
+  .isl-film-stage { height: 56svh; align-self: start; margin-top: 92px; }
+  .isl-rail { display: none; }
+  /* on a phone the dock is one row you swipe along, pinned to the bottom of the game view */
+  .isl-play-deck { height: max(560px, 100svh); }
+  /* below the site's bar, and zoomed onto the land: the open sea at the sides is cropped on a narrow screen */
+  .isl-play-stage { padding: 150px 0 170px; overflow: hidden; }
+  .isl-play-stage .isl-svg { width: 160%; max-width: none; margin-left: -30%; }
+  .isl-hud { left: 12px; top: 84px; right: 96px; gap: 6px; }
+  .isl-chip { padding: 4px 9px 4px 7px; font-size: 11.5px; gap: 5px; box-shadow: none; }
+  .isl-chip b { font-size: 12.5px; }
+  .isl-reset { top: 84px; right: 12px; padding: 4px 10px; font-size: 12px; }
+  .isl-card { width: 78px; } .isl-card b { font-size: 11px; }
+  .isl-dock { left: 0; right: 0; bottom: 0; translate: none; max-width: none; border-radius: 22px 22px 0 0; border-width: 2px 0 0; box-shadow: none; overflow-x: auto; overscroll-behavior-x: contain; scrollbar-width: none; padding: 10px 12px 14px; }
+  .isl-dock::-webkit-scrollbar { display: none; }
+  .isl-group { flex: none; }
+  .isl-card { touch-action: auto; cursor: pointer; }
+  .isl-dock-row { gap: 10px; } .isl-dock-say { display: none; }
+  .isl-line { bottom: 150px; } .isl-line p { font-size: 13px; }
+  .isl-perks { display: none; }
+  .isl-pick { top: auto; bottom: 150px; left: 12px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .isl-cloud, .isl-wave, .isl-tree, .isl-boat, .isl-token, .bd-sails, .bd-lamp, .isl-beam, .bd-smoke circle, .bd-flag, .bd-code rect, .isl-kicker i, .isl-plot ellipse, .bd-swing { animation: none; }
+}
+html.less-motion :is(.isl-cloud, .isl-wave, .isl-tree, .isl-boat, .isl-token, .bd-sails, .bd-lamp, .isl-beam, .bd-smoke circle, .bd-flag, .bd-code rect, .isl-kicker i, .isl-plot ellipse, .bd-swing) { animation: none; }

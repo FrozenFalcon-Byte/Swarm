@@ -91,10 +91,15 @@ export default function Overview() {
         </motion.section>}
 
         {shows('stats') && <>
-        <Stat i={2} tone="coral" label="Failing runs" big={m.before === null ? '—' : <><CountUp value={m.before} suffix="%" /><span className="tile-arrow">→</span><CountUp value={m.after ?? 0} suffix="%" /></>}
-          note={m.before === null ? 'Appears once a fix is proven' : `before → after, ${m.runs} sandboxed runs`} />
-        <Stat i={3} tone="green" label="Fixes merged" big={<CountUp value={m.merged} />} note={`${m.approved} more approved and ready`} />
-        <Stat i={4} tone="sky" label="Tools written" big={<CountUp value={m.tools} />} note={`${m.reuses} reuses on later tasks`} />
+        <Stat i={2} tone="coral" label="Still open" to="/app/repos" big={<CountUp value={m.open.total} />}
+          viz={<StageBar stages={m.open.stages} />}
+          note={m.open.oldest ? <>Oldest: <Link to={`/app/repos/${m.open.oldest.repoId}/tasks/${m.open.oldest.task_id}`} className="ov-stat-link">{m.open.oldest.task_id}</Link>, {m.open.oldest.where} for {since(m.open.oldest.at)}</> : 'Nothing open. Every issue is fixed or closed.'} />
+        <Stat i={3} tone="green" label="Time to a fix" big={m.speed.median === null ? '—' : duration(m.speed.median)}
+          viz={<Spark values={m.speed.recent} tone="var(--ink)" title="Each of the latest fixes, issue to approval" />}
+          note={m.speed.median === null ? 'Appears after the first approved fix' : `median, issue to approval · ${m.speed.firstTry} of ${m.speed.count} passed on the first try`} />
+        <Stat i={4} tone="sky" label="Last 7 days" big={<CountUp value={m.week.fixed} />}
+          viz={<Spark values={m.week.days} tone="var(--ink)" bars labels={m.week.labels} title="Agent moves per day" />}
+          note={`fix${m.week.fixed === 1 ? '' : 'es'} approved · ${m.week.moves} agent moves${m.week.delta === null ? '' : `, ${m.week.delta >= 0 ? '+' : ''}${m.week.delta}% on the week before`}`} />
         </>}
         {shows('repos') && <motion.section className={`ov-repos ${shows('stats') ? '' : 'wide'}`} {...card(5)}>
           <header><span className="tile-label">Repositories</span><Link to="/app/repos" className="ov-more" aria-label="All repositories">→</Link></header>
@@ -161,15 +166,78 @@ export default function Overview() {
 const EVIDENCE_MAX = 12
 const clip = (s: string, n: number) => (s.length > n ? s.slice(0, n - 1) + '…' : s)
 
-function Stat({ i, label, big, note, tone }: { i: number; label: string; big: React.ReactNode; note: string; tone: string }) {
+function Stat({ i, label, big, note, tone, viz, to }: { i: number; label: string; big: React.ReactNode; note: React.ReactNode; tone: string; viz?: React.ReactNode; to?: string }) {
   return (
     <motion.section className={`ov-stat tile-${tone}`} initial={{ opacity: 0, y: 18 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.6, ease: easeOut, delay: 0.04 + i * 0.05 }} whileHover={{ y: -3 }}>
-      <span className="tile-label">{label}</span>
-      <span className="ov-stat-big">{big}</span>
+      <header className="ov-stat-head"><span className="tile-label">{label}</span>{to && <Link to={to} className="ov-more" aria-label={`Open ${label.toLowerCase()}`}>→</Link>}</header>
+      <div className="ov-stat-mid"><span className="ov-stat-big">{big}</span>{viz}</div>
       <span className="tile-note">{note}</span>
     </motion.section>
   )
 }
+
+const STAGE_TONE: Record<string, string> = { 'Needs you': 'var(--white)', Triage: 'var(--triager)', Patching: 'var(--coder)', Testing: 'var(--tester)', Review: 'var(--reviewer)' }
+
+/** Where the open issues are sitting, as one bar split by stage, with a legend that counts each. */
+function StageBar({ stages }: { stages: { label: string; n: number }[] }) {
+  const total = stages.reduce((s, x) => s + x.n, 0)
+  const shown = stages.filter((s) => s.n)
+  if (!total) return null
+  return (
+    <div className="ov-stagebar">
+      <div className="ov-stagebar-track">
+        {shown.map((s, k) => (
+          <motion.i key={s.label} style={{ background: STAGE_TONE[s.label] }} data-tip={`${s.label}: ${s.n}`}
+            initial={{ flexGrow: 0 }} animate={{ flexGrow: s.n }} transition={{ duration: 0.9, ease: easeOut, delay: 0.35 + k * 0.06 }} />
+        ))}
+      </div>
+      <ul>{shown.map((s) => <li key={s.label}><i style={{ background: STAGE_TONE[s.label] }} />{s.label} <b>{s.n}</b></li>)}</ul>
+    </div>
+  )
+}
+
+/** A tiny chart: bars for counts per day, or a line for a run of values. Grows in from the baseline. */
+function Spark({ values, tone, bars, labels, title }: { values: number[]; tone: string; bars?: boolean; labels?: string[]; title: string }) {
+  if (values.length < 2 && !bars) return null
+  const max = Math.max(1, ...values), W = 120, H = 40
+  if (bars) {
+    const w = W / values.length
+    return (
+      <svg className="ov-spark" viewBox={`0 0 ${W} ${H + 12}`} role="img" aria-label={title}>
+        {values.map((v, k) => {
+          const h = v ? Math.max(3, (v / max) * H) : 1.5
+          return (
+            <g key={k}>
+              <motion.rect x={k * w + 2} width={w - 4} rx={2.5} fill={k === values.length - 1 ? tone : 'rgba(15,15,15,0.35)'}
+                initial={{ height: 0, y: H }} animate={{ height: h, y: H - h }} transition={{ duration: 0.7, ease: easeOut, delay: 0.35 + k * 0.05 }}>
+                <title>{`${labels?.[k] ?? ''}: ${v}`}</title>
+              </motion.rect>
+              {labels && <text x={k * w + w / 2} y={H + 10} textAnchor="middle" className="ov-spark-lab">{labels[k]}</text>}
+            </g>
+          )
+        })}
+      </svg>
+    )
+  }
+  const pts = values.map((v, k) => `${(k / (values.length - 1)) * W},${H - (v / max) * (H - 4) - 2}`).join(' ')
+  return (
+    <svg className="ov-spark" viewBox={`0 0 ${W} ${H}`} role="img" aria-label={title}>
+      <motion.polyline points={pts} fill="none" stroke={tone} strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round"
+        initial={{ pathLength: 0 }} animate={{ pathLength: 1 }} transition={{ duration: 1, ease: easeOut, delay: 0.35 }} />
+      {values.map((v, k) => <circle key={k} cx={(k / (values.length - 1)) * W} cy={H - (v / max) * (H - 4) - 2} r={k === values.length - 1 ? 3.5 : 0} fill={tone}><title>{duration(v)}</title></circle>)}
+    </svg>
+  )
+}
+
+const HOUR = 3600_000
+function duration(ms: number) {
+  const m = Math.round(ms / 60_000)
+  if (m < 60) return `${Math.max(1, m)}m`
+  const h = Math.floor(m / 60)
+  if (h < 48) return `${h}h${m % 60 && h < 10 ? ` ${m % 60}m` : ''}`
+  return `${Math.round(h / 24)}d`
+}
+const since = (ts: string) => duration(Date.now() - new Date(ts).getTime())
 
 /** The pipeline as a row of columns, one per stage, each as tall as the share of issues that got that far. */
 function Steps({ steps }: { steps: { label: string; value: number }[] }) {
@@ -228,22 +296,43 @@ function metrics(tasks: (Task & { repoId: string })[]) {
     { label: 'Merged', value: tasks.filter((t) => t.state === 'Merged').length },
   ]
   const evidence = evidenceRows(tasks.filter((t) => t.artifacts.review || t.state === 'Merged'))
-  // only fixes the tester actually proved (the task went on to review); failed attempts don't count
-  const proven = tasks.filter((t) => t.artifacts.review || t.state === 'Merged')
-  let fb = 0, fa = 0, runs = 0
-  for (const t of proven) for (const e of Object.values(t.artifacts.test_summary?.harness?.evidence || {})) {
-    if (!e.before?.runs) continue
-    fb += e.before.failures ?? 0; fa += e.after.failures ?? 0; runs += e.before.runs
-  }
-  const tools = new Set<string>(), uses: Record<string, number> = {}
-  for (const t of tasks) for (const id of t.artifacts.tools_used || []) { tools.add(`${t.repoId}/${id}`); uses[`${t.repoId}/${id}`] = (uses[`${t.repoId}/${id}`] || 0) + 1 }
   const workload = AGENTS.map((a) => ({ agent: a, count: tasks.reduce((n, t) => n + t.history.filter((h) => h.agent === a).length, 0) }))
   const recent = tasks.flatMap((t) => t.history.map((h) => ({ ...h, task: t.task_id, repoId: t.repoId })))
     .sort((a, b) => b.ts.localeCompare(a.ts)).slice(0, 8)
+  // what's still open, split by where it's sitting, and the one that's been sitting longest
+  const STAGE: Partial<Record<string, [string, string]>> = {
+    'Needs Human': ['Needs you', 'waiting for you'], 'New Issue': ['Triage', 'waiting for triage'], Triaged: ['Patching', 'waiting for a patch'],
+    'In Progress': ['Patching', 'being patched'], Rejected: ['Patching', 'back with the coder'], 'Awaiting Tests': ['Testing', 'in testing'], 'In Review': ['Review', 'in review'],
+  }
+  const entered = (t: Task) => [...t.history].reverse().find((h) => h.to_state === t.state)?.ts || t.updated_at || t.created_at
+  const openTasks = tasks.filter((t) => STAGE[t.state])
+  const stages = ['Needs you', 'Triage', 'Patching', 'Testing', 'Review'].map((label) => ({ label, n: openTasks.filter((t) => STAGE[t.state]![0] === label).length }))
+  const stuck = openTasks.map((t) => ({ ...t, at: entered(t), where: STAGE[t.state]![1] })).sort((a, b) => a.at.localeCompare(b.at))[0]
+
+  // how long an issue takes to reach an approved fix, and how often the first patch was the one
+  const fixes = tasks.map((t) => {
+    const ok = t.history.find((h) => h.to_state === 'Approved')
+    return ok && t.created_at ? { ms: new Date(ok.ts).getTime() - new Date(t.created_at).getTime(), at: ok.ts, first: !t.history.some((h) => h.to_state === 'Rejected') } : null
+  }).filter((f): f is { ms: number; at: string; first: boolean } => !!f && f.ms >= 0).sort((a, b) => a.at.localeCompare(b.at))
+  const sorted = fixes.map((f) => f.ms).sort((a, b) => a - b)
+  const median = sorted.length ? sorted[Math.floor((sorted.length - 1) / 2)] : null
+
+  // the last seven days, one bar per day, against the seven before
+  const day0 = new Date(); day0.setHours(0, 0, 0, 0)
+  const start = day0.getTime() - 6 * 24 * HOUR
+  const days = Array(7).fill(0), labels = Array.from({ length: 7 }, (_, k) => new Date(start + k * 24 * HOUR).toLocaleDateString(undefined, { weekday: 'narrow' }))
+  let prev = 0, fixedWeek = 0
+  for (const t of tasks) for (const h of t.history) {
+    const at = new Date(h.ts).getTime()
+    if (at >= start) { days[Math.min(6, Math.floor((at - start) / (24 * HOUR)))]++; if (h.to_state === 'Approved') fixedWeek++ }
+    else if (at >= start - 7 * 24 * HOUR) prev++
+  }
+  const movesWeek = days.reduce((s, n) => s + n, 0)
+
   return {
     funnel, evidence, workload, recent,
-    before: runs ? Math.round((fb / runs) * 100) : null, after: runs ? Math.round((fa / runs) * 100) : null, runs,
-    merged: tasks.filter((t) => t.state === 'Merged').length, approved: tasks.filter((t) => t.state === 'Approved').length,
-    tools: tools.size, reuses: Object.values(uses).reduce((n, u) => n + Math.max(0, u - 1), 0),
+    open: { total: openTasks.length, stages, oldest: stuck ? { repoId: stuck.repoId, task_id: stuck.task_id, at: stuck.at, where: stuck.where } : null },
+    speed: { median, count: fixes.length, firstTry: fixes.filter((f) => f.first).length, recent: fixes.slice(-8).map((f) => f.ms) },
+    week: { days, labels, moves: movesWeek, fixed: fixedWeek, delta: prev ? Math.round(((movesWeek - prev) / prev) * 100) : null },
   }
 }

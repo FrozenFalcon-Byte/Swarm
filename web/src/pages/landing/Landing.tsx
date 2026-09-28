@@ -230,7 +230,7 @@ export function Nav() {
   useMotionValueEvent(scrollY, 'change', (y) => setHidden(y > (scrollY.getPrevious() ?? 0) && y > 300 && !menu))
   // separate pages only; sections of the landing page are reached by scrolling it
   // plus Home whenever you're anywhere else
-  const links = [...(path === '/' ? [] : [['/', 'Home']]), ['/playground', 'Playground'], ['/cost', 'Cost calculator'], ['/docs/mcp', 'MCP docs']]
+  const links = [...(path === '/' ? [] : [['/', 'Home']]), ['/island', 'The Island'], ['/jam', 'The Jam'], ['/maker', 'Agent maker'], ['/docs/mcp', 'MCP docs']]
   return (
     <motion.header className="nav" animate={{ y: hidden ? -120 : 0 }} transition={{ duration: 0.5, ease: easeOut }}>
       <div className="nav-inner">
@@ -1034,8 +1034,8 @@ function Faq() {
         <div className="faq-help">
           <AgentDots size={14} />
           <b>Still unsure?</b>
-          <p>Paste one of your tests into the playground, or read how Swarm plugs into Claude.</p>
-          <div><Link to="/playground" className="btn btn-dark btn-sm"><Roll>Playground</Roll></Link><Link to="/docs/mcp" className="btn btn-line btn-sm"><Roll>MCP docs</Roll></Link></div>
+          <p>Jam with the agents for a minute, or read how Swarm plugs into Claude.</p>
+          <div><Link to="/jam" className="btn btn-dark btn-sm"><Roll>The Jam</Roll></Link><Link to="/docs/mcp" className="btn btn-line btn-sm"><Roll>MCP docs</Roll></Link></div>
         </div>
       </div>
       <motion.div className="faq-list" layout>
@@ -1087,7 +1087,7 @@ export function Footer() {
         <Link to="/signup" className="btn btn-green btn-xl"><AgentDots size={22} /> <Roll>Get started free</Roll><Go /></Link>
       </div>
       <div className="footer-cols">
-        <div><b>Product</b><Link to="/#how">How it works</Link><Link to="/#patterns">Patterns</Link><Link to="/playground">Playground</Link><Link to="/cost">Cost calculator</Link></div>
+        <div><b>Product</b><Link to="/#how">How it works</Link><Link to="/#patterns">Patterns</Link><Link to="/island">The Island</Link><Link to="/jam">The Jam</Link><Link to="/maker">Agent maker</Link></div>
         <div><b>Security</b><Link to="/#security">Sandbox</Link><Link to="/#faq">Merge policy</Link></div>
         <div><b>Support</b><Link to="/#faq">FAQ</Link><Link to="/docs/mcp">MCP docs</Link><Link to="/signin">Sign in</Link></div>
         <div><b>Start</b><Link to="/signup">Get started</Link><a href="https://github.com/FrozenFalcon-Byte/Swarm" target="_blank" rel="noreferrer">GitHub</a><span>Made for maintainers</span></div>

@@ -1434,8 +1434,9 @@ kbd { font-family: var(--font-mono); font-size: 11.5px; min-width: 22px; height:
 @keyframes qh-brush { 0% { transform: translate(-80px, 12px); } 60% { transform: translate(0, 0); } 100% { transform: translate(0, 0); } }
 
 .qh-hero-in { position: relative; height: 100%; display: flex; flex-direction: column; gap: 14px; padding: 12px 12px 18px; }
-.qh-now { align-self: flex-start; max-width: calc(100% - 126px); display: inline-flex; align-items: center; gap: 9px; height: 34px; padding: 0 14px 0 11px; border-radius: var(--pill); background: var(--hero-chip); font-size: 13.5px; font-weight: 600; overflow: hidden; transition: background-color 0.6s var(--ease-out); }
-.qh-now > span:not(.qh-pulse) { display: block; white-space: nowrap; }
+/* the scene sits below this line, so the status can take the full width, and wraps rather than cutting off */
+.qh-now { position: relative; z-index: 1; align-self: flex-start; max-width: 100%; display: inline-flex; align-items: center; gap: 9px; min-height: 34px; padding: 6px 14px 6px 11px; border-radius: 17px; background: var(--hero-chip); font-size: 13.5px; font-weight: 600; line-height: 1.3; overflow: hidden; transition: background-color 0.6s var(--ease-out); }
+.qh-now > span:not(.qh-pulse) { display: block; min-width: 0; overflow-wrap: anywhere; }
 .qh-pulse { position: relative; flex: none; width: 10px; height: 10px; border-radius: 50%; background: var(--coder); }
 .qh-now.open .qh-pulse { background: var(--green); }
 .qh-now.open .qh-pulse::after { content: ""; position: absolute; inset: -5px; border-radius: 50%; border: 2px solid var(--green); animation: qh-ping 1.8s var(--ease-out) infinite; }
@@ -1631,6 +1632,20 @@ html.less-motion .qh-scene * { animation: none !important; }
 
 .ov-stat { grid-column: span 3; display: flex; flex-direction: column; gap: 10px; justify-content: space-between; min-height: 168px; padding: 20px 22px; border-radius: var(--radius-xl); }
 .ov-stat-big { font-size: clamp(38px, 3.4vw, 56px); font-weight: 600; letter-spacing: -0.05em; line-height: 0.9; display: flex; align-items: baseline; gap: 6px; flex-wrap: wrap; }
+.ov-stat-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.ov-stat-head .ov-more { background: rgba(255, 255, 255, 0.55); }
+.ov-stat-mid { display: flex; align-items: flex-end; justify-content: space-between; gap: 10px 14px; flex-wrap: wrap; }
+.ov-stat-mid .ov-stat-big { flex: none; }
+.ov-stat-link { font-family: var(--font-mono); font-size: 0.92em; font-weight: 600; color: var(--ink); text-decoration: underline; text-decoration-thickness: 1.5px; text-underline-offset: 2px; }
+.ov-spark { flex: 1 1 110px; max-width: 150px; height: auto; overflow: visible; }
+.ov-spark-lab { font: 600 8px var(--font-sans); fill: rgba(15, 15, 15, 0.55); }
+.ov-stagebar { flex: 1 1 100%; display: flex; flex-direction: column; gap: 8px; }
+.ov-stagebar-track { display: flex; gap: 3px; height: 14px; }
+.ov-stagebar-track i { flex: 0 1 0; min-width: 6px; border-radius: 5px; border: 1.5px solid #0f0f0f; }
+.ov-stagebar ul { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 4px 12px; font-size: 12.5px; font-weight: 500; color: rgba(15, 15, 15, 0.75); }
+.ov-stagebar li { display: inline-flex; align-items: center; gap: 5px; }
+.ov-stagebar li i { width: 9px; height: 9px; border-radius: 3px; border: 1.5px solid #0f0f0f; }
+.ov-stagebar li b { color: #0f0f0f; }
 .ov-repos { grid-column: span 3; display: flex; flex-direction: column; gap: 10px; padding: 20px 18px 14px 22px; border-radius: var(--radius-xl); background: var(--grey-8); border: 1.5px solid var(--line-soft); }
 .ov-repos header { display: flex; justify-content: space-between; align-items: center; }
 .ov-repos .tile-label { background: var(--white); }

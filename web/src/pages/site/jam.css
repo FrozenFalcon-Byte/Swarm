@@ -1,0 +1,97 @@
+/* The Jam (pages/site/Jam.tsx): the band on a stage, the loop grid under them, a dock of controls. */
+.jam-hero { padding-bottom: 12px; }
+.jam-stage { max-width: 1180px; margin: 0 auto; padding: 0 var(--gutter); display: flex; flex-direction: column; gap: 18px; }
+
+/* the band */
+.jam-band-wrap { position: relative; z-index: 3; }
+.jam-band { width: 100%; height: auto; display: block; overflow: visible; }
+.jam-floor { stroke: var(--ink); stroke-width: 3; stroke-linecap: round; }
+.jam-player { cursor: pointer; }
+.jam-shadow { fill: var(--ink); opacity: 0.1; }
+.jam-body { stroke: var(--ink); stroke-width: 3; stroke-linejoin: round; transition: opacity 0.4s var(--ease-out), filter 0.4s; }
+.jam-eye { fill: #fff; stroke: #0f0f0f; stroke-width: 2.5; }
+.jam-pupil { fill: #0f0f0f; transition: cx 0.18s var(--ease-out); }
+.jam-eyes-shut path, .jam-mouth { fill: none; stroke: #0f0f0f; stroke-width: 3; stroke-linecap: round; }
+.jam-mouth-open { fill: #0f0f0f; }
+.jam-name { font: 700 13px var(--font-mono); text-anchor: middle; fill: #0f0f0f; letter-spacing: 0.02em; text-transform: uppercase; }
+.jam-say { font-size: 22px; font-weight: 700; text-anchor: middle; pointer-events: none; fill: var(--ink); }
+.jam-z { font: 700 18px var(--font-mono); fill: var(--ink-3); }
+.jam-player.is-muted .jam-body { opacity: 0.45; filter: saturate(0.4); }
+.jam-sway { transform-box: fill-box; transform-origin: 50% 100%; }
+/* nodding along to the tempo while the band plays; each player a little behind the last */
+.jam-player.is-grooving .jam-sway { animation: jam-nod var(--beat) ease-in-out infinite alternate; animation-delay: calc(var(--lead) * -0.07s); }
+@keyframes jam-nod { from { transform: rotate(-3deg); } to { transform: rotate(3deg); } }
+.jam-player:hover .jam-body { filter: brightness(1.04); }
+
+/* the loop */
+.jam-grid { display: flex; flex-direction: column; gap: 10px; background: var(--grey-8); border-radius: var(--radius-xl); padding: clamp(12px, 1.6vw, 20px); }
+.jam-row { display: grid; grid-template-columns: 150px minmax(0, 1fr); gap: 14px; align-items: center; transition: opacity 0.3s; }
+.jam-row.is-muted .jam-cells { opacity: 0.4; }
+.jam-who { display: flex; align-items: center; gap: 10px; text-align: left; padding: 6px 8px; border-radius: 14px; transition: background var(--t-fast); }
+.jam-who:hover { background: var(--grey-6); }
+.jam-who i { width: 22px; height: 22px; flex: none; border-radius: 50%; background: var(--c); border: 2px solid var(--ink); transition: transform 0.3s var(--ease-out); }
+.jam-row.is-muted .jam-who i { transform: scale(0.7); background: var(--grey-6); }
+.jam-who span { display: flex; flex-direction: column; line-height: 1.15; min-width: 0; }
+.jam-who b { font-size: 15px; font-weight: 600; }
+.jam-who small { font-size: 12.5px; color: var(--ink-3); }
+.jam-cells { display: grid; grid-template-columns: repeat(16, minmax(0, 1fr)); gap: 6px; }
+.jam-cells > :nth-child(4n+1):not(:first-child) { margin-left: 6px; } /* a little gap between beats */
+.jam-cell { position: relative; aspect-ratio: 1; border-radius: 10px; background: var(--white); border: 2px solid var(--line-soft); overflow: hidden;
+  transition: background 0.2s var(--ease-out), border-color 0.2s, transform 0.25s var(--ease-out), box-shadow 0.2s; }
+.jam-cell.is-down { background: color-mix(in srgb, var(--grey-6) 60%, var(--white)); }
+.jam-cell:hover { border-color: var(--ink); }
+.jam-cell.on { background: var(--c); border-color: var(--ink); }
+.jam-row .jam-cell.on:has(.jam-pitch) { background: color-mix(in srgb, var(--c) 30%, var(--white)); }
+.jam-pitch { position: absolute; left: 0; right: 0; bottom: 0; height: calc(var(--v) * 100%); background: var(--c); border-top: 2px solid var(--ink); transition: height 0.3s cubic-bezier(0.34, 1.56, 0.64, 1); }
+.jam-cell.is-now { transform: translateY(-3px); box-shadow: 0 3px 0 var(--ink); }
+.jam-cell.is-hit { animation: jam-hit 0.3s var(--ease-out); }
+@keyframes jam-hit { 40% { transform: translateY(-3px) scale(1.18); } }
+
+/* the dock */
+.jam-dock { position: sticky; bottom: calc(14px + env(safe-area-inset-bottom)); z-index: 4; display: flex; align-items: center; gap: 14px; flex-wrap: wrap; background: var(--white); border: 2px solid var(--ink); border-radius: 28px; box-shadow: 5px 6px 0 var(--ink); padding: 12px 14px; }
+.jam-play { width: 58px; height: 58px; flex: none; border-radius: 50%; background: var(--green); border: 2px solid var(--ink); display: grid; place-items: center; box-shadow: 2px 3px 0 var(--ink); transition: background 0.3s; }
+.jam-play.on { background: var(--tester); }
+.jam-play svg { width: 26px; height: 26px; fill: #0f0f0f; }
+.jam-knobs { display: flex; align-items: center; gap: 12px; }
+.jam-tempo { display: flex; flex-direction: column; gap: 4px; font-size: 12.5px; color: var(--ink-2); }
+.jam-tempo b { font-size: 16px; color: var(--ink); }
+.jam-tempo input { width: 130px; accent-color: var(--ink); }
+.jam-swing { display: inline-flex; align-items: center; gap: 8px; font-size: 14px; font-weight: 600; padding: 7px 12px 7px 6px; border: 2px solid var(--ink); border-radius: var(--pill); }
+.jam-swing i { width: 30px; height: 18px; border-radius: 10px; background: var(--grey-6); border: 1.5px solid var(--ink); position: relative; transition: background var(--t-fast); }
+.jam-swing i::after { content: ""; position: absolute; top: 1.5px; left: 1.5px; width: 12px; height: 12px; border-radius: 50%; background: var(--ink); transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1); }
+.jam-swing.on i { background: var(--triager); }
+.jam-swing.on i::after { transform: translateX(12px); }
+.jam-presets { align-self: flex-start; display: flex; align-items: center; flex-wrap: wrap; gap: 4px; background: var(--grey-6); border-radius: 22px; padding: 5px 5px 5px 16px; max-width: 100%; }
+.jam-presets > span { font-weight: 600; font-size: 14px; margin-right: 4px; }
+.jam-presets .pg-sample { padding: 8px 14px; }
+.jam-acts { display: flex; gap: 6px; margin-left: auto; }
+.jam-act { white-space: nowrap; padding: 10px 16px; border-radius: var(--pill); border: 2px solid var(--ink); font-size: 14px; font-weight: 600; background: var(--white); transition: transform 0.2s var(--ease-out), box-shadow 0.2s; }
+.jam-act:hover { transform: translate(-1px, -2px); box-shadow: 2px 3px 0 var(--ink); }
+.jam-act--dark { background: var(--ink); color: var(--white); }
+
+@media (max-width: 900px) {
+  .jam-row { grid-template-columns: minmax(0, 1fr); gap: 6px; }
+  .jam-who { padding: 2px 4px; }
+  .jam-acts { margin-left: 0; }
+}
+@media (max-width: 640px) {
+  .jam-stage { gap: 14px; }
+  .jam-band { margin: 0 -6px; width: calc(100% + 12px); }
+  .jam-name { font-size: 16px; }
+  .jam-cells { grid-template-columns: repeat(8, minmax(0, 1fr)); gap: 5px; } /* two bars of eight */
+  .jam-cells > :nth-child(4n+1):not(:first-child) { margin-left: 0; }
+  .jam-cells > :nth-child(8n+5) { margin-left: 5px; }
+  .jam-cell { border-radius: 8px; }
+  .jam-dock { border-radius: 22px; gap: 10px; box-shadow: 4px 4px 0 var(--ink); }
+  .jam-knobs { flex: 1; justify-content: space-between; }
+  .jam-tempo input { width: 110px; }
+  /* on a phone the band stays in view above the grid and the controls below it, so you can edit and watch */
+  .jam-band-wrap { position: sticky; top: env(safe-area-inset-top, 0px); background: var(--white); margin: 0 calc(-1 * var(--gutter)); padding: 12px var(--gutter) 2px; }
+  .jam-presets { border-radius: 20px; }
+  .jam-presets > span { width: 100%; padding: 2px 4px; }
+  .jam-acts { width: 100%; }
+  .jam-act { flex: 1; padding: 9px 6px; font-size: 13px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .jam-player.is-grooving .jam-sway, .jam-cell.is-hit { animation: none; }
+}
