@@ -196,6 +196,45 @@ img, svg { display: block; max-width: 100%; }
 .toast-confetti i { position: absolute; left: -5px; top: -5px; border: 1.5px solid var(--ink); }
 html[data-toasts="bl"] .toasts { right: auto; left: 22px; align-items: flex-start; }
 html[data-toasts="top"] .toasts { top: 18px; bottom: auto; left: 0; right: 0; align-items: center; flex-direction: column-reverse; }
+html[data-toasts="bottom"] .toasts { left: 0; right: 0; align-items: center; }
+html[data-toasts="tr"] .toasts { top: 18px; bottom: auto; flex-direction: column-reverse; }
+html[data-toasts="tl"] .toasts { top: 18px; bottom: auto; right: auto; left: 22px; align-items: flex-start; flex-direction: column-reverse; }
+/* sizes */
+.toasts--compact .toast { width: min(310px, calc(100vw - 32px)); }
+.toasts--compact .toast-in { min-height: 50px; padding: 8px 10px 10px 8px; gap: 10px; }
+.toasts--compact .toast-glyph { width: 32px; height: 32px; }
+.toasts--compact .toast-glyph svg { width: 14px; height: 14px; }
+.toasts--compact .toast-text b { font-size: 14px; }
+.toasts--compact .toast-text > span { font-size: 12px; }
+.toasts--large .toast { width: min(450px, calc(100vw - 32px)); }
+.toasts--large .toast-in { min-height: 78px; padding: 16px 16px 18px 14px; gap: 14px; }
+.toasts--large .toast-glyph { width: 50px; height: 50px; }
+.toasts--large .toast-text b { font-size: 17.5px; }
+.toasts--large .toast-text > span { font-size: 14px; }
+/* styles: sticker is the default above */
+.toasts--glass .toast-shadow { display: none; }
+.toasts--glass .toast-card { background: color-mix(in srgb, var(--white, #fff) 72%, transparent); -webkit-backdrop-filter: blur(18px) saturate(1.4); backdrop-filter: blur(18px) saturate(1.4);
+  border: 1px solid color-mix(in srgb, var(--ink) 14%, transparent); box-shadow: 0 18px 50px -18px rgba(15, 15, 15, 0.35), 0 4px 12px -6px rgba(15, 15, 15, 0.2); }
+.toasts--glass .toast-glyph { border-width: 0; box-shadow: inset 0 0 0 1px rgba(15, 15, 15, 0.12); }
+.toasts--solid .toast-card { color: #0f0f0f; }
+.toasts--solid .toast--ok .toast-card { background: var(--reviewer); } .toasts--solid .toast--error .toast-card { background: var(--tester); }
+.toasts--solid .toast--info .toast-card { background: var(--coder); } .toasts--solid .toast--work .toast-card { background: var(--triager); }
+.toasts--solid .toast-glyph { background: #fff !important; border-color: #0f0f0f; color: #0f0f0f; }
+.toasts--solid .toast-text > span, .toasts--solid .toast-x, .toasts--solid .toast-eta-n b { color: rgba(15, 15, 15, 0.72); }
+.toasts--solid .toast-card { border-color: #0f0f0f; } .toasts--solid .toast-shadow { background: #0f0f0f; }
+.toasts--solid .toast-fuse { background: rgba(255, 255, 255, 0.7) !important; border-top-color: #0f0f0f; }
+.toasts--minimal .toast-shadow { display: none; }
+.toasts--minimal .toast-card { border-radius: var(--pill, 999px); border-width: 1.5px; box-shadow: 0 10px 30px -14px rgba(15, 15, 15, 0.35); }
+.toasts--minimal .toast-in { min-height: 0; padding: 7px 8px 9px 8px; }
+.toasts--minimal .toast-glyph { width: 26px; height: 26px; border-width: 1.5px; }
+.toasts--minimal .toast-glyph svg { width: 12px; height: 12px; }
+.toasts--minimal .toast-text { flex-direction: row; align-items: baseline; gap: 8px; min-width: 0; }
+.toasts--minimal .toast-text b { font-size: 14px; flex: none; }
+.toasts--minimal .toast-text > span { font-size: 12.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.toasts--minimal .toast { width: auto; max-width: min(460px, calc(100vw - 32px)); }
+.toasts--minimal .toast-x { align-self: center; width: 24px; height: 24px; }
+.toasts--minimal .toast-fuse { height: 3px; border-top: 0; }
+.toast-fuse.is-hidden { opacity: 0; }
 @media (max-width: 640px) { .toasts { left: 16px; right: 16px; bottom: 16px; align-items: stretch; } .toast { width: auto; } }
 @keyframes wave { 0%, 100% { transform: scaleY(0.3); } 50% { transform: scaleY(1); } }
 

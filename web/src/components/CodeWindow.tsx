@@ -108,8 +108,10 @@ export function guessLang(name: string, code: string): Lang {
   return 'text'
 }
 
-export function CodeWindow({ title, code, lang, onClose, maxHeight, actions, loading }: {
+export function CodeWindow({ title, code, lang, onClose, maxHeight, actions, loading, paper }: {
   title: string; code: string; lang?: Lang; onClose?: () => void; maxHeight?: string; actions?: ReactNode; loading?: boolean
+  /** Swarm's own look (white paper, ink outline, agent-coloured lights) instead of the dark editor */
+  paper?: boolean
 }) {
   const toast = useToast()
   const language = lang || guessLang(title, code)
@@ -121,25 +123,28 @@ export function CodeWindow({ title, code, lang, onClose, maxHeight, actions, loa
     catch { toast.error('Couldn’t copy', 'Your browser blocked the clipboard.') }
   }
   return (
-    <div className="cw" role="group" aria-label={title}>
+    <div className={`cw ${paper ? 'cw--paper' : ''}`} role="group" aria-label={title}>
       <div className="cw-bar">
-        <div className="cw-lights">
+        {paper ? (
+          <div className="cw-dots" aria-hidden="true">{['triager', 'coder', 'tester', 'reviewer'].map((a, i) => <motion.i key={a} style={{ background: `var(--${a})` }} initial={{ scale: 0 }} animate={{ scale: 1 }} transition={{ type: 'spring', stiffness: 500, damping: 18, delay: 0.25 + i * 0.05 }} />)}</div>
+        ) : <div className="cw-lights">
           <button className="cw-light cw-red" onClick={onClose} disabled={!onClose} aria-label="Close" tabIndex={onClose ? 0 : -1}><svg viewBox="0 0 12 12"><path d="M3.5 3.5l5 5M8.5 3.5l-5 5" /></svg></button>
           <span className="cw-light cw-yellow"><svg viewBox="0 0 12 12"><path d="M3 6h6" /></svg></span>
           <span className="cw-light cw-green"><svg viewBox="0 0 12 12"><path d="M3.8 8.2V3.8h4.4M8.2 3.8v4.4H3.8" /></svg></span>
-        </div>
+        </div>}
         <div className="cw-title"><FileIcon lang={language} /><span>{title}</span></div>
         <div className="cw-actions">
           {actions}
           <WrapButton />
           <button className="cw-btn" onClick={copy} disabled={loading}>{copied ? 'Copied' : 'Copy'}</button>
+          {paper && onClose && <button className="cw-btn cw-close" onClick={onClose} aria-label="Close"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round"><path d="M6 6l12 12M18 6L6 18" /></svg></button>}
         </div>
       </div>
       <div className="cw-body" style={maxHeight ? { maxHeight } : undefined}>
         {loading ? <div className="cw-loading"><span /><span /><span /></div> : (
           <pre className={`cw-code ${wrap ? 'is-wrap' : ''}`}><code>
             {lines.map((l, i) => (
-              <span key={i} className={`cw-line ${l.cls || ''}`}>
+              <span key={i} className={`cw-line ${l.cls || ''}`} style={paper && i < 40 ? { animationDelay: `${0.2 + i * 0.012}s` } : undefined}>
                 <span className="cw-ln" aria-hidden="true">{i + 1}</span>
                 <span className="cw-src">{l.toks.length ? l.toks.map((t, k) => t.c ? <span key={k} className={`tk-${t.c}`}>{t.t}</span> : t.t) : ' '}</span>
               </span>

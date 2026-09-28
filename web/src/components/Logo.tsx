@@ -37,8 +37,8 @@ const done = (as: Ctl[]) => Promise.all(as.map((a) => new Promise<void>((r) => a
 
 /** The sidebar's logo. Every so often the four agents hop out of their tile and land on the word, which
  *  melts away under them; they play on their own for a moment, circling like a carousel, then crash
- *  together in the middle and burst: a ring and a splash of drops go out, and the word springs back from
- *  the point they met, letter by letter. Then they pop back into the tile.
+ *  together in the middle and splash like water: ripples run along the word, drops leap and fall back, and
+ *  the word rides a wave back in from the point they met. Then they pop back into the tile.
  *  Pointing at it is part of the same timeline: mid-play, they skip to the splash so the word comes back
  *  straight away; otherwise they chase round the tile while the word waves in their colours. */
 export function LiveLogo({ to = '/', busy = false, still = false, folded = false, label = 'Swarm home' }: { to?: string; busy?: boolean; still?: boolean; folded?: boolean; label?: string }) {
@@ -48,6 +48,7 @@ export function LiveLogo({ to = '/', busy = false, still = false, folded = false
   const drops = useRef<(HTMLElement | null)[]>([])
   const tile = useRef<HTMLElement>(null)
   const ring = useRef<HTMLElement>(null)
+  const ring2 = useRef<HTMLElement>(null)
   const st = useRef({ phase: 'idle' as Phase, hover: false, run: 0, rush: null as null | (() => void), live: [] as Ctl[] })
   const [fontsIn, setFontsIn] = useState(false)
   useEffect(() => { void document.fonts?.ready.then(() => setFontsIn(true)) }, [])
@@ -90,17 +91,27 @@ export function LiveLogo({ to = '/', busy = false, still = false, folded = false
       if (!alive()) return
       await all(dots.current.map((el) => go(el, { scale: [1.15, 0.7, 1.9, 0], opacity: [1, 1, 1, 0] }, { duration: 0.42, times: [0, 0.35, 0.7, 1], ease: 'easeOut' })))
       if (!alive()) return
-      const rg = ring.current
-      if (rg) { rg.style.left = `${cx}px`; rg.style.top = `${cy}px`; go(rg, { scale: [0.2, 3.4], opacity: [0.9, 0] }, { duration: 0.7, ease: [0.2, 0.7, 0.3, 1] }) }
+      // a wave splash: two flat ripples spread along the word like a surface, drops leap up and fall back,
+      // and the letters come back riding a wave that rolls out from where the dots met
+      ;[ring.current, ring2.current].forEach((rg, j) => {
+        if (!rg) return
+        rg.style.left = `${cx}px`; rg.style.top = `${cy + 5}px`
+        go(rg, { scaleX: [0.3, 5.5 - j * 1.4], scaleY: [0.3, 1.1 - j * 0.2], opacity: [0.9, 0] }, { duration: 0.8, delay: j * 0.14, ease: [0.2, 0.7, 0.3, 1] })
+      })
       drops.current.forEach((el, i) => {
         if (!el) return
-        const a = (i / DROPS) * Math.PI * 2 + 0.3, d = 16 + (i % 3) * 7
+        const a = Math.PI + ((i + 0.5) / DROPS) * Math.PI // spread across the upper half
+        const d = 10 + (i % 3) * 8, h = 12 + ((i * 7) % 5) * 3
         el.style.left = `${cx}px`; el.style.top = `${cy}px`; el.style.background = color(LIVE[i % 4])
-        go(el, { x: [0, Math.cos(a) * d, Math.cos(a) * d * 1.15], y: [0, Math.sin(a) * d * 0.6, Math.sin(a) * d * 0.6 + 9], scale: [0.4, 1, 0], opacity: [1, 1, 0] },
-          { duration: 0.75, times: [0, 0.45, 1], ease: 'easeOut' })
+        go(el, { x: [0, Math.cos(a) * d * 0.7, Math.cos(a) * d * 1.3], y: [0, -h, 10], scale: [0.5, 1, 0.4], opacity: [1, 1, 0] },
+          { duration: 0.8, times: [0, 0.42, 1], ease: ['easeOut', 'easeIn'], delay: (i % 4) * 0.02 })
       })
-      letters.current.forEach((el, i) => el && go(el, { x: [(cx - m.cx[i]) * 0.8, 0], y: [2, 0], scale: [0.2, 1], opacity: [0, 1], filter: ['blur(3px)', 'blur(0px)'] },
-        { type: 'spring', stiffness: 380, damping: 17, delay: 0.04 + Math.abs(i - 2) * 0.05 }))
+      letters.current.forEach((el, i) => {
+        if (!el) return
+        const far = Math.abs(m.cx[i] - cx) / Math.max(1, (m.right - m.left) / 2)
+        go(el, { x: [(cx - m.cx[i]) * 0.5, 0, 0, 0], y: [9, -6, 2, 0], scale: [0.3, 1.06, 0.98, 1], opacity: [0, 1, 1, 1], filter: ['blur(3px)', 'blur(0px)', 'blur(0px)', 'blur(0px)'] },
+          { duration: 0.75, times: [0, 0.45, 0.75, 1], ease: 'easeOut', delay: 0.04 + far * 0.2 })
+      })
       await sleep(380) // the word is most of the way back; the dots go home while it settles
       if (!alive()) return
       // and the dots pop back into the tile
@@ -208,6 +219,7 @@ export function LiveLogo({ to = '/', busy = false, still = false, folded = false
       <span className="live-mark mark" ref={tile} aria-hidden="true" />
       {LIVE.map((c, k) => <i key={k} className="live-dot" ref={(el) => { dots.current[k] = el }} style={{ background: `var(${c})`, left: SLOT[k][0], top: TOP + SLOT[k][1] }} aria-hidden="true" />)}
       <i className="live-ring" ref={ring} aria-hidden="true" />
+      <i className="live-ring" ref={ring2} aria-hidden="true" />
       {Array.from({ length: DROPS }, (_, i) => <i key={i} className="live-drop" ref={(el) => { drops.current[i] = el }} aria-hidden="true" />)}
       <span className="live-word" aria-hidden="true">{[...WORD].map((ch, i) => <span key={i} ref={(el) => { letters.current[i] = el }}>{ch}</span>)}</span>
     </Link>

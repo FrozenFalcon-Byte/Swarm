@@ -52,3 +52,22 @@
 @media (max-height: 780px) { .auth-hint { display: none; } }
 @media (max-height: 680px) { .auth-sub, .auth-divider { display: none; } }
 @media (max-width: 900px) { .auth { height: auto; min-height: 100svh; overflow: visible; } }
+
+/* a sign-in button that's waiting on GitHub, Google or your device: a light runs round its edge */
+.auth-oauth-btn { position: relative; overflow: hidden; }
+.auth-oauth-btn.is-busy::before { content: ""; position: absolute; inset: 0; border-radius: inherit; pointer-events: none;
+  background: linear-gradient(100deg, transparent 30%, color-mix(in srgb, var(--green) 45%, transparent) 50%, transparent 70%) no-repeat; background-size: 220% 100%;
+  animation: auth-sheen 1.3s var(--ease-in-out) infinite; }
+.auth-oauth-btn.is-busy svg { animation: auth-bob 0.9s var(--ease-in-out) infinite alternate; }
+@keyframes auth-sheen { from { background-position: 130% 0; } to { background-position: -30% 0; } }
+@keyframes auth-bob { to { transform: translateY(-2px) rotate(-8deg); } }
+.auth-error { animation: auth-shake 0.45s var(--ease-out); }
+@keyframes auth-shake { 20% { translate: -6px 0; } 40% { translate: 5px 0; } 60% { translate: -3px 0; } 80% { translate: 2px 0; } }
+
+.auth-welcome { position: fixed; inset: 0; z-index: 250; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px; text-align: center; padding: 24px;
+  background: var(--green); color: #0f0f0f; }
+.auth-welcome-dots { display: flex; gap: 12px; margin-bottom: 8px; }
+.auth-welcome-dots i { width: 30px; height: 30px; border-radius: 50%; border: 2px solid #0f0f0f; box-shadow: 2px 3px 0 #0f0f0f; }
+.auth-welcome h2 { font-size: clamp(30px, 5vw, 52px); font-weight: 600; letter-spacing: -0.04em; }
+.auth-welcome p { font-size: 15px; opacity: 0.75; }
+@media (prefers-reduced-motion: reduce) { .auth-oauth-btn.is-busy::before, .auth-oauth-btn.is-busy svg, .auth-error { animation: none; } }

@@ -10,6 +10,8 @@ import { api, createPasskey, deviceLabel, getPasskey } from './api'
 import { auth, db, installed } from './firebase'
 import { whoAmI } from './github'
 
+export type PasskeyStep = 'prepare' | 'device' | 'verify' | 'done'
+
 interface AuthCtx {
   user: User | null
   loading: boolean
@@ -26,8 +28,9 @@ interface AuthCtx {
   disconnectGitHub(): Promise<void>
   resetPassword(email: string): Promise<void>
   logOut(): Promise<void>
-  withPasskey(): Promise<void>
-  addPasskey(name?: string): Promise<void>
+  /** `onStep` hears each stage, so the page can animate it: asking the server, the device prompt, checking, done. */
+  withPasskey(onStep?: (s: PasskeyStep) => void): Promise<void>
+  addPasskey(name?: string, onStep?: (s: PasskeyStep) => void): Promise<void>
   /** Confirm it's really you before a sensitive change: your password, or your provider's popup. */
   reauthenticate(password?: string): Promise<void>
   updateName(name: string): Promise<void>
@@ -151,19 +154,27 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     resetPassword: (email) => sendPasswordResetEmail(auth, email),
     logOut: () => signOut(auth),
     version,
-    async withPasskey() {
+    async withPasskey(onStep) {
+      onStep?.('prepare')
       const { challengeId, options } = await api<{ challengeId: string; options: Record<string, unknown> }>('/api/passkeys/login/options')
+      onStep?.('device')
       const credential = await getPasskey(options)
+      onStep?.('verify')
       const { token } = await api<{ token: string }>('/api/passkeys/login/verify', { challengeId, credential })
       const { user } = await signInWithCustomToken(auth, token)
       await saveProfile(user)
+      onStep?.('done')
     },
-    async addPasskey(name) {
+    async addPasskey(name, onStep) {
       const u = need()
+      onStep?.('prepare')
       const idToken = await u.getIdToken()
       const { challengeId, options } = await api<{ challengeId: string; options: Record<string, unknown> }>('/api/passkeys/register/options', {}, idToken)
+      onStep?.('device')
       const credential = await createPasskey(options)
+      onStep?.('verify')
       await api('/api/passkeys/register/verify', { challengeId, credential, name: name || deviceLabel() }, idToken)
+      onStep?.('done')
     },
     async reauthenticate(password) {
       const u = need()

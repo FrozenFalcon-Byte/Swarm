@@ -9,6 +9,7 @@ import { passkeysSupported, webauthnError } from '../../lib/api'
 import { easeInOut, easeOut } from '../../lib/motion'
 import './auth.css'
 import { Roll } from '../../components/Roll'
+import { PasskeyCeremony, type CeremonyStep } from '../../components/PasskeyCeremony'
 
 type Mode = 'signin' | 'signup'
 
@@ -26,12 +27,25 @@ export default function AuthPage({ mode }: { mode: Mode }) {
   const error = typedError || (redirectError && !busy ? friendlyAuthError(redirectError) : '')
   const [notice, setNotice] = useState('')
 
-  useEffect(() => { if (user) navigate(next, { replace: true }) }, [user, next, navigate])
+  // signing in from this page plays its way in (the passkey ceremony, or the welcome sweep for the rest);
+  // arriving already signed in, or back from a redirect, just goes straight through
+  const [hold, setHold] = useState(false)
+  const [welcome, setWelcome] = useState<string | null>(null)
+  const [pk, setPk] = useState<CeremonyStep | null>(null)
+  const [pkErr, setPkErr] = useState('')
+  useEffect(() => { if (user && !hold) navigate(next, { replace: true }) }, [user, next, navigate, hold])
+  const enter = (how: string, ms = 1500) => { setWelcome(how); window.setTimeout(() => navigate(next, { replace: true }), ms) }
   useEffect(() => { setError(''); setNotice('') }, [mode])
 
-  async function run(key: string, fn: () => Promise<void>) {
-    setBusy(key); setError(''); setNotice('')
-    try { await fn() } catch (e) { setError(friendlyAuthError(e)) } finally { setBusy(null) }
+  async function run(key: string, fn: () => Promise<void>, arrive = true) {
+    setBusy(key); setError(''); setNotice(''); if (arrive) setHold(true)
+    try { await fn(); if (arrive) enter(key) } catch (e) { setError(friendlyAuthError(e)); setHold(false) } finally { setBusy(null) }
+  }
+  const passkey = async () => {
+    setBusy('passkey'); setError(''); setNotice(''); setPkErr(''); setHold(true)
+    try { await withPasskey(setPk); window.setTimeout(() => navigate(next, { replace: true }), 1900) }
+    catch (e) { setPkErr((e as { code?: string }).code ? friendlyAuthError(e) : webauthnError(e)); setPk('error'); setHold(false) }
+    finally { setBusy(null) }
   }
 
   const submit = (e: FormEvent) => {
@@ -41,7 +55,7 @@ export default function AuthPage({ mode }: { mode: Mode }) {
 
   const forgot = () => {
     if (!email) { setError('Type your email above, then choose “Forgot password?” again.'); return }
-    run('reset', async () => { await resetPassword(email); setNotice(`We sent a reset link to ${email}.`) })
+    run('reset', async () => { await resetPassword(email); setNotice(`We sent a reset link to ${email}.`) }, false)
   }
 
   return (
@@ -57,15 +71,12 @@ export default function AuthPage({ mode }: { mode: Mode }) {
           </AnimatePresence>
 
           <div className="auth-oauth">
-            <button className="btn btn-dark auth-oauth-btn" onClick={() => run('github', withGitHub)} disabled={!!busy}>
+            <button className={`btn btn-dark auth-oauth-btn ${busy === 'github' ? 'is-busy' : ''}`} onClick={() => run('github', withGitHub)} disabled={!!busy}>
               <GitHubIcon /> <Roll>{busy === 'github' ? 'Opening GitHub…' : 'Continue with GitHub'}</Roll></button>
-            <button className="btn btn-line auth-oauth-btn" onClick={() => run('google', withGoogle)} disabled={!!busy}>
+            <button className={`btn btn-line auth-oauth-btn ${busy === 'google' ? 'is-busy' : ''}`} onClick={() => run('google', withGoogle)} disabled={!!busy}>
               <GoogleIcon /> <Roll>{busy === 'google' ? 'Opening Google…' : 'Continue with Google'}</Roll></button>
             {mode === 'signin' && passkeysSupported() && (
-              <button className="btn btn-ghost auth-oauth-btn" disabled={!!busy} onClick={async () => {
-                setBusy('passkey'); setError(''); setNotice('')
-                try { await withPasskey() } catch (e) { setError((e as { code?: string }).code ? friendlyAuthError(e) : webauthnError(e)) } finally { setBusy(null) }
-              }}>
+              <button className={`btn btn-ghost auth-oauth-btn ${busy === 'passkey' ? 'is-busy' : ''}`} disabled={!!busy} onClick={passkey}>
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><circle cx="8" cy="9" r="4" /><path d="M11 12h9M17 12v3M20 12v2M2 20c0-3 3-5 6-5" /></svg>
                 <Roll>{busy === 'passkey' ? 'Waiting for your device…' : 'Sign in with a passkey'}</Roll>
               </button>
@@ -110,7 +121,29 @@ export default function AuthPage({ mode }: { mode: Mode }) {
         </div>
       </div>
       <AgentsPanel />
+      <PasskeyCeremony step={pk} mode="signin" error={pkErr} onRetry={passkey} onClose={() => setPk(null)} />
+      <AnimatePresence>{welcome && <Welcome how={welcome} name={user?.displayName?.split(' ')[0] || name.split(' ')[0]} signup={mode === 'signup'} />}</AnimatePresence>
     </div>
+  )
+}
+
+const HOW: Record<string, string> = { github: 'GitHub', google: 'Google', email: 'email' }
+
+/* the way in after GitHub, Google or email: a green sweep from the button's side, the four agents hop in, hello */
+function Welcome({ how, name, signup }: { how: string; name?: string; signup: boolean }) {
+  return (
+    <motion.div className="auth-welcome" role="status" initial={{ clipPath: 'circle(0% at 30% 40%)' }} animate={{ clipPath: 'circle(150% at 30% 40%)' }}
+      transition={{ duration: 0.75, ease: [0.76, 0, 0.24, 1] }}>
+      <div className="auth-welcome-dots">
+        {['triager', 'coder', 'tester', 'reviewer'].map((a, i) => (
+          <motion.i key={a} style={{ background: agentColor(a) }} initial={{ y: 40, opacity: 0, scale: 0.4 }} animate={{ y: [40, -18, 0], opacity: 1, scale: 1 }} transition={{ delay: 0.35 + i * 0.07, duration: 0.55, ease: easeOut }} />
+        ))}
+      </div>
+      <motion.h2 initial={{ opacity: 0, y: 16, filter: 'blur(6px)' }} animate={{ opacity: 1, y: 0, filter: 'blur(0px)' }} transition={{ delay: 0.55, duration: 0.45, ease: easeOut }}>
+        {signup ? 'You’re in' : 'Welcome back'}{name ? `, ${name}` : ''}.
+      </motion.h2>
+      <motion.p initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.75 }}>Signed in with {HOW[how] || how}. Opening your board…</motion.p>
+    </motion.div>
   )
 }
 

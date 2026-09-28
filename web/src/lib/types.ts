@@ -182,8 +182,10 @@ export interface Prefs {
   confirm?: 'ask' | 'off'
   /** "5m ago" or the actual time */
   times?: 'relative' | 'exact'
-  /** which corner notifications arrive in */
-  toasts?: 'br' | 'bl' | 'top'
+  /** where notifications arrive */
+  toasts?: 'br' | 'bl' | 'top' | 'tr' | 'tl' | 'bottom'
+  /** how notifications look and behave (style, arrival, time on screen, size, how many, extras) */
+  toastLook?: Partial<import('../components/Island').ToastLook>
   /** the theme picked in Settings → Appearance; it brings its own animated backdrop */
   look?: 'plain' | 'swarm' | 'studio' | 'paper' | 'candy' | 'harbour' | 'sunny'
   /** the dashboard's highlight colour: the sidebar's active pill, selections, the save chip */

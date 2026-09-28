@@ -1,5 +1,5 @@
 import { AnimatePresence, LayoutGroup, motion } from 'motion/react'
-import { useRef, useState, type FormEvent, type ReactNode } from 'react'
+import { useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { AvatarCropper } from '../../components/AvatarCropper'
 import { createPortal } from 'react-dom'
@@ -13,6 +13,7 @@ import { PanelLayout, usePanel, type PanelItem } from '../../components/PanelLay
 import { easeInOut, easeOut } from '../../lib/motion'
 import { Section, timeAgo } from './ui'
 import { useToast } from '../../components/Island'
+import { PasskeyCeremony, type CeremonyStep } from '../../components/PasskeyCeremony'
 
 type Op = () => Promise<unknown>
 
@@ -164,23 +165,42 @@ function SignInMethods({ guarded }: { guarded: Guarded }) {
   const only = have.size <= 1
   const report = (id: string): Report => (m) => setMsg((s) => ({ ...s, [id]: m }))
   const run = async (id: string, op: Op, done: string) => { setBusy(id); await guarded(op, done, report(id)); setBusy(null) }
+  // a method that just changed plays its moment: a stamp and check when it connects, a fade to grey when it goes
+  const [flash, setFlash] = useState<Record<string, 'on' | 'off'>>({})
+  const seen = useRef<string | null>(null)
+  const key = [...have].sort().join(',')
+  useEffect(() => {
+    const was = seen.current; seen.current = key
+    if (was === null || was === key) return
+    const a = new Set(was.split(',')), b = new Set(key.split(','))
+    const f: Record<string, 'on' | 'off'> = {}
+    b.forEach((x) => { if (x && !a.has(x)) f[x] = 'on' }); a.forEach((x) => { if (x && !b.has(x)) f[x] = 'off' })
+    setFlash(f)
+    const t = window.setTimeout(() => setFlash({}), 1600)
+    return () => window.clearTimeout(t)
+  }, [key])
 
   return (
-    <Section title="Sign-in methods" action={<span className="muted">{have.size} connected</span>}>
+    <Section title="Sign-in methods" action={<span className="muted method-count"><AnimatePresence mode="popLayout" initial={false}><motion.b key={have.size} initial={{ y: 12, opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: -12, opacity: 0 }} transition={{ type: 'spring', stiffness: 420, damping: 28 }}>{have.size}</motion.b></AnimatePresence> connected</span>}>
       <LayoutGroup>
         <div className="methods">
           {(['password', 'google.com', 'github.com'] as const).map((id) => {
             const on = have.has(id)
             return (
-              <motion.div layout key={id} className={`method ${on ? 'on' : ''}`} transition={{ duration: 0.45, ease: easeInOut }}>
-                <span className="method-ic">{PROVIDER[id].icon}</span>
+              <motion.div layout key={id} className={`method ${on ? 'on' : ''} ${busy === id ? 'is-busy' : ''} ${flash[id] ? `just-${flash[id]}` : ''}`} transition={{ duration: 0.45, ease: easeInOut }}
+                animate={flash[id] === 'off' ? { x: [0, -8, 7, -4, 2, 0] } : { x: 0 }}>
+                <span className="method-ic">
+                  {PROVIDER[id].icon}
+                  <AnimatePresence>{on && <motion.span key="ok" className="method-ok" initial={{ scale: 0, rotate: -120 }} animate={{ scale: 1, rotate: 0 }} exit={{ scale: 0, rotate: 90 }} transition={{ type: 'spring', stiffness: 500, damping: 16 }}>✓</motion.span>}</AnimatePresence>
+                </span>
                 <div className="method-main">
                   <b>{PROVIDER[id].label}</b>
                   <span>{id === 'password' ? (on ? 'Sign in with your email and a password.' : 'Add a password to sign in without Google or GitHub.')
                     : id === 'github.com' ? (on ? 'Also gives the worker access to your repositories.' : 'Sign in with GitHub and let Swarm open pull requests.')
                     : (on ? 'Sign in with your Google account.' : 'Sign in with one click from Google.')}</span>
-                  {msg[id] && <em className="method-msg">{msg[id]}</em>}
+                  <AnimatePresence>{msg[id] && <motion.em key={msg[id]} className="method-msg" initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }}>{msg[id]}</motion.em>}</AnimatePresence>
                 </div>
+                <AnimatePresence>{flash[id] === 'on' && <motion.span className="method-stamp" initial={{ scale: 2.2, rotate: -24, opacity: 0 }} animate={{ scale: 1, rotate: -8, opacity: 1 }} exit={{ opacity: 0, scale: 0.8 }} transition={{ type: 'spring', stiffness: 520, damping: 18 }}>Connected</motion.span>}</AnimatePresence>
                 <div className="method-act">
                   {id === 'password'
                     ? <button className="btn btn-line btn-sm" onClick={() => { setPw((v) => !v); setNext('') }} aria-expanded={pw}><Roll>{pw ? 'Cancel' : on ? 'Change password' : 'Add password'}</Roll></button>
@@ -213,39 +233,55 @@ function Passkeys() {
   const { user, addPasskey } = useAuth()
   const toast = useToast()
   const { data: keys, loading } = usePasskeys(user?.uid)
-  const [busy, setBusy] = useState(false)
-  const [msg, setMsg] = useState('')
+  const [step, setStep] = useState<CeremonyStep | null>(null)
+  const [err, setErr] = useState('')
+  const [fresh, setFresh] = useState<string | null>(null)
+  const before = useRef<Set<string> | null>(null)
   const supported = passkeysSupported()
   const add = async () => {
-    setBusy(true); setMsg('')
-    try { await addPasskey(); setMsg(''); toast.ok('Passkey added', 'Next time, choose “Sign in with a passkey”.') } catch (e) { setMsg(webauthnError(e)) } finally { setBusy(false) }
+    setErr(''); before.current = new Set(keys.map((k) => k.id))
+    try {
+      await addPasskey(undefined, setStep)
+      // let the key land on the ring, then close and point at the new row
+      window.setTimeout(() => { setStep(null); toast.ok('Passkey added', 'Next time, choose “Sign in with a passkey”.') }, 1900)
+    } catch (e) { setErr(webauthnError(e)); setStep('error') }
   }
+  // the row that wasn't there before the ceremony is the new one; it glows for a moment
+  useEffect(() => {
+    const was = before.current
+    const added = was && keys.find((k) => !was.has(k.id))
+    if (!added) return
+    before.current = null
+    const t = window.setTimeout(() => setFresh(added.id), 1900)
+    const u = window.setTimeout(() => setFresh(null), 4600)
+    return () => { window.clearTimeout(t); window.clearTimeout(u) }
+  }, [keys])
   return (
     <Section title="Passkeys" action={<span className="pill tone-work">No password needed</span>}>
       <p className="muted-p">A passkey signs you in with your fingerprint, face or device PIN. It’s stored on your device or password manager and can’t be phished.</p>
       <ul className="keys">
         <AnimatePresence initial={false}>
-          {keys.map((k) => <KeyRow key={k.id} id={k.id} name={k.name} synced={!!k.backedUp} created={k.createdAt} used={k.lastUsedAt} />)}
+          {keys.map((k) => <KeyRow key={k.id} id={k.id} name={k.name} synced={!!k.backedUp} created={k.createdAt} used={k.lastUsedAt} fresh={fresh === k.id} />)}
         </AnimatePresence>
         {!loading && !keys.length && <li className="keys-empty">No passkeys yet.</li>}
       </ul>
       <div className="keys-foot">
-        <button className="btn btn-dark" onClick={add} disabled={busy || !supported}>
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><circle cx="8" cy="9" r="4" /><path d="M11 12l9 0M17 12v3M20 12v2M2 20c0-3 3-5 6-5" /></svg>
-          <Roll>{busy ? 'Waiting for your device…' : 'Add a passkey'}</Roll>
-        </button>
+        <motion.button className="btn btn-dark pk-add" onClick={add} disabled={!!step || !supported} whileTap={{ scale: 0.95 }}>
+          <motion.svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" whileHover={{ rotate: -35 }} transition={{ type: 'spring', stiffness: 400, damping: 12 }}><circle cx="8" cy="9" r="4" /><path d="M11 12l9 0M17 12v3M20 12v2M2 20c0-3 3-5 6-5" /></motion.svg>
+          <Roll>{step ? 'Waiting for your device…' : 'Add a passkey'}</Roll>
+        </motion.button>
         {!supported && <span className="muted">This browser doesn’t support passkeys.</span>}
-        {msg && <span className="conn-msg" role="status">{msg}</span>}
       </div>
+      <PasskeyCeremony step={step} mode="add" error={err} onRetry={add} onClose={() => setStep(null)} />
     </Section>
   )
 }
 
-function KeyRow({ id, name, synced, created, used }: { id: string; name: string; synced: boolean; created?: { toDate(): Date } | null; used?: { toDate(): Date } | null }) {
+function KeyRow({ id, name, synced, created, used, fresh }: { id: string; name: string; synced: boolean; created?: { toDate(): Date } | null; used?: { toDate(): Date } | null; fresh?: boolean }) {
   const [editing, setEditing] = useState(false)
   const [v, setV] = useState(name)
   return (
-    <motion.li layout className="key" initial={{ opacity: 0, x: -14 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 24, transition: { duration: 0.25 } }} transition={{ duration: 0.45, ease: easeOut }}>
+    <motion.li layout className={`key ${fresh ? 'is-fresh' : ''}`} initial={{ opacity: 0, x: -14 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 24, transition: { duration: 0.25 } }} transition={{ duration: 0.45, ease: easeOut }}>
       <span className="key-ic" aria-hidden="true"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><circle cx="8" cy="9" r="4" /><path d="M11 12l9 0M17 12v3M20 12v2" /></svg></span>
       <div className="key-main">
         {editing ? (

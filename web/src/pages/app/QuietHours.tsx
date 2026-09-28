@@ -120,7 +120,7 @@ export default function QuietHours() {
           <div className="qh-hero-in">
             <div className={`qh-tile m-${mode}`}>
               <Washes mode={mode} />
-              <Orb mode={mode} />
+              <Scene mode={mode} />
               <Now scheduled={!!sched} open={hours[at.index] === '1'} next={next} />
               <div className="qh-title" aria-live="polite">
                 {/* old and new share one grid cell: the old one leaves upward first, then the new one rises in */}
@@ -215,15 +215,66 @@ function Washes({ mode }: { mode: ModeId }) {
   )
 }
 
-/** The big shape in the corner: a sun for daytime modes, a moon at night. It sinks out and the next one rises. */
-function Orb({ mode }: { mode: ModeId }) {
+/** Each mode's little scene in the corner of the tile, drawn like the rest of Swarm (flat colour, ink outline):
+ *  the agents on a loop for any time, an office clock for working hours, the sun coming up behind a coffee for
+ *  before dawn, a rocking moon for nights and a brush painting for your own. One pops out, the next springs in. */
+function Scene({ mode }: { mode: ModeId }) {
   return (
-    <div className="qh-orb-box" aria-hidden="true">
+    <div className="qh-scene-box" aria-hidden="true">
       <AnimatePresence initial={false} mode="wait">
-        <motion.span key={mode} className={`qh-orb m-${mode}`} initial={{ scale: 0.3, opacity: 0, rotate: -40 }} animate={{ scale: 1, opacity: 1, rotate: 0 }}
-          exit={{ scale: 0.3, opacity: 0, transition: { duration: 0.2, ease: [0.55, 0, 0.9, 0.4] } }} transition={{ type: 'spring', stiffness: 200, damping: 18 }}>
-          {mode === 'nights' && Array.from({ length: 9 }, (_, k) => <i key={k} style={{ ['--k' as string]: k }} />)}
-        </motion.span>
+        <motion.svg key={mode} className={`qh-scene s-${mode}`} viewBox="0 0 120 120" initial={{ scale: 0.3, opacity: 0, rotate: -25, y: 16 }} animate={{ scale: 1, opacity: 1, rotate: 0, y: 0 }}
+          exit={{ scale: 0.3, opacity: 0, rotate: 20, y: -10, transition: { duration: 0.2, ease: [0.55, 0, 0.9, 0.4] } }} transition={{ type: 'spring', stiffness: 220, damping: 16 }}>
+          {mode === 'any' && <>
+            <circle className="qh-sc-path" cx="60" cy="60" r="38" />
+            <g className="qh-sc-spin">
+              {['triager', 'coder', 'tester', 'reviewer'].map((a, k) => <circle key={a} className="qh-sc-ink" cx={60 + 38 * Math.cos((k * Math.PI) / 2)} cy={60 + 38 * Math.sin((k * Math.PI) / 2)} r="10" style={{ fill: `var(--${a})` }} />)}
+            </g>
+            <circle className="qh-sc-ink qh-sc-pulse" cx="60" cy="60" r="12" style={{ fill: 'var(--white)' }} />
+            <path className="qh-sc-line" d="M55 60h10M60 55v10" />
+          </>}
+          {mode === 'work' && <>
+            <circle className="qh-sc-ink" cx="58" cy="56" r="40" style={{ fill: 'var(--white)' }} />
+            <path className="qh-sc-arc" d="M18 56 A40 40 0 1 1 58 96" />
+            {Array.from({ length: 12 }, (_, k) => <line key={k} className="qh-sc-tick" x1="58" y1="22" x2="58" y2={k % 3 ? 26 : 29} transform={`rotate(${k * 30} 58 56)`} />)}
+            <line className="qh-sc-hand qh-sc-hour" x1="58" y1="56" x2="58" y2="38" />
+            <line className="qh-sc-hand qh-sc-min" x1="58" y1="56" x2="58" y2="29" />
+            <circle cx="58" cy="56" r="3.5" style={{ fill: '#0f0f0f' }} />
+            <g className="qh-sc-bob"><rect className="qh-sc-ink" x="80" y="86" width="32" height="22" rx="5" style={{ fill: 'var(--coder)' }} /><path className="qh-sc-line" d="M89 86v-5h14v5M80 96h32" /></g>
+          </>}
+          {mode === 'dawn' && <>
+            <clipPath id="qh-sky"><rect x="0" y="0" width="120" height="82" /></clipPath>
+            <g clipPath="url(#qh-sky)">
+              <g className="qh-sc-rise">
+                <g className="qh-sc-rays">{Array.from({ length: 8 }, (_, k) => <line key={k} className="qh-sc-line" x1="66" y1="40" x2="66" y2="30" transform={`rotate(${k * 45} 66 82)`} />)}</g>
+                <circle className="qh-sc-ink" cx="66" cy="82" r="28" style={{ fill: 'var(--tester)' }} />
+              </g>
+            </g>
+            <path className="qh-sc-line" d="M4 82h112" />
+            <path className="qh-sc-line qh-sc-soft" d="M20 92h30M70 92h40M34 101h44" />
+            <g transform="translate(6 70)">
+              <path className="qh-sc-steam" d="M9 4c-3 -5 3 -8 0 -13M17 4c-3 -5 3 -8 0 -13" />
+              <path className="qh-sc-ink" d="M2 8h22v14a7 7 0 01-7 7h-8a7 7 0 01-7-7z" style={{ fill: 'var(--white)' }} />
+              <path className="qh-sc-line" d="M24 12h3a4 4 0 010 8h-3" />
+            </g>
+          </>}
+          {mode === 'nights' && <>
+            <mask id="qh-moon"><rect width="120" height="120" fill="#fff" /><circle cx="76" cy="44" r="29" fill="#000" /></mask>
+            <clipPath id="qh-moon-in"><circle cx="58" cy="58" r="34" /></clipPath>
+            <g className="qh-sc-rock">
+              <circle className="qh-sc-ink" cx="58" cy="58" r="34" style={{ fill: '#c9c1f7' }} mask="url(#qh-moon)" />
+              <circle className="qh-sc-line" cx="76" cy="44" r="30" clipPath="url(#qh-moon-in)" />
+            </g>
+            {[[96, 22, 0], [104, 70, 1], [22, 26, 2], [84, 100, 3]].map(([x, y, k]) => (
+              <path key={k} className="qh-sc-star" style={{ ['--k' as string]: k, transformOrigin: `${x}px ${y}px` }} d={`M${x} ${y - 7}Q${x} ${y} ${x + 7} ${y}Q${x} ${y} ${x} ${y + 7}Q${x} ${y} ${x - 7} ${y}Q${x} ${y} ${x} ${y - 7}z`} />
+            ))}
+            <text className="qh-sc-z" x="30" y="100">z</text><text className="qh-sc-z qh-sc-z2" x="40" y="92">z</text>
+          </>}
+          {mode === 'custom' && <>
+            {Array.from({ length: 12 }, (_, k) => <rect key={k} className="qh-sc-cell" style={{ ['--k' as string]: k }} x={12 + (k % 4) * 22} y={46 + Math.floor(k / 4) * 22} width="18" height="18" rx="5" />)}
+            <path className="qh-sc-paint" d="M14 30c14-12 26 8 40-4s26 8 40-4" />
+            <g className="qh-sc-brush"><path className="qh-sc-ink" d="M96 8l12 12-18 18-8 2 2-8z" style={{ fill: 'var(--triager)' }} /><path className="qh-sc-line" d="M90 14l12 12" /></g>
+          </>}
+        </motion.svg>
       </AnimatePresence>
     </div>
   )

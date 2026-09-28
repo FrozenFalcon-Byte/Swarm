@@ -1,6 +1,7 @@
 import { AnimatePresence, motion, type Variants } from 'motion/react'
-import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from 'react'
 import { HUB_WAKE_MS, onHubWake } from '../lib/api'
+import { pop } from '../lib/sound'
 
 /*
  * Toasts as stickers. Each one arrives as its agent's dot, which rolls in from the corner, bursts open into
@@ -18,27 +19,60 @@ type Push = (t: { tone?: Tone; title: string; body?: string; duration?: number; 
 interface ToastApi { push: Push; ok(title: string, body?: string): number; error(title: string, body?: string): number; info(title: string, body?: string): number; work(title: string, body?: string): number; dismiss(id?: number): void }
 
 const Ctx = createContext<ToastApi | null>(null)
-const MAX = 3
+
+/* How toasts look and behave, picked in Settings → Appearance → Notifications. The dashboard hands the saved
+   choice in with setToastLook (this provider sits above sign-in, so it can't read preferences itself). */
+export interface ToastLook {
+  style: 'sticker' | 'glass' | 'solid' | 'minimal'
+  motion: 'roll' | 'slide' | 'pop' | 'drop' | 'fade'
+  time: 'short' | 'normal' | 'long' | 'stay'
+  size: 'compact' | 'regular' | 'large'
+  stack: 1 | 3 | 5
+  fuse: boolean; confetti: boolean; sound: boolean; quietOk: boolean; hold: boolean
+}
+export const TOAST_LOOK: ToastLook = { style: 'sticker', motion: 'roll', time: 'normal', size: 'regular', stack: 3, fuse: true, confetti: true, sound: false, quietOk: false, hold: true }
+let look = TOAST_LOOK
+const lookSubs = new Set<() => void>()
+export function setToastLook(next?: Partial<ToastLook>) {
+  const merged = { ...TOAST_LOOK, ...next }
+  if (JSON.stringify(merged) === JSON.stringify(look)) return
+  look = merged
+  lookSubs.forEach((f) => f())
+}
+const useLook = () => useSyncExternalStore((f) => { lookSubs.add(f); return () => { lookSubs.delete(f) } }, () => look)
+const TIME = { short: 0.6, normal: 1, long: 2, stay: 0 }
+const PITCH: Record<Tone, number> = { ok: 1.35, error: 0.7, info: 1.05, work: 0.9 }
 const EASE = [0.65, 0, 0.35, 1] as const
 const COLOR: Record<Tone, string> = { ok: 'var(--reviewer)', error: 'var(--tester)', info: 'var(--coder)', work: 'var(--triager)' }
 const AGENTS = ['var(--triager)', 'var(--coder)', 'var(--tester)', 'var(--reviewer)']
 
 export function IslandProvider({ children }: { children: ReactNode }) {
   const [toasts, setToasts] = useState<Toast[]>([])
+  const cfg = useLook()
   const seq = useRef(0)
   const close = useCallback((id?: number) => setToasts((ts) => (id === undefined ? ts.slice(0, -1) : ts.filter((t) => t.id !== id))), [])
 
   const push = useCallback<Push>(({ tone = 'info', title, body, duration, eta }) => {
     const id = ++seq.current
-    const t: Toast = { id, slot: id, tone, title, body, eta, duration: duration ?? (tone === 'work' ? 0 : tone === 'error' ? 7000 : 3600) }
+    const base = duration ?? (tone === 'work' ? 0 : tone === 'error' ? 7000 : 3600)
+    const t: Toast = { id, slot: id, tone, title, body, eta, duration: tone === 'work' ? base : Math.round(base * TIME[look.time]) }
     setToasts((ts) => {
       // a "working on it" note becomes the answer, in the same card, rather than a second card
       const w = ts.findIndex((x) => x.tone === 'work')
-      if (w >= 0) { const next = [...ts]; next[w] = { ...t, slot: ts[w].slot }; return next }
-      return [...ts, t].slice(-MAX)
+      if (w >= 0) {
+        const next = [...ts]
+        if (tone === 'ok' && look.quietOk) next.splice(w, 1)
+        else next[w] = { ...t, slot: ts[w].slot }
+        return next
+      }
+      if (tone === 'ok' && look.quietOk) return ts
+      return [...ts, t].slice(-look.stack)
     })
+    if (look.sound && !(tone === 'ok' && look.quietOk)) { pop(PITCH[tone]); if (tone === 'ok') window.setTimeout(() => pop(PITCH.ok * 1.26), 90) }
     return id
   }, [])
+  // fewer allowed on screen: the oldest go first
+  useEffect(() => { setToasts((ts) => (ts.length > cfg.stack ? ts.slice(-cfg.stack) : ts)) }, [cfg.stack])
 
   const api = useMemo<ToastApi>(() => ({
     push,
@@ -59,9 +93,9 @@ export function IslandProvider({ children }: { children: ReactNode }) {
   return (
     <Ctx.Provider value={api}>
       {children}
-      <ol className="toasts" aria-live="polite">
+      <ol className={`toasts toasts--${cfg.style} toasts--${cfg.size}`} aria-live="polite">
         <AnimatePresence initial={false}>
-          {toasts.map((t, i) => <Sticker key={t.slot} t={t} depth={toasts.length - 1 - i} onClose={() => close(t.id)} />)}
+          {toasts.map((t, i) => <Sticker key={t.slot} t={t} cfg={cfg} depth={toasts.length - 1 - i} onClose={() => close(t.id)} />)}
         </AnimatePresence>
       </ol>
     </Ctx.Provider>
@@ -80,29 +114,61 @@ const wrap: Variants = {
   gone: { y: 70, x: 20, rotate: -30, scale: 0.4, opacity: 0, transition: { when: 'afterChildren', duration: 0.38, ease: [0.5, 0, 0.75, 0] } },
 }
 
-function Sticker({ t, depth, onClose }: { t: Toast; depth: number; onClose: () => void }) {
+const open: Variants = { hidden: {}, show: {}, gone: {} }
+const side = () => { const p = document.documentElement.dataset.toasts || 'br'; return p === 'bl' || p === 'tl' ? -1 : p === 'top' || p === 'bottom' ? 0 : 1 }
+const top = () => ['top', 'tl', 'tr'].includes(document.documentElement.dataset.toasts || '')
+/** The way in and out for each arrival style; 'roll' is the sticker dot bursting open (above). */
+function arrive(m: ToastLook['motion']): Variants {
+  const x = side(), y = top() ? -1 : 1
+  if (m === 'slide') return {
+    hidden: { x: x ? x * 420 : 0, y: x ? 0 : y * 160, opacity: 0 },
+    show: { x: 0, y: 0, opacity: 1, transition: { type: 'spring', stiffness: 300, damping: 30 } },
+    gone: { x: x ? x * 420 : 0, y: x ? 0 : y * 160, opacity: 0, transition: { duration: 0.35, ease: EASE } },
+  }
+  if (m === 'pop') return {
+    hidden: { scale: 0.2, rotate: -8 * (x || 1), opacity: 0 },
+    show: { scale: 1, rotate: 0, opacity: 1, transition: { type: 'spring', stiffness: 520, damping: 15 } },
+    gone: { scale: 0.5, rotate: 10, opacity: 0, transition: { duration: 0.25, ease: EASE } },
+  }
+  if (m === 'drop') return {
+    hidden: { y: -y * 260, rotate: -12 * (x || 1), opacity: 0 },
+    show: { y: 0, rotate: 0, opacity: 1, transition: { type: 'spring', stiffness: 380, damping: 11, mass: 1.1 } },
+    gone: { y: y * 60, opacity: 0, scale: 0.9, transition: { duration: 0.3, ease: [0.5, 0, 0.75, 0] } },
+  }
+  if (m === 'fade') return {
+    hidden: { opacity: 0, y: y * 10 },
+    show: { opacity: 1, y: 0, transition: { duration: 0.4, ease: EASE } },
+    gone: { opacity: 0, transition: { duration: 0.3 } },
+  }
+  return { ...wrap, hidden: { ...wrap.hidden, x: x ? x * 140 : 0, rotate: 14 * (x || 1) } }
+}
+
+function Sticker({ t, cfg, depth, onClose }: { t: Toast; cfg: ToastLook; depth: number; onClose: () => void }) {
   const [held, setHeld] = useState(false)
   const words = t.title.split(' ')
+  const roll = cfg.motion === 'roll'
+  const k = roll ? 1 : 0.35 // everything inside waits for the card to open; other arrivals don't open
+  const variants = useMemo(() => arrive(cfg.motion), [cfg.motion])
   return (
-    <motion.li layout className={`toast toast--${t.tone}`} variants={wrap} initial="hidden" animate="show" exit="gone"
+    <motion.li layout className={`toast toast--${t.tone}`} variants={variants} initial="hidden" animate="show" exit="gone"
       style={{ zIndex: 10 - depth }} transition={{ layout: { type: 'spring', stiffness: 380, damping: 32 } }}
-      onMouseEnter={() => setHeld(true)} onMouseLeave={() => setHeld(false)} role="status">
+      onMouseEnter={() => cfg.hold && setHeld(true)} onMouseLeave={() => setHeld(false)} role="status">
       <motion.span className="toast-shadow" aria-hidden="true" initial={{ x: 0, y: 0, opacity: 0 }} animate={{ x: 6, y: 6, opacity: 1 }}
-        exit={{ x: 0, y: 0, opacity: 0, transition: { duration: 0.15 } }} transition={{ delay: 0.72, type: 'spring', stiffness: 500, damping: 20 }} />
-      <motion.div className="toast-card" variants={card} onClick={onClose}>
+        exit={{ x: 0, y: 0, opacity: 0, transition: { duration: 0.15 } }} transition={{ delay: 0.72 * k, type: 'spring', stiffness: 500, damping: 20 }} />
+      <motion.div className="toast-card" variants={roll ? card : open} onClick={onClose}>
         <AnimatePresence mode="popLayout" initial={false}>
           <motion.div key={t.id} className="toast-in" initial={{ opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -14 }} transition={{ duration: 0.35, ease: EASE }}>
-            <Glyph tone={t.tone} />
+            <Glyph tone={t.tone} k={k} />
             <div className="toast-text">
               <b aria-label={t.title}>
-                {words.map((w, k) => (
-                  <span key={k} className="toast-mask" aria-hidden="true">
-                    <motion.span initial={{ y: '110%', rotate: 8 }} animate={{ y: '0%', rotate: 0 }} transition={{ delay: 0.5 + k * 0.05, duration: 0.55, ease: [0.22, 1, 0.36, 1] }}>{w}</motion.span>
+                {words.map((w, i) => (
+                  <span key={i} className="toast-mask" aria-hidden="true">
+                    <motion.span initial={{ y: '110%', rotate: 8 }} animate={{ y: '0%', rotate: 0 }} transition={{ delay: 0.5 * k + i * 0.05, duration: 0.55, ease: [0.22, 1, 0.36, 1] }}>{w}</motion.span>
                   </span>
                 ))}
               </b>
               {(t.body || t.eta) && (
-                <motion.span initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.62 + words.length * 0.04, duration: 0.45 }}>
+                <motion.span initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.62 * k + words.length * 0.04, duration: 0.45 }}>
                   {t.body}{t.eta && <>{t.body && ' '}<Countdown eta={t.eta} /></>}
                 </motion.span>
               )}
@@ -113,12 +179,12 @@ function Sticker({ t, depth, onClose }: { t: Toast; depth: number; onClose: () =
           </motion.div>
         </AnimatePresence>
         {t.duration > 0
-          ? <i key={`fuse-${t.id}`} className="toast-fuse" style={{ animationDuration: `${t.duration}ms`, animationPlayState: held ? 'paused' : 'running', background: COLOR[t.tone] }} onAnimationEnd={onClose} />
+          ? <i key={`fuse-${t.id}`} className={`toast-fuse ${cfg.fuse ? '' : 'is-hidden'}`} style={{ animationDuration: `${t.duration}ms`, animationPlayState: held ? 'paused' : 'running', background: COLOR[t.tone] }} onAnimationEnd={onClose} />
           : t.eta
             ? <i key={`eta-${t.id}`} className="toast-fuse toast-fuse--work toast-fuse--eta" style={{ ['--eta' as string]: `${t.eta.ms}ms`, ['--gone' as string]: `${t.eta.since - Date.now()}ms` }} />
             : <i className="toast-fuse toast-fuse--work" />}
       </motion.div>
-      {t.tone === 'ok' && <Confetti key={`c-${t.id}`} />}
+      {t.tone === 'ok' && cfg.confetti && cfg.style !== 'minimal' && <Confetti key={`c-${t.id}`} delay={0.36 * k} />}
     </motion.li>
   )
 }
@@ -143,7 +209,7 @@ function Countdown({ eta }: { eta: Eta }) {
 }
 
 /** Eight dots in the agents' colours, thrown out of the glyph as the card opens. */
-function Confetti() {
+function Confetti({ delay }: { delay: number }) {
   const bits = useMemo(() => Array.from({ length: 8 }, (_, i) => {
     const a = (-150 + i * (300 / 7)) * (Math.PI / 180) - Math.PI / 2
     const d = 46 + Math.random() * 30
@@ -154,18 +220,18 @@ function Confetti() {
       {bits.map((b, i) => (
         <motion.i key={i} style={{ background: b.c, width: b.s, height: b.s, borderRadius: i % 3 ? '50%' : 3 }}
           initial={{ x: 0, y: 0, scale: 0, rotate: 0 }} animate={{ x: [0, b.x, b.x * 1.1], y: [0, b.y, b.y + 40], scale: [0, 1.2, 0], rotate: b.r }}
-          transition={{ delay: 0.36, duration: 1.1, times: [0, 0.4, 1], ease: 'easeOut' }} />
+          transition={{ delay, duration: 1.1, times: [0, 0.4, 1], ease: 'easeOut' }} />
       ))}
     </span>
   )
 }
 
-function Glyph({ tone }: { tone: Tone }) {
-  const draw = { initial: { pathLength: 0 }, animate: { pathLength: 1 }, transition: { delay: 0.55, duration: 0.45, ease: [0.165, 0.84, 0.44, 1] as const } }
+function Glyph({ tone, k }: { tone: Tone; k: number }) {
+  const draw = { initial: { pathLength: 0 }, animate: { pathLength: 1 }, transition: { delay: 0.55 * k, duration: 0.45, ease: [0.165, 0.84, 0.44, 1] as const } }
   const shake = tone === 'error' ? { rotate: [0, -16, 13, -9, 6, 0] } : { rotate: 0 }
   return (
     <motion.span className="toast-glyph" style={{ background: COLOR[tone] }} initial={{ scale: 0.3, rotate: -200 }} animate={{ scale: 1, ...shake }}
-      transition={tone === 'error' ? { scale: { type: 'spring', stiffness: 400, damping: 16 }, rotate: { delay: 0.7, duration: 0.6 } } : { type: 'spring', stiffness: 300, damping: 14 }}>
+      transition={tone === 'error' ? { scale: { type: 'spring', stiffness: 400, damping: 16 }, rotate: { delay: 0.7 * k, duration: 0.6 } } : { type: 'spring', stiffness: 300, damping: 14 }}>
       {tone === 'work'
         ? <span className="toast-orbit">{AGENTS.map((c, i) => <i key={i} style={{ background: c, animationDelay: `${-i * 0.25}s` }} />)}</span>
         : <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">

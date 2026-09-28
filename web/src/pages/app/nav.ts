@@ -5,13 +5,13 @@ export const NAV: { to: string; label: string; icon: string; group: 'main' | 'gu
   { to: '/app/agents', label: 'Agents', icon: 'agents', group: 'main' }, { to: '/app/tools', label: 'Tools', icon: 'tools', group: 'main' },
   { to: '/app/lab', label: 'Test lab', icon: 'lab', group: 'main', admin: true },
   { to: '/app/rules', label: 'House rules', icon: 'rules', group: 'guard' }, { to: '/app/quiet-hours', label: 'Quiet hours', icon: 'quiet', group: 'guard' },
-  { to: '/app/whodunit', label: 'Whodunit', icon: 'whodunit', group: 'play' },
+  { to: '/app/hive', label: 'The Hive', icon: 'hive', group: 'play' },
   { to: '/app/settings', label: 'Settings', icon: 'settings', group: 'foot' }, { to: '/app/help', label: 'Help', icon: 'help', group: 'foot' },
 ]
 
 export const ICONS: Record<string, string> = {
   rules: 'M12 3l8 3v6c0 4.5-3.4 8-8 9-4.6-1-8-4.5-8-9V6z M9 12l2 2 4-4',
-  whodunit: 'M10.5 17a6.5 6.5 0 100-13 6.5 6.5 0 000 13z M15.2 15.2L21 21 M8 9.5a2.5 2.5 0 012.5-2.5',
+  hive: 'M12 2.5l8.2 4.75v9.5L12 21.5l-8.2-4.75v-9.5z M12 8.2l3.3 1.9v3.8L12 15.8l-3.3-1.9v-3.8z',
   quiet: 'M20 14.5A8 8 0 1 1 9.5 4a6.5 6.5 0 0 0 10.5 10.5z',
   lab: 'M9 3h6 M10 3v6L4.5 18.5A1.7 1.7 0 006 21h12a1.7 1.7 0 001.5-2.5L14 9V3 M7.5 14h9',
   overview: 'M3 13h8V3H3v10zm0 8h8v-6H3v6zm10 0h8V11h-8v10zm0-18v6h8V3h-8z',

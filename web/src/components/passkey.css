@@ -1,0 +1,54 @@
+/* ---------- the passkey ceremony (components/PasskeyCeremony.tsx) */
+.pk-overlay { position: fixed; inset: 0; z-index: 260; display: grid; place-items: center; padding: 20px;
+  background: rgba(15, 15, 15, 0.34); -webkit-backdrop-filter: blur(12px) saturate(1.2); backdrop-filter: blur(12px) saturate(1.2); }
+.pk-card { position: relative; width: min(420px, 100%); display: flex; flex-direction: column; align-items: center; gap: 20px; padding: 34px 28px 24px; text-align: center;
+  background: var(--white); color: var(--ink); border: 2px solid var(--ink); border-radius: 34px; box-shadow: 6px 7px 0 var(--ink); }
+.pk-vault { --pk-c: var(--coder); position: relative; width: 168px; height: 168px; border-radius: 50%; display: grid; place-items: center;
+  background: color-mix(in srgb, var(--pk-c) 30%, var(--white)); border: 2px solid var(--ink); box-shadow: 4px 5px 0 var(--ink); transition: background-color 0.5s var(--ease-out); }
+.pk-vault.is-done { --pk-c: var(--reviewer); }
+.pk-vault.is-bad { --pk-c: var(--tester); }
+.pk-vault > * { grid-area: 1 / 1; }
+.pk-fill { position: absolute; inset: 14px; border-radius: 50%; background: var(--white); border: 1.5px dashed color-mix(in srgb, var(--ink) 30%, transparent); }
+.pk-vault.is-done .pk-fill { border-style: solid; border-color: var(--ink); }
+.pk-print, .pk-key, .pk-lock, .pk-bad { position: relative; width: 78px; height: 78px; color: var(--ink); }
+.pk-bad { width: 60px; height: 60px; }
+.pk-scan { position: absolute; left: 28px; right: 28px; top: 30px; height: 3px; border-radius: 3px; background: var(--pk-c); box-shadow: 0 0 0 1.5px var(--ink), 0 0 18px 4px color-mix(in srgb, var(--pk-c) 70%, transparent);
+  animation: pk-scan 1.6s var(--ease-in-out) infinite alternate; }
+@keyframes pk-scan { to { top: calc(100% - 33px); } }
+.pk-ring { position: absolute; inset: -2px; border-radius: 50%; border: 2px solid var(--ink); opacity: 0; animation: pk-ring 1.8s var(--ease-out) infinite; pointer-events: none; }
+@keyframes pk-ring { 0% { transform: scale(1); opacity: 0.55; } 100% { transform: scale(1.7); opacity: 0; } }
+.pk-ripple { position: absolute; inset: 0; border-radius: 50%; background: var(--reviewer); border: 2px solid var(--ink); pointer-events: none; }
+.pk-orbit { position: absolute; inset: 20px; pointer-events: none; animation: pk-spin 1.8s linear infinite; }
+.pk-orbit.is-fast { animation-duration: 0.9s; inset: 6px; }
+.pk-orbit i { position: absolute; left: calc(50% - 7px); top: calc(50% - 7px); width: 14px; height: 14px; border-radius: 50%; border: 1.5px solid var(--ink);
+  transform: rotate(calc(var(--k) * 90deg)) translateY(-56px); }
+.pk-orbit.is-fast i { transform: rotate(calc(var(--k) * 90deg)) translateY(-72px); width: 12px; height: 12px; left: calc(50% - 6px); top: calc(50% - 6px); }
+@keyframes pk-spin { to { rotate: 1turn; } }
+.pk-keyring { position: relative; width: 80px; height: 90px; }
+.pk-keyring svg { position: absolute; left: 0; width: 80px; height: 80px; color: var(--ink); }
+.pk-ring-loop { top: -18px; }
+.pk-hung { top: 6px; transform-origin: 50% 10%; }
+.pk-badge { position: absolute; right: 6px; top: 6px; width: 38px; height: 38px; border-radius: 50%; display: grid; place-items: center; background: var(--reviewer); color: #0f0f0f;
+  border: 2px solid var(--ink); box-shadow: 2px 3px 0 var(--ink); z-index: 2; }
+.pk-confetti { position: absolute; left: 50%; top: 50%; width: 0; height: 0; pointer-events: none; z-index: 3; }
+.pk-confetti i { position: absolute; left: -6px; top: -6px; border: 1.5px solid var(--ink); }
+.pk-copy { min-height: 70px; }
+.pk-copy h3 { font-size: 24px; font-weight: 600; letter-spacing: -0.03em; }
+.pk-copy p { margin-top: 6px; color: var(--ink-2); font-size: 14.5px; line-height: 1.45; }
+.pk-steps { display: flex; align-items: flex-start; justify-content: center; gap: 0; margin: 0; padding: 0; list-style: none; width: 100%; }
+.pk-steps li { position: relative; flex: 1; display: flex; flex-direction: column; align-items: center; gap: 6px; font-size: 11.5px; font-weight: 600; color: var(--ink-3); }
+.pk-step-dot { position: relative; z-index: 1; width: 22px; height: 22px; border-radius: 50%; display: grid; place-items: center; font-size: 11px; background: var(--grey-7); border: 1.5px solid var(--line);
+  transition: background-color 0.35s var(--ease-out), border-color 0.35s, transform 0.4s var(--spring); }
+.pk-steps li.is-now { color: var(--ink); }
+.pk-steps li.is-now .pk-step-dot { background: var(--triager); border-color: var(--ink); transform: scale(1.15); color: #0f0f0f; }
+.pk-steps li.is-done { color: var(--ink-2); }
+.pk-steps li.is-done .pk-step-dot { background: var(--reviewer); border-color: var(--ink); color: #0f0f0f; }
+.pk-step-line { position: absolute; top: 10px; left: calc(50% + 14px); right: calc(-50% + 14px); height: 2px; background: var(--line-soft); border-radius: 2px; overflow: hidden; }
+.pk-step-line b { position: absolute; inset: 0; background: var(--ink); transform-origin: 0 50%; }
+.pk-actions { display: flex; gap: 8px; }
+.pk-cancel { font-size: 13px; }
+.pk-bloom { position: fixed; inset: 0; z-index: 3; background: var(--reviewer); display: grid; place-items: center; }
+.pk-bloom-in { display: flex; gap: 12px; }
+.pk-bloom-in i { width: 26px; height: 26px; border-radius: 50%; border: 2px solid #0f0f0f; box-shadow: 2px 3px 0 #0f0f0f; }
+@media (prefers-reduced-motion: reduce) { .pk-scan, .pk-ring, .pk-orbit { animation: none; } .pk-ring { display: none; } }
+html.less-motion .pk-scan, html.less-motion .pk-ring, html.less-motion .pk-orbit { animation: none; }

@@ -55,3 +55,41 @@ button.cw-red:disabled { background: #ff5f57; }
   .cw-line { grid-template-columns: 38px 1fr; padding-right: 14px; }
   .cw-ln { padding-right: 12px; }
 }
+
+/* ---------- the paper window: Swarm's own look for code (white paper, ink outline, a hard shadow, agent-coloured dots) */
+.cw--paper { --cw-bg: var(--white); --cw-text: var(--ink); --cw-dim: var(--ink-3); --cw-tint: var(--coder);
+  border: 2px solid var(--ink); border-radius: 24px; box-shadow: 5px 6px 0 var(--ink); }
+.cw--paper .cw-bar { height: 52px; padding: 0 12px 0 16px; background: color-mix(in srgb, var(--cw-tint) 38%, var(--white)); border-bottom: 2px solid var(--ink); box-shadow: none; }
+.cw-dots { display: flex; gap: 6px; }
+.cw-dots i { width: 12px; height: 12px; border-radius: 50%; border: 1.5px solid var(--ink); }
+.cw--paper .cw-title { color: var(--ink); font-size: 13.5px; }
+.cw--paper .cw-title svg { color: var(--ink); }
+.cw--paper .cw-btn { height: 30px; padding: 0 13px; border-radius: var(--pill); border: 1.5px solid var(--ink); background: var(--white); color: var(--ink); box-shadow: 2px 2px 0 var(--ink);
+  transition: translate 0.2s var(--ease-out), box-shadow 0.2s var(--ease-out), background-color 0.2s; }
+.cw--paper .cw-btn:hover { background: var(--white); translate: -1px -1px; box-shadow: 3px 3px 0 var(--ink); }
+.cw--paper .cw-btn:active { translate: 1px 1px; box-shadow: 0 0 0 var(--ink); }
+.cw--paper .cw-btn.on { background: var(--ink); color: var(--white); }
+.cw--paper .cw-close { width: 30px; padding: 0; display: grid; place-items: center; background: var(--tester); color: #0f0f0f; }
+.cw--paper .cw-close:hover { background: var(--tester); rotate: 90deg; }
+.cw--paper .cw-close { transition: rotate 0.4s var(--spring), translate 0.2s var(--ease-out), box-shadow 0.2s var(--ease-out); }
+.cw--paper .cw-body { scrollbar-color: var(--line) transparent; background:
+  linear-gradient(90deg, var(--grey-8) 0 52px, transparent 52px); }
+.cw--paper .cw-line { animation: cw-line-in 0.45s var(--ease-out) backwards; }
+@keyframes cw-line-in { from { opacity: 0; translate: -10px 0; } }
+.cw--paper .cw-line:hover { background: color-mix(in srgb, var(--reviewer) 14%, transparent); }
+.cw--paper .cw-ln { border-right: 1.5px dashed var(--line); margin-right: 14px; padding-right: 12px; }
+.cw--paper .cw-line { grid-template-columns: 52px 1fr; }
+.cw--paper .cw-status { background: var(--grey-8); border-top: 2px solid var(--ink); color: var(--ink-2); font-size: 11.5px; padding: 9px 16px; }
+.cw--paper .cw-loading span { border: 1.5px solid var(--ink); }
+.cw--paper .tk-kw { color: #c0392b; font-weight: 600; } .cw--paper .tk-str { color: #1d7a3a; } .cw--paper .tk-fn { color: #1f5fae; font-weight: 700; }
+.cw--paper .tk-call { color: #2d6cb5; } .cw--paper .tk-num { color: #a15c00; } .cw--paper .tk-com { color: #8a8d86; font-style: italic; }
+.cw--paper .tk-bi, .cw--paper .tk-dec { color: #b0307a; } .cw--paper .tk-op { color: #5a5c58; } .cw--paper .tk-key { color: #1f5fae; } .cw--paper .tk-punc { color: #7b7e78; }
+.cw--paper .d-add { background: color-mix(in srgb, var(--reviewer) 20%, transparent); } .cw--paper .d-add .cw-src { color: #16622d; }
+.cw--paper .d-del { background: color-mix(in srgb, var(--tester) 20%, transparent); } .cw--paper .d-del .cw-src { color: #a3281a; }
+html[data-theme="dark"] .cw--paper .tk-kw { color: #ff8a7a; } html[data-theme="dark"] .cw--paper .tk-str { color: #8fe19a; }
+html[data-theme="dark"] .cw--paper .tk-fn { color: #9dc4f5; } html[data-theme="dark"] .cw--paper .tk-call { color: #bcd6f8; }
+html[data-theme="dark"] .cw--paper .tk-num { color: #fbe74e; } html[data-theme="dark"] .cw--paper .tk-bi, html[data-theme="dark"] .cw--paper .tk-dec { color: #f5b7d0; }
+html[data-theme="dark"] .cw--paper .tk-op { color: #c9c9c5; } html[data-theme="dark"] .cw--paper .tk-key { color: #9dc4f5; }
+html[data-theme="dark"] .cw--paper .cw-bar { background: color-mix(in srgb, var(--cw-tint) 30%, var(--white)); }
+@media (prefers-reduced-motion: reduce) { .cw--paper .cw-line { animation: none; } }
+html.less-motion .cw--paper .cw-line { animation: none; }

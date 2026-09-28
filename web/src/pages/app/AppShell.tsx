@@ -1,6 +1,7 @@
 import { AnimatePresence, motion } from 'motion/react'
 import { lazy, Suspense, useEffect, useRef, useState } from 'react'
 import { PageTransition, routeLabel } from '../../components/PageTransition'
+import { setToastLook } from '../../components/Island'
 import { Link, NavLink, Route, Routes, useLocation, useNavigate } from 'react-router-dom'
 import { LiveLogo, Logo } from '../../components/Logo'
 import { ModeToggle } from '../../components/ModeToggle'
@@ -23,7 +24,7 @@ const pages = {
   overview: () => import('./Overview'), repos: () => import('./Repos'), repo: () => import('./RepoView'),
   tools: () => import('./ToolsPage'), settings: () => import('./Settings'), profile: () => import('./Profile'),
   help: () => import('./Help'), agents: () => import('./Agents'), lab: () => import('./Lab'),
-  rules: () => import('./Rules'), quiet: () => import('./QuietHours'), whodunit: () => import('./Whodunit'),
+  rules: () => import('./Rules'), quiet: () => import('./QuietHours'), hive: () => import('./Hive'),
 }
 const Overview = lazy(pages.overview)
 const Repos = lazy(pages.repos)
@@ -36,7 +37,12 @@ const Agents = lazy(pages.agents)
 const Lab = lazy(pages.lab)
 const Rules = lazy(pages.rules)
 const QuietHours = lazy(pages.quiet)
-const Whodunit = lazy(pages.whodunit)
+const Hive = lazy(pages.hive)
+
+const NAV_KEY = 'swarm.sideNavH'
+const clamp = (v: number, a: number, b: number) => Math.max(a, Math.min(b, v))
+const recall = (k: string) => { try { const v = Number(localStorage.getItem(k)); return v > 0 ? v : null } catch { return null } }
+const keep = (k: string, v: number) => { try { localStorage.setItem(k, String(Math.round(v))) } catch { /* private window: this visit only */ } }
 
 let startHandled = false // once per page load: later visits to /app are deliberate
 
@@ -97,6 +103,57 @@ export default function AppShell() {
   const [rail, setRail] = useState(prefs?.sidebar === 'icons')
   useEffect(() => { setRail(prefs?.sidebar === 'icons') }, [prefs?.sidebar])
   const toggleRail = () => { const next = !rail; setRail(next); if (user) void savePrefs(user.uid, { sidebar: next ? 'icons' : 'full' }).catch(() => setRail(!next)) }
+
+  // inside it: how much room the pages get before the repositories begin; the rest scrolls
+  const panes = useRef<HTMLDivElement>(null)
+  const navPane = useRef<HTMLDivElement>(null)
+  // the soft fade at a list's edge only shows on the side there's more to scroll to
+  useEffect(() => {
+    const els = [...(panes.current?.querySelectorAll<HTMLElement>('.side-scroll, .side-repos-list') ?? [])]
+    const edge = (el: HTMLElement) => {
+      el.classList.toggle('has-above', el.scrollTop > 1)
+      el.classList.toggle('has-below', el.scrollTop + el.clientHeight < el.scrollHeight - 1)
+    }
+    const on = (e: Event) => edge(e.currentTarget as HTMLElement)
+    const ro = new ResizeObserver(() => els.forEach(edge))
+    els.forEach((el) => { edge(el); el.addEventListener('scroll', on, { passive: true }); ro.observe(el); if (el.firstElementChild) ro.observe(el.firstElementChild) })
+    return () => { ro.disconnect(); els.forEach((el) => el.removeEventListener('scroll', on)) }
+  })
+  const [navH, setNavH] = useState<number | null>(() => recall(NAV_KEY))
+  const navRange = () => {
+    const room = panes.current?.getBoundingClientRect().height || 600
+    return { min: 84, max: Math.max(84, room - 96), natural: navPane.current?.scrollHeight || 300 }
+  }
+  const fitNav = (reset?: boolean) => {
+    const { min, max, natural } = navRange()
+    const h = reset ? clamp(Math.min(natural, max * 0.55), min, max) : clamp(navH ?? natural, min, max)
+    setNavH(h); keep(NAV_KEY, h)
+  }
+  const nudgeNav = (d: number) => { const { min, max } = navRange(); const h = clamp((navH ?? navPane.current?.getBoundingClientRect().height ?? 300) + d, min, max); setNavH(h); keep(NAV_KEY, h) }
+  const splitDown = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (e.button !== 0) return
+    e.preventDefault()
+    const el = e.currentTarget, y0 = e.clientY, h0 = navPane.current?.getBoundingClientRect().height || 300
+    const { min, max } = navRange()
+    el.setPointerCapture(e.pointerId)
+    panes.current?.classList.add('is-dragging')
+    let h = h0
+    const move = (ev: PointerEvent) => { h = clamp(h0 + ev.clientY - y0, min, max); setNavH(h) }
+    const up = () => {
+      el.removeEventListener('pointermove', move); el.removeEventListener('pointerup', up); el.removeEventListener('pointercancel', up)
+      panes.current?.classList.remove('is-dragging')
+      keep(NAV_KEY, h)
+    }
+    el.addEventListener('pointermove', move); el.addEventListener('pointerup', up); el.addEventListener('pointercancel', up)
+  }
+  // a shorter window never leaves the repositories squeezed out
+  useEffect(() => {
+    const el = panes.current
+    if (!el) return
+    const ro = new ResizeObserver(() => setNavH((h) => (h === null ? h : clamp(h, 84, Math.max(84, el.getBoundingClientRect().height - 96)))))
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [])
   useStartPage(prefs?.startPage)
   setTimeStyle(prefs?.times ?? 'relative', prefs?.clock ?? '24h') // read by timeAgo everywhere below
   const pins = (prefs?.pins ?? []).map((to) => {
@@ -110,6 +167,7 @@ export default function AppShell() {
     const d = document.documentElement.dataset
     d.toasts = prefs?.toasts ?? 'br'
   }, [prefs?.toasts])
+  useEffect(() => { setToastLook(prefs?.toastLook) }, [prefs?.toastLook])
   // the pointer lives outside the dashboard, so hand it your highlight colour
   const shellRef = useRef<HTMLDivElement>(null)
   useEffect(() => {
@@ -137,7 +195,7 @@ export default function AppShell() {
 
   return (
     <div ref={shellRef} className={`shell ${rail ? 'side-rail' : ''} text-${prefs?.textSize ?? 'default'} canvas-${prefs?.canvas ?? 'white'} font-${prefs?.font ?? 'grotesk'} corners-${prefs?.corners ?? 'round'} look-${prefs?.look ?? 'plain'}`}
-      data-accent={prefs?.accent ?? 'green'} style={accentStyle(prefs?.accent, prefs?.accentHex)}>
+      data-accent={prefs?.accent ?? 'green'} style={{ ...accentStyle(prefs?.accent, prefs?.accentHex) }}>
       <LookFx look={prefs?.look ?? 'plain'} />
       <header className="mtop">
         <Logo to="/app" />
@@ -192,37 +250,46 @@ export default function AppShell() {
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><circle cx="11" cy="11" r="7" /><path d="M20 20l-3.5-3.5" /></svg>
           <span>Search or jump to…</span><kbd>⌘K</kbd>
         </button>
-        {pins.length > 0 && (
-          <nav className="side-nav" aria-label="Pinned">
-            <p className="side-label side-label--top">Pinned</p>
-            {pins.map((p) => p.repo
-              ? <NavLink key={p.to} to={p.to} className="side-repo" data-tip={p.label}><span className={`status-dot s-${p.repo.status || 'idle'}`} /><span className="side-repo-name">{p.label}</span></NavLink>
-              : <SideLink key={p.to} to={p.to} end={p.to === '/app'} icon={p.icon}>{p.label}</SideLink>)}
-          </nav>
-        )}
-        <nav className="side-nav" aria-label="Main">
-          {nav.filter((n) => n.group === 'main').map((n) => <SideLink key={n.to} to={n.to} end={n.to === '/app'} icon={n.icon} count={n.to === '/app' ? needsYou : 0}>{n.label}</SideLink>)}
-          {<>
-            <p className="side-label">Guardrails</p>
-            {nav.filter((n) => n.group === 'guard').map((n) => <SideLink key={n.to} to={n.to} icon={n.icon}>{n.label}</SideLink>)}
-            <p className="side-label">Just for fun</p>
-            {nav.filter((n) => n.group === 'play').map((n) => <SideLink key={n.to} to={n.to} icon={n.icon}>{n.label}</SideLink>)}
-          </>}
-        </nav>
-        {repos.length > 0 && (
-          <div className="side-repos">
-            <p className="side-label">Your repos</p>
-            <div className="side-repos-list" data-lenis-prevent>
-            {repos.map((r) => (
-              <NavLink key={r.id} to={`/app/repos/${r.id}`} className="side-repo" data-tip={r.displayName || r.fullName}>
-                <span className={`status-dot s-${r.status || 'idle'}`} />
-                <span className="side-repo-name">{r.displayName || r.fullName}</span>
-                {!!r.stats?.needsYou && <span className="side-count">{r.stats.needsYou}</span>}
-              </NavLink>
-            ))}
-            </div>
+        <div ref={panes} className="side-panes">
+          <div ref={navPane} className={`side-scroll ${navH ? 'is-set' : ''}`} data-lenis-prevent style={navH ? { flexBasis: navH } : undefined}>
+            {pins.length > 0 && (
+              <nav className="side-nav" aria-label="Pinned">
+                <p className="side-label side-label--top">Pinned</p>
+                {pins.map((p) => p.repo
+                  ? <NavLink key={p.to} to={p.to} className="side-repo" data-tip={p.label}><span className={`status-dot s-${p.repo.status || 'idle'}`} /><span className="side-repo-name">{p.label}</span></NavLink>
+                  : <SideLink key={p.to} to={p.to} end={p.to === '/app'} icon={p.icon}>{p.label}</SideLink>)}
+              </nav>
+            )}
+            <nav className="side-nav" aria-label="Main">
+              {nav.filter((n) => n.group === 'main').map((n) => <SideLink key={n.to} to={n.to} end={n.to === '/app'} icon={n.icon} count={n.to === '/app' ? needsYou : 0}>{n.label}</SideLink>)}
+              <p className="side-label">Guardrails</p>
+              {nav.filter((n) => n.group === 'guard').map((n) => <SideLink key={n.to} to={n.to} icon={n.icon}>{n.label}</SideLink>)}
+              <p className="side-label">Just for fun</p>
+              {nav.filter((n) => n.group === 'play').map((n) => <SideLink key={n.to} to={n.to} icon={n.icon}>{n.label}</SideLink>)}
+            </nav>
           </div>
-        )}
+          {repos.length > 0 && (
+            <>
+              <div className="side-split" role="separator" aria-orientation="horizontal" aria-label="Drag to share the sidebar between pages and repositories" tabIndex={0}
+                data-tip="Drag to resize · double-click to reset" onPointerDown={splitDown} onDoubleClick={() => fitNav(true)}
+                onKeyDown={(e) => { if (e.key === 'ArrowUp' || e.key === 'ArrowDown') { e.preventDefault(); nudgeNav(e.key === 'ArrowUp' ? -24 : 24) } }}>
+                <i />
+              </div>
+              <div className="side-repos">
+                <p className="side-label">Your repos <span className="side-label-n">{repos.length}</span></p>
+                <div className="side-repos-list" data-lenis-prevent>
+                {repos.map((r) => (
+                  <NavLink key={r.id} to={`/app/repos/${r.id}`} className="side-repo" data-tip={r.displayName || r.fullName}>
+                    <span className={`status-dot s-${r.status || 'idle'}`} />
+                    <span className="side-repo-name">{r.displayName || r.fullName}</span>
+                    {!!r.stats?.needsYou && <span className="side-count">{r.stats.needsYou}</span>}
+                  </NavLink>
+                ))}
+                </div>
+              </div>
+            </>
+          )}
+        </div>
         <div className="side-foot">
           <nav className="side-nav" aria-label="More">
             {nav.filter((n) => n.group === 'foot').map((n) => <SideLink key={n.to} to={n.to} icon={n.icon}>{n.label}</SideLink>)}
@@ -260,7 +327,7 @@ export default function AppShell() {
                 <Route path="lab" element={admin ? <Lab /> : <Overview />} />
                 <Route path="rules" element={<Rules />} />
                 <Route path="quiet-hours" element={<QuietHours />} />
-                <Route path="whodunit" element={<Whodunit />} />
+                <Route path="hive" element={<Hive />} />
               </Routes>
             </Suspense>
           </PageTransition>
