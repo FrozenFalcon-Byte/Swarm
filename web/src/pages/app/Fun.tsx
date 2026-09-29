@@ -1,7 +1,6 @@
 import { motion } from 'motion/react'
 import { Link } from 'react-router-dom'
 import { Roll } from '../../components/Roll'
-import { easeOut } from '../../lib/motion'
 import { PageHead } from './Overview'
 import { useWinHeight } from '../../lib/winHeight'
 import './fun.css'
@@ -9,8 +8,8 @@ import './fun.css'
 /* Just for fun: the dashboard's toys, one big card each. Each card plays a little loop of what's inside. */
 
 const CARDS = [
-  { to: '/app/fun/garden', title: 'The Garden', tag: 'Two films', tint: 'var(--reviewer)', art: <GardenArt />,
-    text: 'Your swarm, grown. Every repo is a plant: scroll and watch it grow from your first issue, then see what your crew harvested.' },
+  { to: '/app/fun/liftoff', title: 'Liftoff', tag: 'Scroll film', tint: 'var(--coder)', art: <LiftoffArt />,
+    text: 'Your swarm, launched. Scroll your repos into orbit past every fix they shipped, then light your favourites as stars and high-five the crew.' },
   { to: '/app/fun/hive', title: 'The Hive', tag: 'Game', tint: 'var(--triager)', art: <HiveArt />,
     text: 'Your agents, off the clock. Drop bugs and watch the swarm fix each one in order: read, patch, test, sign off.' },
 ]
@@ -40,32 +39,31 @@ export default function Fun() {
   )
 }
 
-/** A stem grows, three flowers pop open and a bee does a lap. */
-function GardenArt() {
-  const loop = { repeat: Infinity, duration: 6, repeatDelay: 0.4 } as const
-  const blooms = [{ x: 118, y: 96, c: 'triager' }, { x: 206, y: 74, c: 'coder' }, { x: 160, y: 40, c: 'tester' }]
+/** Three, two, one: the rocket shakes, lifts off past the clouds and the stars come out. */
+function LiftoffArt() {
+  const loop = { repeat: Infinity, duration: 5.2, repeatDelay: 0.3 } as const
+  const stars = [[40, 30], [90, 60], [250, 40], [280, 90], [60, 120], [230, 140], [150, 22], [300, 30]]
   return (
     <svg viewBox="0 0 320 220" className="fun-svg">
-      <path d="M20 186 C 90 172, 220 176, 300 186" fill="none" stroke="var(--ink)" strokeWidth="3" strokeLinecap="round" />
-      <motion.path d="M160 186 Q 140 120 160 48" fill="none" stroke="var(--ink)" strokeWidth="6" strokeLinecap="round"
-        initial={{ pathLength: 0 }} animate={{ pathLength: [0, 1, 1, 0] }} transition={{ ...loop, times: [0, 0.25, 0.92, 1], ease: easeOut }} />
-      <motion.path d="M152 128 Q 135 104 120 98 M154 100 Q 180 80 204 76" fill="none" stroke="var(--ink)" strokeWidth="4" strokeLinecap="round"
-        initial={{ pathLength: 0 }} animate={{ pathLength: [0, 0, 1, 1, 0] }} transition={{ ...loop, times: [0, 0.2, 0.35, 0.92, 1] }} />
-      {blooms.map((b, k) => (
-        <motion.g key={k} initial={{ scale: 0 }} animate={{ scale: [0, 0, 1.2, 1, 1, 0], rotate: [0, -90, 0, 0, 0, 0] }}
-          transition={{ ...loop, times: [0, 0.35 + k * 0.08, 0.43 + k * 0.08, 0.48 + k * 0.08, 0.92, 1] }} style={{ originX: `${b.x}px`, originY: `${b.y}px` }}>
-          {Array.from({ length: 6 }, (_, p) => { const a = (p / 6) * Math.PI * 2; return <circle key={p} cx={b.x + Math.cos(a) * 11} cy={b.y + Math.sin(a) * 11} r="8" fill={`var(--${b.c})`} stroke="var(--ink)" strokeWidth="2.5" /> })}
-          <circle cx={b.x} cy={b.y} r="7" fill="#ffd85a" stroke="var(--ink)" strokeWidth="2.5" />
-        </motion.g>
+      {stars.map(([x, y], k) => (
+        <motion.path key={k} d={`M${x} ${y - 6}l2 4 4 2-4 2-2 4-2-4-4-2 4-2z`} fill="var(--triager)" stroke="var(--ink)" strokeWidth="1.5"
+          animate={{ scale: [0, 0, 1.2, 1, 1, 0], opacity: [0, 0, 1, 1, 1, 0] }} transition={{ ...loop, times: [0, 0.45 + k * 0.03, 0.5 + k * 0.03, 0.55 + k * 0.03, 0.92, 1] }}
+          style={{ originX: `${x}px`, originY: `${y}px` }} />
       ))}
-      <motion.g animate={{ x: [40, 250, 200, 60, 40], y: [60, 40, 130, 120, 60] }} transition={{ repeat: Infinity, duration: 7, ease: 'easeInOut' }}>
-        <ellipse cx="0" cy="-8" rx="5" ry="7" fill="var(--white)" stroke="var(--ink)" strokeWidth="2" />
-        <ellipse cx="0" cy="0" rx="11" ry="8" fill="var(--reviewer)" stroke="var(--ink)" strokeWidth="2.5" />
-        <path d="M-3 -7.5v15M3 -7.5v15" stroke="var(--ink)" strokeWidth="2.4" />
+      <motion.path d="M20 200 C 90 186, 230 190, 300 200" fill="none" stroke="var(--ink)" strokeWidth="3" strokeLinecap="round"
+        animate={{ y: [0, 0, 60, 60, 0] }} transition={{ ...loop, times: [0, 0.35, 0.6, 0.95, 1] }} />
+      {[[110, 190], [210, 190], [135, 196], [185, 196]].map(([x, y], k) => (
+        <motion.circle key={k} cx={x} cy={y} r="14" fill="var(--white)" stroke="var(--ink)" strokeWidth="2.5"
+          animate={{ scale: [0, 0, 1.3, 1.6, 0], opacity: [0, 0, 1, 1, 0] }} transition={{ ...loop, times: [0, 0.18, 0.3, 0.5, 0.62] }} style={{ originX: `${x}px`, originY: `${y}px` }} />
+      ))}
+      <motion.g animate={{ y: [0, 0, 0, -150, -150, 0], x: [0, 1.5, -1.5, 0, 0, 0] }} transition={{ ...loop, times: [0, 0.2, 0.3, 0.62, 0.95, 1], ease: 'easeIn' }}>
+        <motion.path d="M150 176 Q160 222 170 176z" fill="#ffb347" stroke="var(--ink)" strokeWidth="2.5" animate={{ scaleY: [0.2, 0.5, 1.2, 1] }}
+          transition={{ repeat: Infinity, duration: 0.25, repeatType: 'mirror' }} style={{ originX: '160px', originY: '176px' }} />
+        <path d="M144 150l-14 22h14z M176 150l14 22h-14z" fill="var(--tester)" stroke="var(--ink)" strokeWidth="2.5" strokeLinejoin="round" />
+        <path d="M160 86c14 14 18 38 16 90h-32c-2-52 2-76 16-90z" fill="var(--white)" stroke="var(--ink)" strokeWidth="3" />
+        <path d="M144 146h32v14h-32z" fill="var(--reviewer)" stroke="var(--ink)" strokeWidth="2.5" />
+        <circle cx="160" cy="118" r="9" fill="var(--coder)" stroke="var(--ink)" strokeWidth="2.5" />
       </motion.g>
-      <g transform="translate(236 176)">
-        <ellipse rx="8" ry="6" fill="var(--ink)" /><circle cx="7" cy="-3" r="4" fill="var(--ink)" />
-      </g>
     </svg>
   )
 }

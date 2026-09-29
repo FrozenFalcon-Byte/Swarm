@@ -152,7 +152,7 @@ export function routeLabel(path: string, repoName?: (id: string) => string | und
   if (path.startsWith('/island')) return 'The Island'
   if (path.startsWith('/app/rules')) return 'House rules'
   if (path.startsWith('/app/quiet-hours')) return 'Quiet hours'
-  if (path.startsWith('/app/fun/garden')) return 'The Garden'
+  if (path.startsWith('/app/fun/liftoff')) return 'Liftoff'
   if (path.startsWith('/app/fun/hive') || path.startsWith('/app/hive')) return 'The Hive'
   if (path.startsWith('/app/fun')) return 'Just for fun'
   if (path.startsWith('/app')) return 'Overview'
