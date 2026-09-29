@@ -1,7 +1,7 @@
 import { AnimatePresence, motion } from 'motion/react'
 import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react'
 import { PageTransition, routeLabel } from '../../components/PageTransition'
-import { setToastLook } from '../../components/Island'
+import { setToastLook, useToast } from '../../components/Island'
 import { Link, NavLink, Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom'
 import { LiveLogo, Logo } from '../../components/Logo'
 import { ModeToggle } from '../../components/ModeToggle'
@@ -19,6 +19,7 @@ import type { Prefs } from '../../lib/types'
 import { CommandBar, useCommandBar } from './CommandBar'
 import { BackToTop, GoChip, NetPill, NewVersion, ShortcutSheet, useRecordVisit, useShortcuts, useTabTitle } from './Qol'
 import { pop } from '../../lib/sound'
+import { alertWanted, deliver, inAppOn, kindOf, titleCountOn } from '../../lib/alerts'
 import { ICONS, NAV } from './nav'
 import { setTimeStyle } from './ui'
 import './app.css'
@@ -73,26 +74,30 @@ function useStartPage(start: 'overview' | 'repos' | 'last' | undefined) {
   }, [start, location.pathname, navigate])
 }
 
-/** A browser notification when a task newly needs you, if you turned that on and Swarm isn't the tab you're looking at. */
-function useNeedsYouAlerts(repos: { id: string; displayName?: string; fullName?: string }[], on: boolean) {
+/** Alerts when a task newly reaches a state you asked to hear about (Settings → Notifications): a browser
+ *  notification while Swarm is in the background, a note in the app while it's in front. */
+function useTaskAlerts(repos: { id: string; displayName?: string; fullName?: string }[], prefs: Prefs | undefined) {
+  const toast = useToast()
+  const on = !!prefs?.notify || inAppOn(prefs)
   const tasks = useAllTasks(on ? repos.map((r) => r.id) : [])
   const known = useRef<Set<string> | null>(null)
+  const live = useRef({ prefs, toast, repos })
+  useEffect(() => { live.current = { prefs, toast, repos } }) // runs before the effect below, so it always reads the latest
   useEffect(() => {
     if (!on) { known.current = null; return }
-    const waiting = tasks.filter((t) => t.state === 'Approved' || t.state === 'Needs Human')
-    const keys = new Set(waiting.map((t) => `${t.repoId}/${t.task_id}/${t.state}`))
+    const watched = tasks.filter((t) => kindOf(t.state))
+    const keys = new Set(watched.map((t) => `${t.repoId}/${t.task_id}/${t.state}`))
     if (known.current === null) { if (tasks.length) known.current = keys; return } // the first snapshot is what was already there
-    const fresh = waiting.filter((t) => !known.current!.has(`${t.repoId}/${t.task_id}/${t.state}`))
+    const fresh = watched.filter((t) => !known.current!.has(`${t.repoId}/${t.task_id}/${t.state}`))
     known.current = keys
-    if (!fresh.length || typeof Notification === 'undefined' || Notification.permission !== 'granted' || !document.hidden) return
-    const t = fresh[0]
+    const { prefs, toast, repos } = live.current
+    const mute = new Set(prefs?.alertMute ?? [])
+    const wanted = fresh.filter((t) => !mute.has(t.repoId) && alertWanted(prefs, kindOf(t.state)!.id))
+    if (!wanted.length) return
+    const t = wanted[0]
     const repo = repos.find((r) => r.id === t.repoId)
-    const n = new Notification(t.state === 'Approved' ? 'A fix is ready to merge' : 'A task needs you', {
-      body: `${repo?.displayName || repo?.fullName || 'Swarm'} · ${t.task_id}: ${t.title}${fresh.length > 1 ? ` (+${fresh.length - 1} more)` : ''}`,
-      icon: '/favicon.svg', tag: `${t.repoId}/${t.task_id}`,
-    })
-    n.onclick = () => { window.focus(); window.location.assign(`/app/repos/${t.repoId}`) }
-  }, [tasks, on, repos])
+    deliver(prefs, toast, kindOf(t.state)!.id, `${repo?.displayName || repo?.fullName || 'Swarm'} · ${t.task_id}: ${t.title}${wanted.length > 1 ? ` (+${wanted.length - 1} more)` : ''}`, `/app/repos/${t.repoId}`)
+  }, [tasks, on])
 }
 
 export default function AppShell() {
@@ -169,7 +174,7 @@ export default function AppShell() {
     const page = NAV.find((n) => n.to === to)
     return repo ? { to, label: repo.displayName || repo.fullName, repo, icon: '' } : page ? { to, label: page.label, icon: page.icon, repo: undefined } : null
   }).filter((p): p is NonNullable<typeof p> => !!p)
-  useNeedsYouAlerts(repos, !!prefs?.notify)
+  useTaskAlerts(repos, prefs)
   useEffect(() => { setMenu(false) }, [location.pathname])
   useEffect(() => {
     const d = document.documentElement.dataset
@@ -196,7 +201,7 @@ export default function AppShell() {
   // animate between sections, not between a repo's tabs or its task drawer
   const key = location.pathname.split('/').slice(0, 4).join('/')
   const where = routeLabel(key, (id) => repos.find((r) => r.id === id)?.displayName)
-  useTabTitle(where, needsYou)
+  useTabTitle(where, titleCountOn(prefs) ? needsYou : 0)
   useRecordVisit(key, where)
   const [sheet, setSheet] = useState(false)
   const going = useShortcuts({ openSearch: () => setCmdOpen(true), toggleRail, toggleSheet: () => setSheet((o) => !o) })

@@ -2098,3 +2098,23 @@ html.less-motion .method.is-busy .method-ic, html.less-motion .method.is-busy .m
 @media (max-width: 900px) { .qol-top { right: 14px; bottom: 14px; width: 46px; height: 46px; } .qol-fresh { flex-wrap: wrap; justify-content: center; border-radius: 22px; padding: 12px; text-align: center; } }
 .less-motion .qol-net-dot { animation: none; }
 .kbar-foot-end { margin-left: auto; }
+
+/* Settings → Notifications (Notifications.tsx) */
+.nt { display: flex; flex-direction: column; gap: 18px; }
+.nt-kinds { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 12px; }
+.nt-kind { display: flex; align-items: flex-start; gap: 12px; padding: 14px 16px; text-align: left; font: inherit; color: var(--ink); cursor: pointer;
+  background: var(--white); border: 2px solid var(--line); border-radius: 18px; transition: border-color 0.2s, box-shadow 0.25s var(--ease-out), translate 0.25s var(--ease-out), background-color 0.2s; }
+.nt-kind:hover { border-color: var(--ink); }
+.nt-kind.on { border-color: var(--ink); box-shadow: 4px 4px 0 var(--ink); translate: -2px -2px; background: color-mix(in srgb, var(--c) 16%, var(--white)); }
+.nt-kind-dot { flex: none; display: grid; place-items: center; width: 26px; height: 26px; margin-top: 1px; border-radius: 50%; background: var(--grey-8); border: 2px solid var(--line); transition: background-color 0.2s, border-color 0.2s; }
+.nt-kind.on .nt-kind-dot { background: var(--c); border-color: #0f0f0f; }
+.nt-kind-dot svg { width: 16px; height: 16px; }
+.nt-kind-copy { display: flex; flex-direction: column; gap: 3px; }
+.nt-kind-copy b { font-size: 15px; }
+.nt-kind-copy span { font-size: 13px; color: var(--ink-2); line-height: 1.35; }
+.nt-repos { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
+.nt-repos li { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 12px 2px; border-top: 1.5px solid var(--line); transition: opacity 0.2s; }
+.nt-repos li:first-child { border-top: 0; }
+.nt-repos li.is-muted .nt-repo-name { opacity: 0.5; }
+.nt-repo-name { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.nt-repo-name .mono { font-size: 12px; color: var(--ink-3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

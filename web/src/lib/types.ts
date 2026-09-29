@@ -210,6 +210,16 @@ export interface Prefs {
   textSize?: 'small' | 'default' | 'large'
   sidebar?: 'full' | 'icons'
   clock?: '24h' | '12h'
+  /** which task changes alert you (ready and needsYou are on unless switched off) */
+  alertOn?: { ready?: boolean; needsYou?: boolean; merged?: boolean; rejected?: boolean }
+  /** a note inside Swarm when something happens while it's the tab you're on (on unless switched off) */
+  alertInApp?: boolean
+  /** a soft pop with each alert */
+  alertSound?: boolean
+  /** repositories you don't want alerts from */
+  alertMute?: string[]
+  /** the tab title shows how many things need you (on unless switched off) */
+  titleCount?: boolean
   weekStart?: 'mon' | 'sun'
 }
 export interface Profile { displayName?: string; email?: string; avatar?: string | null; githubLogin?: string | null; createdAt?: Stamp

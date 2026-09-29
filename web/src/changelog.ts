@@ -10,6 +10,15 @@ export interface Release { id: string; date: string; items: Change[] }
 
 export const RELEASES: Release[] = [
   {
+    id: '2026-09-29c',
+    date: '29 September',
+    items: [
+      { agent: 'triager', text: 'Settings → Notifications: pick what alerts you, from ready to merge to sent back' },
+      { agent: 'coder', text: 'Get a note in Swarm, a browser notification or a soft pop, and send yourself a test' },
+      { agent: 'reviewer', text: 'Mute the repositories you don’t need to hear from' },
+    ],
+  },
+  {
     id: '2026-09-29b',
     date: '29 September',
     items: [

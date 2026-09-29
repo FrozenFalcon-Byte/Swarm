@@ -6,12 +6,13 @@ import { useToast } from '../../components/Island'
 import { API_URL, MCP_URL } from '../../lib/api'
 import { friendlyAuthError, useAuth } from '../../lib/auth'
 import { createMcpToken, onlineWorker, queueRun, removeRepo, revokeMcpToken, setAutoSync, useGithubLink, useMcpTokens, useRepos, useWorkers } from '../../lib/data'
-import type { Repo, WorkerInfo } from '../../lib/types'
+import type { Repo } from '../../lib/types'
 import { PanelLayout, usePanel, type PanelItem } from '../../components/PanelLayout'
 import { firebaseInfo } from '../../lib/firebase'
 import { MCP_CLIENTS, MCP_TOOLS, TOKEN_PLACEHOLDER } from '../../lib/mcpClients'
 import { easeInOut, easeOut } from '../../lib/motion'
 import { Appearance } from './Appearance'
+import { Notifications } from './Notifications'
 import { RewindSettings } from './RewindSettings'
 import { PageHead } from './Overview'
 import { Section, timeAgo } from './ui'
@@ -21,7 +22,7 @@ const SECTIONS: PanelItem[] = [
   { id: 'connections', label: 'Connections', hint: 'Firebase, GitHub, worker, models', color: 'var(--coder)' },
   { id: 'repos', label: 'Repositories', hint: 'Watching, runs, removal', color: 'var(--reviewer)' },
   { id: 'ai', label: 'Claude & AI tools', hint: 'MCP server and access tokens', color: 'var(--tester)' },
-  { id: 'workers', label: 'Workers', hint: 'Where the agents run', color: 'var(--triager)' },
+  { id: 'alerts', label: 'Notifications', hint: 'What alerts you, and how', color: 'var(--triager)' },
   { id: 'rewind', label: 'Weekly Rewind', hint: 'When your week pops up', color: 'var(--mint)' },
 ]
 
@@ -36,14 +37,14 @@ export default function Settings() {
   const status: { label: string; value: string; tone: 'ok' | 'warn' | 'bad'; to: string }[] = [
     { label: 'Firebase', value: firebaseInfo.usingEmulators ? 'emulators' : 'live', tone: firebaseInfo.usingEmulators ? 'warn' : 'ok', to: 'connections' },
     { label: 'GitHub', value: link ? `@${link.login}` : link === undefined ? '…' : 'not connected', tone: link ? 'ok' : 'warn', to: 'connections' },
-    { label: 'Worker', value: worker ? (worker.mode === 'scheduled' ? 'scheduled' : 'online') : 'offline', tone: worker ? 'ok' : 'bad', to: 'workers' },
+    { label: 'Worker', value: worker ? (worker.mode === 'scheduled' ? 'scheduled' : 'online') : 'offline', tone: worker ? 'ok' : 'bad', to: 'connections' },
     { label: 'Models', value: worker?.llm?.active || (worker ? 'heuristics' : 'unknown'), tone: worker?.llm?.active ? 'ok' : 'warn', to: 'connections' },
   ]
   const items = SECTIONS.map((s) => ({ ...s, badge: s.id === 'repos' ? <span className="pl-badge">{repos.length}</span> : s.id === 'ai' && tokens.length ? <span className="pl-badge">{tokens.length}</span> : undefined }))
 
   return (
     <div className="page page--wide">
-      <PageHead title="Settings" sub="What Swarm is connected to, where it runs, and how other tools reach it." />
+      <PageHead title="Settings" sub="What Swarm is connected to, how it reaches you, and how other tools reach it." />
       <div className="sstatus">
         {status.map((s, k) => (
           <motion.button key={s.label} className={`sstat tone-${s.tone}`} onClick={() => setTab(s.to)} initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }}
@@ -64,7 +65,7 @@ export default function Settings() {
               <Conn name="Worker" tone={worker ? 'ok' : 'bad'} state={worker ? (worker.mode === 'scheduled' ? 'scheduled' : 'online') : 'offline'}
                 detail={worker
                   ? `${worker.id} · ${worker.sandbox} sandbox · ${worker.mode === 'scheduled' ? `last pass ${timeAgo(worker.lastSeen)}, runs on a schedule` : `checked in ${timeAgo(worker.lastSeen)}`}${worker.syncMinutes && worker.mode !== 'scheduled' ? ` · looks for new issues every ${worker.syncMinutes} min` : ''}`
-                  : 'Runs wait in the queue until a worker picks them up. See Workers for how to start one.'} />
+                  : <>Runs wait in the queue until a worker picks them up. Start one with <code>swarm worker</code>, or see <Link className="link" to="/app/help">Help</Link> for Render and GitHub Actions.</>} />
               <Conn name="Models" tone={worker?.llm?.active ? 'ok' : 'warn'} state={worker?.llm?.active ? 'ready' : worker ? 'heuristics' : 'unknown'}
                 detail={!worker ? 'Shown once a worker is online. Models are configured on the worker, never in the browser.'
                   : worker.llm?.active ? `Using ${worker.llm.active}${worker.llm.fallbacks?.length ? `, then ${worker.llm.fallbacks.join(', ')}` : ''}.`
@@ -75,7 +76,7 @@ export default function Settings() {
         {tab === 'appearance' && <Appearance />}
         {tab === 'repos' && <RepoSettings repos={repos} />}
         {tab === 'ai' && <Section title="Use from Claude and other AI tools" action={<span className="pill tone-work">MCP</span>}><McpSetup /></Section>}
-        {tab === 'workers' && <Workers workers={workers} />}
+        {tab === 'alerts' && <Notifications />}
         {tab === 'rewind' && <RewindSettings />}
       </PanelLayout>
     </div>
@@ -130,61 +131,6 @@ function RepoSettings({ repos }: { repos: Repo[] }) {
       </ul>
       <p className="muted-p">Removing a repository deletes its board here. Nothing changes on GitHub.</p>
     </Section>
-  )
-}
-
-/* ------------------------------------------------------------------ workers */
-
-const COMMANDS = [
-  ['Check the setup', 'swarm doctor'],
-  ['Start a worker on this machine', 'swarm worker'],
-  ['Run once and exit (for cron or CI)', 'swarm worker --once'],
-] as const
-
-function Workers({ workers }: { workers: WorkerInfo[] }) {
-  const toast = useToast()
-  const now = Date.now()
-  const sorted = [...workers].sort((a, b) => (b.lastSeen?.toDate().getTime() ?? 0) - (a.lastSeen?.toDate().getTime() ?? 0))
-  const copy = async (c: string) => { try { await navigator.clipboard.writeText(c); toast.ok('Copied', c) } catch { toast.error('The browser blocked the clipboard') } }
-  return (
-    <div className="pl-grid">
-      <Section title="Workers" action={<span className="muted">{sorted.length} seen</span>}>
-        {!sorted.length && <p className="muted-p">No worker has checked in yet. Start one with the commands on the right.</p>}
-        <ul className="wlist">
-          {sorted.map((w, k) => {
-            const age = w.lastSeen ? now - w.lastSeen.toDate().getTime() : Infinity
-            const on = age < 60_000 || (w.mode === 'scheduled' && age < 30 * 60_000)
-            return (
-              <motion.li key={w.id} className={`wrow ${on ? 'on' : ''}`} initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.45, ease: easeOut, delay: k * 0.06 }}>
-                <span className="wpulse" aria-hidden="true" />
-                <div className="wmain">
-                  <b className="mono">{w.id}</b>
-                  <span>{on ? (w.mode === 'scheduled' ? 'scheduled' : 'online') : 'offline'} · {w.sandbox || 'local'} sandbox · seen {timeAgo(w.lastSeen)}</span>
-                  <div className="wchips">
-                    {w.llm?.active && <span className="chip ok">{w.llm.active}</span>}
-                    {w.llm?.fallbacks?.map((f) => <span key={f} className="chip">{f}</span>)}
-                    {w.syncMinutes ? <span className="chip">checks GitHub every {w.syncMinutes} min</span> : null}
-                    {w.protocol === 'a2a' && <span className="chip">A2A · {w.agents?.length ?? 0} agents</span>}
-                  </div>
-                </div>
-              </motion.li>
-            )
-          })}
-        </ul>
-      </Section>
-      <Section title="Run a worker">
-        <p className="muted-p">The worker picks up queued runs, clones the repository into a sandbox and runs the agents. Models and keys live in its own .env, never in the browser.</p>
-        <ul className="cmds">
-          {COMMANDS.map(([what, cmd]) => (
-            <li key={cmd}>
-              <span>{what}</span>
-              <button className="cmd mono" onClick={() => copy(cmd)} title="Copy"><span>$ {cmd}</span><em>Copy</em></button>
-            </li>
-          ))}
-        </ul>
-        <Link className="link" to="/app/help">Deploying it on Render or GitHub Actions →</Link>
-      </Section>
-    </div>
   )
 }
 
