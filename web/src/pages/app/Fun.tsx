@@ -1,15 +1,12 @@
 import { motion } from 'motion/react'
 import { Link } from 'react-router-dom'
 import { Roll } from '../../components/Roll'
-import { easeOut } from '../../lib/motion'
 import { PageHead } from './Overview'
 import './fun.css'
 
 /* Just for fun: the dashboard's toys, one big card each. Each card plays a little loop of what's inside. */
 
 const CARDS = [
-  { to: '/app/fun/rewind', title: 'Rewind', tag: 'New', tint: 'var(--coder)', art: <RewindArt />,
-    text: 'Your swarm as a short film: what came in, who did the most, how fast fixes land, what kept breaking and what’s waiting for you.' },
   { to: '/app/fun/hive', title: 'The Hive', tag: 'Game', tint: 'var(--triager)', art: <HiveArt />,
     text: 'Your agents, off the clock. Drop bugs and watch the swarm fix each one in order: read, patch, test, sign off.' },
 ]
@@ -35,34 +32,6 @@ export default function Fun() {
         ))}
       </div>
     </div>
-  )
-}
-
-/** A little screen whose story bars fill one after another while the bars on it grow. */
-function RewindArt() {
-  const loop = { repeat: Infinity, repeatDelay: 0.6 } as const
-  return (
-    <svg viewBox="0 0 320 220" className="fun-svg">
-      <rect x="44" y="24" width="238" height="172" rx="22" fill="var(--ink)" />
-      <rect x="38" y="18" width="238" height="172" rx="22" fill="var(--white)" stroke="var(--ink)" strokeWidth="3" />
-      {[0, 1, 2, 3].map((k) => (
-        <g key={k}>
-          <rect x={56 + k * 52} y="32" width="44" height="6" rx="3" fill="var(--ink)" opacity="0.15" />
-          <motion.rect x={56 + k * 52} y="32" height="6" rx="3" fill="var(--ink)" initial={{ width: 0 }} animate={{ width: [0, 44, 44, 0] }}
-            transition={{ ...loop, duration: 6, times: [k * 0.2, (k + 1) * 0.2, 0.95, 1], ease: 'linear' }} />
-        </g>
-      ))}
-      {['triager', 'coder', 'tester', 'reviewer'].map((a, k) => (
-        <g key={a}>
-          <motion.rect x="58" y={62 + k * 28} height="18" rx="9" fill={`var(--${a})`} stroke="var(--ink)" strokeWidth="2.5"
-            initial={{ width: 18 }} animate={{ width: [18, [150, 110, 180, 90][k], [150, 110, 180, 90][k], 18] }} transition={{ ...loop, duration: 6, times: [0, 0.35, 0.9, 1], ease: easeOut, delay: k * 0.1 }} />
-        </g>
-      ))}
-      <motion.g initial={{ scale: 0 }} animate={{ scale: [0, 1.15, 1, 1, 0] }} transition={{ ...loop, duration: 6, times: [0.4, 0.46, 0.5, 0.9, 0.95] }} style={{ originX: '250px', originY: '150px' }}>
-        <circle cx="250" cy="150" r="22" fill="var(--reviewer)" stroke="var(--ink)" strokeWidth="3" />
-        <path d="M240 150l7 7 13-14" fill="none" stroke="#0f0f0f" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round" />
-      </motion.g>
-    </svg>
   )
 }
 

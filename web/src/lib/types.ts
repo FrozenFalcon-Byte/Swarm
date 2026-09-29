@@ -196,6 +196,10 @@ export interface Prefs {
   canvas?: 'white' | 'paper' | 'mist'
   font?: 'grotesk' | 'geist' | 'outfit' | 'rounded' | 'serif' | 'bricolage' | 'mono' | 'system'
   corners?: 'round' | 'soft' | 'sharp'
+  /** when your week pops up as a Rewind: day 0 (Monday) to 6, minutes after midnight */
+  rewind?: { on?: boolean; day?: number; minutes?: number }
+  /** the last weekly Rewind you watched or closed, as the ISO time it was due */
+  rewindSeen?: string
   /** sidebar groups you've switched off */
   hideGuardrails?: boolean
   hideRepos?: boolean

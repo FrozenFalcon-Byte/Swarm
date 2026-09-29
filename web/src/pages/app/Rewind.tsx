@@ -1,13 +1,11 @@
-import { AnimatePresence, LayoutGroup, motion } from 'motion/react'
+import { AnimatePresence, motion } from 'motion/react'
 import { Fragment, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { Link } from 'react-router-dom'
 import { useToast } from '../../components/Island'
 import { useAuth } from '../../lib/auth'
-import { useBootHold } from '../../lib/boot'
 import { useAllTasks, useRepos } from '../../lib/data'
 import { easeOut } from '../../lib/motion'
 import { AGENTS, type Repo, type Task } from '../../lib/types'
-import { PageHead } from './Overview'
 import { CountUp } from './ui'
 import './fun.css'
 
@@ -108,39 +106,49 @@ function rewind(tasks: T[], repos: Repo[], period: Period) {
 }
 type Stats = ReturnType<typeof rewind>
 
-/* ------------------------------------------------------------------ the page */
+/* ------------------------------------------------------------------ the pop-up */
 
-export default function Rewind() {
+/** This week's Rewind over the dashboard. The shell opens it when it's due (Settings → Weekly Rewind says when);
+ *  closing it, or watching to the end, marks the week as seen. */
+export default function RewindPopup({ onClose }: { onClose: () => void }) {
   const { user } = useAuth()
   const { data: repos, loading } = useRepos(user?.uid)
-  useBootHold(loading)
   const tasks = useAllTasks(repos.map((r) => r.id)) as T[]
-  const [period, setPeriod] = useState<Period>('week')
-  const s = useMemo(() => rewind(tasks, repos, period), [tasks, repos, period])
+  const s = useMemo(() => rewind(tasks, repos, 'week'), [tasks, repos])
   const first = (user?.displayName || user?.email || 'there').split(/[ @]/)[0]
+  const empty = !loading && !repos.length
+  useEffect(() => { if (empty) onClose() }, [empty, onClose])
+  useEffect(() => {
+    const on = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
+    const html = document.documentElement, prev = html.style.overflow
+    html.style.overflow = 'hidden'
+    window.addEventListener('keydown', on)
+    return () => { window.removeEventListener('keydown', on); html.style.overflow = prev }
+  }, [onClose])
+  if (loading || empty) return null
   return (
-    <div className="page rw-page">
-      <PageHead title="Rewind" sub="Your swarm as a short film. Tap through what came in, who did what, what kept breaking and what’s waiting for you.">
-        <Link to="/app/fun" className="btn btn-line btn-sm fun-back">← Just for fun</Link>
-      </PageHead>
-      <div className="rw-periods" role="tablist" aria-label="Period">
-        <LayoutGroup id="rw-period">
-          {PERIODS.map(([k, label]) => (
-            <button key={k} role="tab" aria-selected={period === k} className={period === k ? 'on' : ''} onClick={() => setPeriod(k)}>
-              {period === k && <motion.span layoutId="rw-period-on" className="rw-period-on" transition={{ type: 'spring', stiffness: 420, damping: 34 }} />}
-              <span>{label}</span>
-            </button>
-          ))}
-        </LayoutGroup>
-      </div>
-      <Player key={period} s={s} first={first} period={period} />
-    </div>
+    <motion.div className="rw-pop" role="dialog" aria-modal="true" aria-label="Your week with the swarm"
+      initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0, transition: { duration: 0.35, delay: 0.1 } }} transition={{ duration: 0.3 }}>
+      <div className="rw-pop-back" onClick={onClose} />
+      <motion.div className="rw-pop-card"
+        initial={calm() ? { opacity: 0 } : { opacity: 0, scale: 0.7, y: 60, rotate: -3 }} animate={{ opacity: 1, scale: 1, y: 0, rotate: 0 }}
+        exit={calm() ? { opacity: 0 } : { opacity: 0, scale: 0.85, y: 40, rotate: 2 }} transition={{ type: 'spring', stiffness: 150, damping: 18 }}>
+        <div className="rw-pop-head">
+          <motion.span className="rw-pop-tag" initial={{ scale: 0, rotate: -20 }} animate={{ scale: 1, rotate: -4 }} transition={{ type: 'spring', stiffness: 400, damping: 14, delay: 0.35 }}>Weekly Rewind</motion.span>
+          <span className="rw-pop-title">Your week with the swarm</span>
+          <button className="icon-btn rw-pop-x" onClick={onClose} aria-label="Close">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round"><path d="M6 6l12 12M18 6L6 18" /></svg>
+          </button>
+        </div>
+        <Player s={s} first={first} period="week" onDone={onClose} />
+      </motion.div>
+    </motion.div>
   )
 }
 
 type Scene = { id: string; tint: string; render: () => ReactNode }
 
-function Player({ s, first, period }: { s: Stats; first: string; period: Period }) {
+function Player({ s, first, period, onDone }: { s: Stats; first: string; period: Period; onDone?: () => void }) {
   const toast = useToast()
   const word = period === 'week' ? 'week' : period === 'month' ? 'month' : 'time'
   const scenes = useMemo<Scene[]>(() => {
@@ -153,7 +161,7 @@ function Player({ s, first, period }: { s: Stats; first: string; period: Period 
     if (s.tough) list.push({ id: 'tough', tint: 'var(--tester)', render: () => <Tough s={s} /> })
     if (s.causes.length) list.push({ id: 'causes', tint: 'var(--coder)', render: () => <Causes s={s} /> })
     list.push({ id: 'waiting', tint: 'var(--triager)', render: () => <Waiting s={s} /> })
-    list.push({ id: 'outro', tint: 'var(--accent-soft, var(--mint))', render: () => <Outro s={s} word={word} onAgain={() => go(0, 50, 50)} onCopy={copy} /> })
+    list.push({ id: 'outro', tint: 'var(--accent-soft, var(--mint))', render: () => <Outro s={s} word={word} onAgain={() => go(0, 50, 50)} onCopy={copy} onDone={onDone} /> })
     return list
     // go and copy are stable enough for the scene closures; the list only changes with the numbers
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -526,7 +534,7 @@ function Waiting({ s }: { s: Stats }) {
   )
 }
 
-function Outro({ s, word, onAgain, onCopy }: { s: Stats; word: string; onAgain: () => void; onCopy: () => void }) {
+function Outro({ s, word, onAgain, onCopy, onDone }: { s: Stats; word: string; onAgain: () => void; onCopy: () => void; onDone?: () => void }) {
   const tiles: [string, ReactNode, string][] = [
     ['var(--triager)', s.arrived, 'issues in'], ['var(--coder)', s.moves.toLocaleString(), 'agent moves'],
     ['var(--tester)', s.runs.toLocaleString(), 'sandbox runs'], ['var(--reviewer)', s.fixed, 'fixes approved'],
@@ -538,7 +546,8 @@ function Outro({ s, word, onAgain, onCopy }: { s: Stats; word: string; onAgain: 
         <motion.span className="rw-kicker" {...up(0.3)}>That’s a wrap</motion.span>
         <h2 className="rw-hero"><Words text={word === 'time' ? 'That’s your swarm so far.' : `That was your ${word}.`} delay={0.4} /></h2>
         <motion.div className="rw-outro-acts" {...up(1)}>
-          <button className="btn btn-dark btn-sm" onClick={onAgain}>Watch again</button>
+          {onDone && <button className="btn btn-dark btn-sm" onClick={onDone}>See you next week</button>}
+          <button className={`btn btn-sm ${onDone ? 'btn-line' : 'btn-dark'}`} onClick={onAgain}>Watch again</button>
           <button className="btn btn-line btn-sm" onClick={onCopy}>Copy summary</button>
         </motion.div>
       </div>

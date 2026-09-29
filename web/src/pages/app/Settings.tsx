@@ -12,6 +12,7 @@ import { firebaseInfo } from '../../lib/firebase'
 import { MCP_CLIENTS, MCP_TOOLS, TOKEN_PLACEHOLDER } from '../../lib/mcpClients'
 import { easeInOut, easeOut } from '../../lib/motion'
 import { Appearance } from './Appearance'
+import { RewindSettings } from './RewindSettings'
 import { PageHead } from './Overview'
 import { Section, timeAgo } from './ui'
 
@@ -21,6 +22,7 @@ const SECTIONS: PanelItem[] = [
   { id: 'repos', label: 'Repositories', hint: 'Watching, runs, removal', color: 'var(--reviewer)' },
   { id: 'ai', label: 'Claude & AI tools', hint: 'MCP server and access tokens', color: 'var(--tester)' },
   { id: 'workers', label: 'Workers', hint: 'Where the agents run', color: 'var(--triager)' },
+  { id: 'rewind', label: 'Weekly Rewind', hint: 'When your week pops up', color: 'var(--mint)' },
 ]
 
 export default function Settings() {
@@ -74,6 +76,7 @@ export default function Settings() {
         {tab === 'repos' && <RepoSettings repos={repos} />}
         {tab === 'ai' && <Section title="Use from Claude and other AI tools" action={<span className="pill tone-work">MCP</span>}><McpSetup /></Section>}
         {tab === 'workers' && <Workers workers={workers} />}
+        {tab === 'rewind' && <RewindSettings />}
       </PanelLayout>
     </div>
   )

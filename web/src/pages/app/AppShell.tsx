@@ -1,5 +1,5 @@
 import { AnimatePresence, motion } from 'motion/react'
-import { lazy, Suspense, useEffect, useRef, useState } from 'react'
+import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react'
 import { PageTransition, routeLabel } from '../../components/PageTransition'
 import { setToastLook } from '../../components/Island'
 import { Link, NavLink, Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom'
@@ -14,6 +14,8 @@ import { usingEmulators } from '../../lib/firebase'
 import { easeOut } from '../../lib/motion'
 import { Splash } from '../../components/Splash'
 import { useBootHold } from '../../lib/boot'
+import { closeRewind, lastSlot, openRewind, rewindWhen, useRewind } from '../../lib/rewind'
+import type { Prefs } from '../../lib/types'
 import { CommandBar, useCommandBar } from './CommandBar'
 import { pop } from '../../lib/sound'
 import { ICONS, NAV } from './nav'
@@ -40,7 +42,7 @@ const Rules = lazy(pages.rules)
 const QuietHours = lazy(pages.quiet)
 const Hive = lazy(pages.hive)
 const Fun = lazy(pages.fun)
-const Rewind = lazy(pages.rewind)
+const RewindPopup = lazy(pages.rewind)
 const A2aGuide = lazy(pages.a2a)
 
 const NAV_KEY = 'swarm.sideNavH'
@@ -334,7 +336,7 @@ export default function AppShell() {
                 <Route path="quiet-hours" element={<QuietHours />} />
                 <Route path="fun" element={<Fun />} />
                 <Route path="fun/hive" element={<Hive />} />
-                <Route path="fun/rewind" element={<Rewind />} />
+                <Route path="fun/rewind" element={<Navigate to="/app/fun" replace />} />
                 <Route path="hive" element={<Navigate to="/app/fun/hive" replace />} />
               </Routes>
             </Suspense>
@@ -342,7 +344,36 @@ export default function AppShell() {
         </AnimatePresence>
       </main>
       <CommandBar open={cmdOpen} onClose={() => setCmdOpen(false)} repos={repos} pages={nav} onSignOut={signOut} />
+      <RewindHost uid={user?.uid} prefs={prefs} />
     </div>
+  )
+}
+
+/** Opens this week's Rewind once it's due (a day and time from Settings), and remembers that you've seen it. */
+function RewindHost({ uid, prefs }: { uid?: string; prefs?: Prefs }) {
+  const { open, slot } = useRewind()
+  const ready = !!uid && !!prefs
+  const when = JSON.stringify(rewindWhen(prefs))
+  const seen = prefs?.rewindSeen
+  useEffect(() => {
+    if (!ready) return
+    const w = JSON.parse(when) as ReturnType<typeof rewindWhen>
+    if (!w.on) return
+    const check = () => {
+      const due = lastSlot(w).toISOString()
+      if (!seen || seen < due) openRewind(due)
+    }
+    const first = window.setTimeout(check, 2500), every = window.setInterval(check, 60_000)
+    return () => { window.clearTimeout(first); window.clearInterval(every) }
+  }, [ready, when, seen])
+  const close = useCallback(() => {
+    if (slot && uid) savePrefs(uid, { rewindSeen: slot }).catch(() => { /* it shows again next visit */ })
+    closeRewind()
+  }, [slot, uid])
+  return (
+    <AnimatePresence>
+      {open && <Suspense key="rewind" fallback={null}><RewindPopup onClose={close} /></Suspense>}
+    </AnimatePresence>
   )
 }
 
