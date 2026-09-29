@@ -318,3 +318,18 @@ html.sw-cursor-on, html.sw-cursor-on * { cursor: none !important; }
 .mode-words { display: flex; flex-direction: column; transition: transform 0.55s var(--ease-in-out); }
 .mode-words span { height: 20px; line-height: 20px; }
 .mode.is-dark .mode-words { transform: translateY(-20px); }
+
+/* What's new (components/WhatsNew.tsx): one continuous piece after each deploy */
+.wn { position: fixed; inset: 0; z-index: 320; display: grid; place-items: center; padding: 16px; background: rgba(15, 15, 15, 0.28); }
+.wn-card { width: min(440px, 100%); display: flex; flex-direction: column; gap: 18px; padding: 24px 24px 20px; background: var(--white); color: var(--ink);
+  border: 2.5px solid var(--ink); box-shadow: 6px 6px 0 var(--ink); transform-origin: 50% 50%; will-change: transform; }
+.wn-tag { display: inline-block; font: 700 11px/1 var(--font-mono); letter-spacing: 0.1em; text-transform: uppercase; padding: 6px 10px; border-radius: 99px; background: var(--grey-6); color: var(--ink-2); }
+.wn-head h2 { margin: 12px 0 0; font-size: 30px; line-height: 1; font-weight: 600; letter-spacing: -0.04em; }
+.wn-list { position: relative; display: grid; grid-auto-rows: 1fr; gap: 6px; padding-left: 38px; }
+.wn-rail { position: absolute; left: 12px; top: 0; bottom: 0; width: 4px; margin-left: -2px; }
+.wn-rail i { display: block; height: 100%; border-radius: 99px; background: var(--ink); transform-origin: top; opacity: 0.18; }
+.wn-baton-track { position: absolute; left: 12px; top: 0; height: 100%; width: 0; pointer-events: none; z-index: 1; }
+.wn-baton { position: absolute; left: -11px; top: -11px; width: 22px; height: 22px; border-radius: 50%; border: 2.5px solid #0f0f0f; box-shadow: 2px 2px 0 #0f0f0f; }
+.wn-item { position: relative; display: flex; align-items: center; min-height: 44px; font-size: 15px; line-height: 1.35; }
+.wn-dot { position: absolute; left: -33px; top: 50%; width: 14px; height: 14px; margin-top: -7px; border-radius: 50%; border: 2px solid #0f0f0f; }
+.wn-foot { display: flex; justify-content: flex-end; }

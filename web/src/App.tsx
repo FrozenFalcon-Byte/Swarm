@@ -3,6 +3,7 @@ import { lazy, Suspense, useEffect, type ReactNode } from 'react'
 import { Navigate, Route, Routes, useLocation } from 'react-router-dom'
 import { PageTransition, routeLabel } from './components/PageTransition'
 import { Cursor } from './components/Cursor'
+import { WhatsNew } from './components/WhatsNew'
 import { SetupNeeded } from './components/SetupNeeded'
 import { Splash } from './components/Splash'
 import { useAuth } from './lib/auth'
@@ -98,6 +99,7 @@ export default function App() {
         </Suspense>
       </PageTransition>
     </AnimatePresence>
+    <WhatsNew />
     </MotionConfig>
     </>
   )

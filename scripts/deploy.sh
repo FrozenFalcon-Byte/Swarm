@@ -17,6 +17,12 @@ only="firestore:rules,firestore:indexes"
 # Storage rules only if the project uses Cloud Storage (Blaze plan)
 if grep -qE '^VITE_FIREBASE_STORAGE_BUCKET=.+' web/.env.local; then only="${only},storage"; fi
 if [[ "${1:-all}" != "rules" ]]; then
+  # everyone sees the newest entry in web/src/changelog.ts once after a deploy, so nudge when it's behind the code
+  src_at=$(git log -1 --format=%ct -- web/src ':!web/src/changelog.ts' 2>/dev/null || echo 0)
+  log_at=$(git log -1 --format=%ct -- web/src/changelog.ts 2>/dev/null || echo 0)
+  if [[ "${log_at:-0}" -lt "${src_at:-0}" ]]; then
+    echo "Heads up: web/src/changelog.ts has no entry for the latest changes, so the What's new popup won't mention them." >&2
+  fi
   (cd web && npm run build)
   only="${only},hosting"
 fi
