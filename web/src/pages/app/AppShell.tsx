@@ -17,6 +17,7 @@ import { useBootHold } from '../../lib/boot'
 import { closeRewind, lastSlot, openRewind, rewindWhen, useRewind } from '../../lib/rewind'
 import type { Prefs } from '../../lib/types'
 import { CommandBar, useCommandBar } from './CommandBar'
+import { BackToTop, GoChip, NetPill, NewVersion, ShortcutSheet, useRecordVisit, useShortcuts, useTabTitle } from './Qol'
 import { pop } from '../../lib/sound'
 import { ICONS, NAV } from './nav'
 import { setTimeStyle } from './ui'
@@ -194,6 +195,11 @@ export default function AppShell() {
   const signOut = () => { navigate('/', { replace: true }); void logOut() }
   // animate between sections, not between a repo's tabs or its task drawer
   const key = location.pathname.split('/').slice(0, 4).join('/')
+  const where = routeLabel(key, (id) => repos.find((r) => r.id === id)?.displayName)
+  useTabTitle(where, needsYou)
+  useRecordVisit(key, where)
+  const [sheet, setSheet] = useState(false)
+  const going = useShortcuts({ openSearch: () => setCmdOpen(true), toggleRail, toggleSheet: () => setSheet((o) => !o) })
   // fetch every section's code once the shell is idle, so the bellows never open onto a loading screen
   useEffect(() => {
     const id = window.setTimeout(() => Object.values(pages).forEach((load) => load()), 1200)
@@ -206,7 +212,7 @@ export default function AppShell() {
       <LookFx look={prefs?.look ?? 'plain'} />
       <header className="mtop">
         <Logo to="/app" />
-        <span className="mtop-where">{routeLabel(key, (id) => repos.find((r) => r.id === id)?.displayName)}</span>
+        <span className="mtop-where">{where}</span>
         <button className="mtop-search" onClick={() => setCmdOpen(true)} aria-label="Search">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><circle cx="11" cy="11" r="7" /><path d="M20 20l-3.5-3.5" /></svg>
         </button>
@@ -320,7 +326,7 @@ export default function AppShell() {
         {/* light and dark: a slim row of its own above every page, so it never sits on top of anything (phones have it in the menu sheet) */}
         <div className="main-bar"><ModeToggle /></div>
         <AnimatePresence mode="wait" initial={false} onExitComplete={() => window.scrollTo(0, 0)}>
-          <PageTransition key={key} scope="pane" label={routeLabel(key, (id) => repos.find((r) => r.id === id)?.displayName)}>
+          <PageTransition key={key} scope="pane" label={where}>
             <Suspense fallback={<Splash />}>
               <Routes location={location}>
                 <Route index element={<Overview />} />
@@ -345,8 +351,13 @@ export default function AppShell() {
           </PageTransition>
         </AnimatePresence>
       </main>
-      <CommandBar open={cmdOpen} onClose={() => setCmdOpen(false)} repos={repos} pages={nav} onSignOut={signOut} />
+      <CommandBar open={cmdOpen} onClose={() => setCmdOpen(false)} repos={repos} pages={nav} onSignOut={signOut} onShortcuts={() => { setCmdOpen(false); setSheet(true) }} />
       <RewindHost uid={user?.uid} prefs={prefs} />
+      <ShortcutSheet open={sheet} onClose={() => setSheet(false)} />
+      <GoChip on={going} />
+      <NetPill />
+      <BackToTop />
+      <NewVersion />
     </div>
   )
 }

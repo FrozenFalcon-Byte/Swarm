@@ -4,10 +4,12 @@ import { createPortal } from 'react-dom'
 import { useNavigate } from 'react-router-dom'
 import { useToast } from '../../components/Island'
 import { useAuth } from '../../lib/auth'
-import { queueRun, useAllTasks } from '../../lib/data'
+import { queueRun, savePrefs, useAllTasks, usePrefs } from '../../lib/data'
 import type { Repo } from '../../lib/types'
 import { ICONS } from './nav'
 import { openRewind } from '../../lib/rewind'
+import { toggleMode, useMode } from '../../lib/theme'
+import { readRecent } from './Qol'
 
 /* ⌘K from anywhere in the dashboard: jump to a page, a repository or any task, or start a run, by typing
    a few letters. Tasks are only loaded while the bar is open. */
@@ -21,9 +23,15 @@ const EXTRA: Record<string, string> = {
   home: 'M3 11l9-7 9 7 M5 10v10h14V10',
   out: 'M15 17l5-5-5-5M20 12H9M12 21H5a2 2 0 01-2-2V5a2 2 0 012-2h7',
   task: 'M5 4h14v16H5z M9 9h6 M9 13h6 M9 17h3',
+  clock: 'M12 21a9 9 0 100-18 9 9 0 000 18z M12 7v5l3 2',
+  moon: 'M20 14.5A8 8 0 019.5 4 8 8 0 1020 14.5z',
+  sun: 'M12 16a4 4 0 100-8 4 4 0 000 8z M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4',
+  text: 'M4 7V5h16v2 M12 5v14 M9 19h6',
+  link: 'M10 14a4 4 0 005.7 0l3-3a4 4 0 00-5.7-5.7l-1 1 M14 10a4 4 0 00-5.7 0l-3 3a4 4 0 005.7 5.7l1-1',
+  keys: 'M3 6h18v12H3z M7 10h.01M11 10h.01M15 10h.01M7 14h10',
 }
 // results keep this group order, so the arrow keys walk them in the order you see them
-const RANK = ['Go to', 'Repositories', 'Tasks', 'Actions']
+const RANK = ['Recent', 'Go to', 'Repositories', 'Tasks', 'Quick', 'Actions']
 
 const Icon = ({ name }: { name: string }) => (
   <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d={ICONS[name] ?? EXTRA[name] ?? EXTRA.task} /></svg>
@@ -41,10 +49,9 @@ export function useCommandBar() {
   return [open, setOpen] as const
 }
 
-export function CommandBar({ open, onClose, repos, pages, onSignOut }: {
-  open: boolean; onClose: () => void; repos: Repo[]; pages: { to: string; label: string; icon?: string }[]; onSignOut: () => void
-}) {
-  return createPortal(<AnimatePresence>{open && <Bar onClose={onClose} repos={repos} pages={pages} onSignOut={onSignOut} />}</AnimatePresence>, document.body)
+type BarProps = { onClose: () => void; repos: Repo[]; pages: { to: string; label: string; icon?: string }[]; onSignOut: () => void; onShortcuts: () => void }
+export function CommandBar({ open, ...props }: BarProps & { open: boolean }) {
+  return createPortal(<AnimatePresence>{open && <Bar {...props} />}</AnimatePresence>, document.body)
 }
 
 /** The results in their groups, each keeping its place in the one list the arrow keys walk. */
@@ -54,7 +61,7 @@ function groups(shown: Cmd[]) {
   return out
 }
 
-function Bar({ onClose, repos, pages, onSignOut }: { onClose: () => void; repos: Repo[]; pages: { to: string; label: string; icon?: string }[]; onSignOut: () => void }) {
+function Bar({ onClose, repos, pages, onSignOut, onShortcuts }: BarProps) {
   const navigate = useNavigate()
   const toast = useToast()
   const { user } = useAuth()
@@ -64,8 +71,16 @@ function Bar({ onClose, repos, pages, onSignOut }: { onClose: () => void; repos:
   const list = useRef<HTMLDivElement>(null)
   const name = (r: Repo) => r.displayName || r.fullName
   const go = (to: string) => () => { onClose(); navigate(to) }
+  const prefs = usePrefs(user?.uid)
+  const { dark } = useMode()
+  const [recent] = useState(() => readRecent().filter((v) => v.to !== window.location.pathname.split('/').slice(0, 4).join('/')).slice(0, 4))
+  const size = (textSize: 'small' | 'default' | 'large', label: string) => () => {
+    onClose(); if (!user) return
+    savePrefs(user.uid, { textSize }).then(() => toast.ok(`Text: ${label}`, 'Change it any time in Settings'), (e) => toast.error('Couldn’t change it', e.message))
+  }
 
   const cmds = useMemo<Cmd[]>(() => [
+    ...recent.map((v) => ({ id: `rc:${v.to}`, group: 'Recent', label: v.label, icon: 'clock', hint: 'visited', run: go(v.to), words: '' })),
     ...pages.map((p) => ({ id: `p:${p.to}`, group: 'Go to', label: p.label, icon: p.icon, run: go(p.to), words: `${p.label} page` })),
     { id: 'p:profile', group: 'Go to', label: 'Your profile', icon: 'profile', run: go('/app/profile'), words: 'profile account avatar preferences' },
     ...repos.map((r) => ({ id: `r:${r.id}`, group: 'Repositories', label: name(r), hint: r.stats?.needsYou ? `${r.stats.needsYou} need you` : r.status || 'idle', dot: `s-${r.status || 'idle'}`, run: go(`/app/repos/${r.id}`), words: `${r.fullName} ${r.displayName || ''} repo board` })),
@@ -73,6 +88,13 @@ function Bar({ onClose, repos, pages, onSignOut }: { onClose: () => void; repos:
       onClose(); if (!user) return
       queueRun(user.uid, r.id, 'command').then(() => toast.ok('Run queued', `${name(r)} · a worker picks it up next`), (e) => toast.error('Couldn’t queue it', e.message))
     }, words: `run start sync ${r.fullName}` })),
+    { id: 'q:mode', group: 'Quick', label: dark ? 'Switch to light mode' : 'Switch to dark mode', icon: dark ? 'sun' : 'moon', hint: 'theme', run: () => { onClose(); toggleMode() }, words: 'dark light mode theme night day toggle appearance' },
+    ...([['small', 'Smaller'], ['default', 'Default'], ['large', 'Larger']] as const).filter(([v]) => (prefs?.textSize ?? 'default') !== v).map(([v, label]) => ({
+      id: `q:text-${v}`, group: 'Quick', label: `${label} text`, icon: 'text', hint: 'text size', run: size(v, label.toLowerCase()), words: 'text size font zoom bigger smaller larger default reading' })),
+    { id: 'q:link', group: 'Quick', label: 'Copy link to this page', icon: 'link', hint: 'clipboard', run: () => {
+      onClose(); navigator.clipboard.writeText(window.location.href).then(() => toast.ok('Link copied', window.location.pathname), () => toast.error('Couldn’t copy the link'))
+    }, words: 'copy link url share clipboard' },
+    { id: 'q:keys', group: 'Quick', label: 'Keyboard shortcuts', icon: 'keys', hint: '?', run: onShortcuts, words: 'keyboard shortcuts keys hotkeys help' },
     { id: 'a:rewind', group: 'Actions', label: 'Watch your Rewind', hint: 'this week', icon: 'fun', run: () => { onClose(); openRewind() }, words: 'rewind recap wrapped week weekly summary stats film story fun' },
     { id: 'a:garden', group: 'Actions', label: 'Visit The Garden', hint: 'just for fun', icon: 'garden', run: go('/app/fun/garden'), words: 'garden flowers bees plants bloom grow fun' },
     { id: 'a:hive', group: 'Actions', label: 'Play The Hive', hint: 'just for fun', icon: 'hive', run: go('/app/fun/hive'), words: 'hive game swarm bugs play fun' },
@@ -83,11 +105,11 @@ function Bar({ onClose, repos, pages, onSignOut }: { onClose: () => void; repos:
     ...tasks.map((t) => ({ id: `t:${t.repoId}/${t.task_id}`, group: 'Tasks', label: t.title, icon: 'task', hint: `${t.task_id} · ${t.state === 'Needs Human' ? 'needs you' : t.state.toLowerCase()}`,
       run: go(`/app/repos/${t.repoId}/tasks/${t.task_id}`), words: `${t.task_id} ${t.source_issue} ${t.state} ${t.labels.join(' ')}` })),
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  ], [pages, repos, tasks, user])
+  ], [pages, repos, tasks, user, recent, dark, prefs?.textSize])
 
   const shown = useMemo(() => {
     const terms = q.toLowerCase().split(/\s+/).filter(Boolean)
-    if (!terms.length) return cmds.filter((c) => c.group !== 'Tasks' || /needs you|approved/.test(c.hint || '')).sort((a, b) => RANK.indexOf(a.group) - RANK.indexOf(b.group)).slice(0, 24)
+    if (!terms.length) return cmds.filter((c) => c.group !== 'Tasks' || /needs you|approved/.test(c.hint || '')).sort((a, b) => RANK.indexOf(a.group) - RANK.indexOf(b.group)).slice(0, 40)
     return cmds.map((c) => {
       const hay = `${c.label} ${c.words}`.toLowerCase()
       if (!terms.every((w) => hay.includes(w))) return null
@@ -144,7 +166,7 @@ function Bar({ onClose, repos, pages, onSignOut }: { onClose: () => void; repos:
             )
           })}
         </div>
-        <div className="kbar-foot"><span><kbd>↑</kbd><kbd>↓</kbd> move</span><span><kbd>↵</kbd> open</span><span><kbd>⌘</kbd><kbd>K</kbd> toggle</span></div>
+        <div className="kbar-foot"><span><kbd>↑</kbd><kbd>↓</kbd> move</span><span><kbd>↵</kbd> open</span><span><kbd>⌘</kbd><kbd>K</kbd> toggle</span><span className="kbar-foot-end"><kbd>?</kbd> all shortcuts</span></div>
       </motion.div>
     </>
   )
