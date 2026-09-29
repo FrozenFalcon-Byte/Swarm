@@ -26,7 +26,7 @@ const pages = {
   overview: () => import('./Overview'), repos: () => import('./Repos'), repo: () => import('./RepoView'),
   tools: () => import('./ToolsPage'), settings: () => import('./Settings'), profile: () => import('./Profile'),
   help: () => import('./Help'), agents: () => import('./Agents'), lab: () => import('./Lab'),
-  rules: () => import('./Rules'), quiet: () => import('./QuietHours'), hive: () => import('./Hive'),
+  rules: () => import('./Rules'), quiet: () => import('./QuietHours'), hive: () => import('./Hive'), garden: () => import('./Garden'),
   fun: () => import('./Fun'), rewind: () => import('./Rewind'), a2a: () => import('./A2aGuide'),
 }
 const Overview = lazy(pages.overview)
@@ -41,6 +41,7 @@ const Lab = lazy(pages.lab)
 const Rules = lazy(pages.rules)
 const QuietHours = lazy(pages.quiet)
 const Hive = lazy(pages.hive)
+const Garden = lazy(pages.garden)
 const Fun = lazy(pages.fun)
 const RewindPopup = lazy(pages.rewind)
 const A2aGuide = lazy(pages.a2a)
@@ -336,6 +337,7 @@ export default function AppShell() {
                 <Route path="quiet-hours" element={<QuietHours />} />
                 <Route path="fun" element={<Fun />} />
                 <Route path="fun/hive" element={<Hive />} />
+                <Route path="fun/garden" element={<Garden />} />
                 <Route path="fun/rewind" element={<Navigate to="/app/fun" replace />} />
                 <Route path="hive" element={<Navigate to="/app/fun/hive" replace />} />
               </Routes>
