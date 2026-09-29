@@ -9,8 +9,8 @@ import './fun.css'
 /* Just for fun: the dashboard's toys, one big card each. Each card plays a little loop of what's inside. */
 
 const CARDS = [
-  { to: '/app/fun/garden', title: 'The Garden', tag: 'Film + game', tint: 'var(--reviewer)', art: <GardenArt />,
-    text: 'Your swarm, grown. Every repo is a plant: scroll and watch it grow from your first issue, then keep the bugs off it.' },
+  { to: '/app/fun/garden', title: 'The Garden', tag: 'Two films', tint: 'var(--reviewer)', art: <GardenArt />,
+    text: 'Your swarm, grown. Every repo is a plant: scroll and watch it grow from your first issue, then see what your crew harvested.' },
   { to: '/app/fun/hive', title: 'The Hive', tag: 'Game', tint: 'var(--triager)', art: <HiveArt />,
     text: 'Your agents, off the clock. Drop bugs and watch the swarm fix each one in order: read, patch, test, sign off.' },
 ]
