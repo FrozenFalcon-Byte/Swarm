@@ -95,7 +95,7 @@ async function exit(boot: HTMLElement) {
     return
   }
   const cx = window.innerWidth / 2, cy = window.innerHeight / 2
-  const cover = Math.hypot(window.innerWidth, window.innerHeight) / 2 + 40
+  const cover = Math.hypot(window.innerWidth, window.innerHeight) / 2 * 1.12 + 60 // well past the corners, so none peek out
   // swap the orbiting dots for fixed "washes" in exactly the same places, so nothing jumps
   const washes = [...boot.querySelectorAll<HTMLElement>('.boot-dot')].map((dot) => {
     const r = dot.getBoundingClientRect()
@@ -119,12 +119,17 @@ async function exit(boot: HTMLElement) {
   const box = (r: number) => ({ left: `${cx - r}px`, top: `${cy - r}px`, width: `${r * 2}px`, height: `${r * 2}px` })
   const floods = washes.map((w, k) => w.animate([{ ...box(radius), transform: 'none' }, { ...box(cover), transform: 'none' }],
     { duration: 640, delay: k * 110, easing: 'cubic-bezier(0.7, 0, 0.2, 1)', fill: 'forwards' }).finished)
-  await sleep(3 * 110 + 520)
+  // wait for the last colour to cover every corner, then make it the whole screen: the colours beneath are
+  // gone, so none of them can show at an edge while the hole opens
+  await Promise.all(floods)
+  const last = washes[washes.length - 1]
+  if (last) boot.style.background = last.style.background
+  washes.forEach((w) => w.remove())
   // 3. open a hole onto the app, which rises into place behind it
   html.classList.add('booting-in')
   boot.classList.add('boot--hole')
   const hole = boot.animate([{ '--hole': '0px' } as Keyframe, { '--hole': `${cover}px` } as Keyframe], { duration: 760, easing: 'cubic-bezier(0.6, 0, 0.2, 1)', fill: 'forwards' })
-  await Promise.all([hole.finished, ...floods])
+  await hole.finished
   boot.remove()
   window.setTimeout(() => html.classList.remove('booting-in'), 1100)
 }
