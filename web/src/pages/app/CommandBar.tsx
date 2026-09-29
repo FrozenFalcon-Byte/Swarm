@@ -96,7 +96,7 @@ function Bar({ onClose, repos, pages, onSignOut, onShortcuts }: BarProps) {
     }, words: 'copy link url share clipboard' },
     { id: 'q:keys', group: 'Quick', label: 'Keyboard shortcuts', icon: 'keys', hint: '?', run: onShortcuts, words: 'keyboard shortcuts keys hotkeys help' },
     { id: 'a:rewind', group: 'Actions', label: 'Watch your Rewind', hint: 'this week', icon: 'fun', run: () => { onClose(); openRewind() }, words: 'rewind recap wrapped week weekly summary stats film story fun' },
-    { id: 'a:relay', group: 'Actions', label: 'Watch The Relay', hint: 'just for fun', icon: 'relay', run: go('/app/fun/relay'), words: 'relay film story bug fix agents scroll animation fun' },
+    { id: 'a:clock', group: 'Actions', label: 'Visit The Clock Shop', hint: 'just for fun', icon: 'clock', run: go('/app/fun/clock'), words: 'clock shop time watch clocks world cuckoo hourglass stopwatch quiet hours rewind scroll fun' },
     { id: 'a:hive', group: 'Actions', label: 'Play The Hive', hint: 'just for fun', icon: 'hive', run: go('/app/fun/hive'), words: 'hive game swarm bugs play fun' },
     { id: 'a:merge', group: 'Actions', label: 'Play Merge', hint: 'public page', icon: 'flask', run: go('/merge'), words: 'merge game jar drop play fun score' },
     { id: 'a:jam', group: 'Actions', label: 'Jam with the agents', hint: 'public page', icon: 'flask', run: go('/jam'), words: 'jam music beat band play playground fun' },

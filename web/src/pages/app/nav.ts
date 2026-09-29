@@ -13,7 +13,7 @@ export const NAV: { to: string; label: string; icon: string; group: 'main' | 'gu
 export const ICONS: Record<string, string> = {
   rules: 'M12 3l8 3v6c0 4.5-3.4 8-8 9-4.6-1-8-4.5-8-9V6z M9 12l2 2 4-4',
   fun: 'M12 22a10 10 0 100-20 10 10 0 000 20z M8 14.5s1.5 2.5 4 2.5 4-2.5 4-2.5 M9 9.5h.01 M15 9.5h.01',
-  relay: 'M4 12h4 M16 12h4 M12 4v4 M12 16v4 M12 15a3 3 0 100-6 3 3 0 000 6z',
+  clock: 'M12 21a9 9 0 100-18 9 9 0 000 18z M12 7v5l3 2',
   hive: 'M12 2.5l8.2 4.75v9.5L12 21.5l-8.2-4.75v-9.5z M12 8.2l3.3 1.9v3.8L12 15.8l-3.3-1.9v-3.8z',
   quiet: 'M20 14.5A8 8 0 1 1 9.5 4a6.5 6.5 0 0 0 10.5 10.5z',
   a2a: 'M6.5 9a3 3 0 100-6 3 3 0 000 6z M17.5 21a3 3 0 100-6 3 3 0 000 6z M9.5 6h5a3 3 0 013 3v3 M14.5 18h-5a3 3 0 01-3-3v-3 M15.5 10l2 2 2-2 M8.5 14l-2-2-2 2',

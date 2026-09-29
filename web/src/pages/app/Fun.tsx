@@ -8,8 +8,8 @@ import './fun.css'
 /* Just for fun: the dashboard's toys, one big card each. Each card plays a little loop of what's inside. */
 
 const CARDS = [
-  { to: '/app/fun/relay', title: 'The Relay', tag: 'Scroll film', tint: 'var(--coder)', art: <RelayArt />,
-    text: 'One bug, four agents, one fix. Scroll and watch the baton pass, from the first dot to the merge, in one unbroken shot.' },
+  { to: '/app/fun/clock', title: 'The Clock Shop', tag: 'Scroll tour', tint: 'var(--coder)', art: <ClockArt />,
+    text: 'A wall of clocks, each one a part of your Swarm and every one running. Scroll along it: world time, a cuckoo that calls what needs you, gears, an hourglass and your Rewind.' },
   { to: '/app/fun/hive', title: 'The Hive', tag: 'Game', tint: 'var(--triager)', art: <HiveArt />,
     text: 'Your agents, off the clock. Drop bugs and watch the swarm fix each one in order: read, patch, test, sign off.' },
 ]
@@ -39,30 +39,27 @@ export default function Fun() {
   )
 }
 
-/** The baton: a card hops from agent to agent, changing shape each time, then lands as a green check. */
-function RelayArt() {
-  const loop = { repeat: Infinity, duration: 6, ease: 'easeInOut' } as const
-  const xs = [60, 125, 195, 260]
-  const t = [0, 0.14, 0.25, 0.39, 0.5, 0.64, 0.75, 0.89, 1]
+/** A wall clock whose hands race round, its four agent dots bobbing, next to a little hourglass that flips. */
+function ClockArt() {
+  const AG = ['var(--triager)', 'var(--coder)', 'var(--tester)', 'var(--reviewer)']
   return (
     <svg viewBox="0 0 320 220" className="fun-svg">
-      <path d="M20 176 H300" stroke="var(--ink)" strokeWidth="3" strokeLinecap="round" strokeDasharray="2 10" />
-      {['triager', 'coder', 'tester', 'reviewer'].map((r, k) => (
-        <motion.g key={r} animate={{ y: [0, 0, -10, 0, 0] }} transition={{ ...loop, times: [0, k * 0.25, k * 0.25 + 0.08, k * 0.25 + 0.16, 1] }}>
-          <circle cx={xs[k]} cy="162" r="15" fill={`var(--${r})`} stroke="var(--ink)" strokeWidth="2.5" />
-          <rect x={xs[k] - 5} y="157" width="3" height="6" rx="1.5" fill="var(--ink)" /><rect x={xs[k] + 2} y="157" width="3" height="6" rx="1.5" fill="var(--ink)" />
-        </motion.g>
-      ))}
-      <motion.rect fill="var(--white)" stroke="var(--ink)" strokeWidth="3"
-        animate={{
-          x: [40, 40, 95, 95, 155, 155, 225, 225, 40],
-          y: [70, 70, 60, 60, 66, 66, 64, 64, 70],
-          width: [40, 40, 60, 60, 80, 80, 70, 70, 40], height: [52, 52, 64, 64, 52, 52, 70, 70, 52], rx: [6, 6, 6, 6, 6, 6, 35, 35, 6],
-          fill: ['var(--white)', 'var(--white)', 'var(--white)', 'var(--white)', 'var(--white)', 'var(--white)', 'var(--reviewer)', 'var(--reviewer)', 'var(--white)'],
-        }}
-        transition={{ ...loop, times: t }} />
-      <motion.path d="M246 99l8 8 16-17" fill="none" stroke="var(--ink)" strokeWidth="5" strokeLinecap="round" strokeLinejoin="round"
-        animate={{ pathLength: [0, 0, 0, 1, 1, 0] }} transition={{ ...loop, times: [0, 0.7, 0.76, 0.84, 0.95, 1] }} />
+      <circle cx="140" cy="110" r="74" fill="var(--ink)" />
+      <circle cx="140" cy="110" r="64" fill="var(--white)" stroke="var(--ink)" strokeWidth="3" />
+      {AG.map((c, k) => {
+        const a = (k / 4) * Math.PI * 2
+        return <motion.circle key={k} cx={140 + Math.sin(a) * 44} cy={110 - Math.cos(a) * 44} r="10" fill={c} stroke="var(--ink)" strokeWidth="2.5"
+          animate={{ y: [0, -4, 0] }} transition={{ repeat: Infinity, duration: 1.6, delay: k * 0.2, ease: 'easeInOut' }} />
+      })}
+      <motion.line x1="140" y1="110" x2="140" y2="80" stroke="var(--ink)" strokeWidth="7" strokeLinecap="round" style={{ originX: '140px', originY: '110px' }}
+        animate={{ rotate: 360 }} transition={{ repeat: Infinity, duration: 12, ease: 'linear' }} />
+      <motion.line x1="140" y1="110" x2="140" y2="62" stroke="var(--ink)" strokeWidth="4.5" strokeLinecap="round" style={{ originX: '140px', originY: '110px' }}
+        animate={{ rotate: 360 }} transition={{ repeat: Infinity, duration: 2, ease: 'linear' }} />
+      <circle cx="140" cy="110" r="5" fill="var(--ink)" />
+      <motion.g style={{ originX: '262px', originY: '130px' }} animate={{ rotate: [0, 0, 180, 180] }} transition={{ repeat: Infinity, duration: 4, times: [0, 0.8, 0.95, 1], ease: 'easeInOut' }}>
+        <path d="M240 88h44M240 172h44M244 90c0 26 16 30 16 40s-16 14 -16 40h36c0-26-16-30-16-40s16-14 16-40z" fill="var(--white)" stroke="var(--ink)" strokeWidth="3" strokeLinejoin="round" />
+        <motion.path d="M250 170c2-14 8-18 12-18s10 4 12 18z" fill="var(--tester)" style={{ originY: 1 }} animate={{ scaleY: [0.2, 1, 1, 0.2] }} transition={{ repeat: Infinity, duration: 4, times: [0, 0.8, 0.95, 1] }} />
+      </motion.g>
     </svg>
   )
 }

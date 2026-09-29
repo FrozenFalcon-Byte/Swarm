@@ -10,6 +10,16 @@ export interface Release { id: string; date: string; items: Change[] }
 
 export const RELEASES: Release[] = [
   {
+    id: '2026-09-29e',
+    date: '29 September',
+    items: [
+      { agent: 'coder', text: 'The Clock Shop replaces The Relay: scroll along a wall of live clocks, from your time to six cities' },
+      { agent: 'triager', text: 'A cuckoo calls out what needs you, and four agent gears turn inside a watch' },
+      { agent: 'tester', text: 'An hourglass drains through the tester’s 24 runs as you scroll past' },
+      { agent: 'reviewer', text: 'A stopwatch counts down to your Weekly Rewind, and a dial shows your quiet hours' },
+    ],
+  },
+  {
     id: '2026-09-29d',
     date: '29 September',
     items: [

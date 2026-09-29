@@ -1,0 +1,101 @@
+/* The Clock Shop (ClockShop.tsx): a paper wall of clocks the camera flies along as you scroll, like the Island.
+   The pieces are paper-craft, so they keep their paper and ink colours in dark mode too; the wall follows the theme. */
+
+.main:has(.ck-page) { padding-bottom: 0; }
+.page.ck-page { --bleed: clamp(20px, 3.4vw, 56px); --pin-top: 0px; --stage-h: calc(var(--win-h, 100svh) / var(--main-zoom, 1) - var(--pin-top));
+  max-width: none; gap: 0; margin: 0 calc(-1 * var(--bleed)); overflow-x: clip; }
+.ck-film { position: relative; height: 900svh; }
+.ck-pin { position: sticky; top: var(--pin-top); height: var(--stage-h); overflow: hidden; background: var(--grey-8); }
+.ck-svg { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+
+.ck-svg .ink { stroke: #0f0f0f; stroke-width: 4; stroke-linejoin: round; stroke-linecap: round; }
+.ck-svg text { font-family: var(--font-sans); fill: #0f0f0f; }
+.ck-wall { fill: var(--grey-8); }
+.ck-dot { fill: var(--line); }
+.ck-wood { fill: #f3d9a4; }
+.ck-wood-dark { fill: #e6c68a; }
+.ck-grain { fill: none; stroke: #0f0f0f; stroke-width: 3; stroke-linecap: round; opacity: 0.14; }
+.ck-shadow { fill: #0f0f0f; opacity: 0.16; }
+.ck-face { fill: #fffdf7; }
+.ck-face.is-night { fill: #dfe6ff; }
+.ck-plaque { fill: #fffdf7; }
+.ck-small { font-size: 17px; font-weight: 700; letter-spacing: 0.06em; }
+.ck-city { font-size: 22px; font-weight: 700; letter-spacing: -0.01em; }
+.ck-digits { font-family: var(--font-mono) !important; font-size: 34px; font-weight: 700; }
+.ck-digits--sm { font-size: 19px; }
+.ck-small--xs { font-size: 13px; }
+.ck-agent { animation: ck-bob 2.4s ease-in-out infinite alternate; animation-delay: calc(var(--k) * -0.6s); transform-box: fill-box; transform-origin: center; }
+@keyframes ck-bob { to { transform: translateY(-5px); } }
+
+.ck-roof { fill: #ff8a7a; }
+.ck-house { fill: #c98f5a; }
+.ck-door { fill: #e6c68a; }
+.ck-cone { fill: #8a5a33; }
+.ck-bird { animation: ck-call 0.5s ease-in-out infinite alternate; transform-box: fill-box; transform-origin: 30% 80%; }
+@keyframes ck-call { to { transform: rotate(-8deg); } }
+.ck-swing { animation: ck-swing 1.2s ease-in-out infinite alternate; transform-box: fill-box; transform-origin: 50% 0; }
+@keyframes ck-swing { from { transform: rotate(-9deg); } to { transform: rotate(9deg); } }
+.ck-bubble { fill: #fffdf7; }
+.ck-bubble-t { font-size: 26px; font-weight: 800; letter-spacing: -0.02em; }
+
+.ck-strap { fill: #9dc4f5; }
+.ck-hole { fill: #0f0f0f; opacity: 0.55; }
+.ck-case { fill: #d9dde3; }
+.ck-back { fill: #2b2f36; }
+.ck-gear-hole { fill: #2b2f36; stroke: #0f0f0f; stroke-width: 5; }
+.ck-glass { fill: #ffffff; opacity: 0.08; pointer-events: none; }
+
+.ck-glass-body { fill: #ffffff; opacity: 0.65; }
+.ck-stream { animation: ck-flow 0.4s linear infinite; }
+@keyframes ck-flow { to { stroke-dashoffset: -11; } }
+.ck-notch { stroke: #0f0f0f; stroke-width: 1.5; transition: fill 0.2s; }
+.ck-seg { transition: filter 0.2s; }
+.ck-seg.is-on { filter: brightness(0.86); }
+
+/* words over the film */
+.ck-intro { position: absolute; z-index: 2; top: clamp(70px, 12svh, 130px); left: max(20px, calc(50% - 600px)); width: min(520px, calc(100% - 40px)); display: flex; flex-direction: column; align-items: flex-start; gap: 16px; pointer-events: none; }
+.ck-intro > * { pointer-events: auto; }
+.ck-intro.is-gone { visibility: hidden; }
+.ck-intro h1 { margin: 0; font-size: clamp(44px, 7vw, 96px); line-height: 0.92; font-weight: 600; letter-spacing: -0.05em; }
+.ck-intro p { margin: 0; max-width: 40ch; font-size: clamp(16px, 1.5vw, 19px); line-height: 1.45; color: var(--ink-2); }
+.ck-kicker { display: inline-flex; align-items: center; gap: 8px; padding: 6px 14px 6px 10px; border: 2px solid var(--ink); border-radius: 999px; background: var(--white); font-size: 13.5px; font-weight: 600; box-shadow: 2px 3px 0 var(--ink); }
+.ck-kicker i { width: 10px; height: 10px; border-radius: 50%; background: var(--reviewer); border: 1.5px solid var(--ink); }
+.ck-kicker a { text-decoration: underline; text-underline-offset: 2px; }
+
+.ck-caption { position: absolute; z-index: 2; left: max(20px, calc(50% - 600px)); bottom: clamp(24px, 6svh, 60px); width: min(430px, calc(100% - 40px)); padding: 18px 22px;
+  background: var(--white); border: 2.5px solid var(--ink); border-radius: 22px; box-shadow: 5px 6px 0 var(--ink); transition: opacity 0.4s, translate 0.4s; }
+.ck-caption.is-hidden { opacity: 0; translate: 0 16px; pointer-events: none; }
+.ck-caption b { display: block; font-size: clamp(20px, 2vw, 26px); font-weight: 600; letter-spacing: -0.03em; line-height: 1.12; }
+.ck-caption p { margin: 6px 0 0; font-size: 15px; line-height: 1.45; color: var(--ink-2); }
+.ck-tag { display: inline-block; margin-bottom: 8px; padding: 2px 10px; border-radius: 999px; border: 1.5px solid #0f0f0f; color: #0f0f0f; font-size: 12px; font-weight: 700; }
+.ck-rail { position: absolute; z-index: 2; right: max(20px, calc(50% - 600px)); top: 50%; translate: 0 -50%; list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
+.ck-rail li { width: 12px; height: 12px; border-radius: 50%; border: 2px solid var(--ink); background: var(--white); transition: background-color 0.3s, transform 0.4s var(--spring, cubic-bezier(.34, 1.56, .64, 1)); }
+.ck-rail li.done { background: var(--c); }
+.ck-rail li.on { background: var(--c); transform: scale(1.5); }
+.ck-bar { position: absolute; z-index: 2; left: 0; right: 0; bottom: 0; height: 4px; background: var(--ink); transform-origin: 0 50%; }
+
+/* after the film */
+.ck-band { padding: clamp(56px, 9vw, 110px) var(--bleed); }
+.ck-band-inner { max-width: 1200px; margin: 0 auto; display: flex; flex-direction: column; gap: 28px; }
+.ck-band h2 { margin: 0; font-size: clamp(30px, 4.4vw, 56px); line-height: 1; font-weight: 600; letter-spacing: -0.045em; max-width: 16ch; }
+.ck-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 16px; }
+.ck-card { position: relative; display: flex; flex-direction: column; align-items: flex-start; gap: 8px; padding: 20px 20px 18px; background: var(--white); color: var(--ink);
+  border: 2.5px solid var(--ink); border-radius: 22px; box-shadow: 4px 5px 0 var(--ink); transition: translate 0.25s var(--ease-out), box-shadow 0.25s var(--ease-out); }
+.ck-card::before { content: ""; width: 26px; height: 26px; border-radius: 50%; background: var(--c); border: 2px solid var(--ink); }
+a.ck-card:hover { translate: 0 -3px; box-shadow: 5px 8px 0 var(--ink); }
+.ck-card b { font-size: 19px; letter-spacing: -0.02em; }
+.ck-card p { margin: 0 0 6px; font-size: 14.5px; line-height: 1.45; color: var(--ink-2); flex: 1; }
+.ck-band-foot { display: flex; flex-wrap: wrap; gap: 12px; }
+
+@media (max-width: 900px) { .page.ck-page { --bleed: 16px; --pin-top: 60px; } }
+@media (max-width: 760px) {
+  .ck-film { height: 820svh; }
+  .ck-rail { display: none; }
+  .ck-intro { top: 24px; }
+  .ck-caption { bottom: 16px; padding: 14px 16px; }
+  .ck-caption p { font-size: 14px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .ck-agent, .ck-bird, .ck-swing, .ck-stream { animation: none !important; }
+}
+html.less-motion :is(.ck-agent, .ck-bird, .ck-swing, .ck-stream) { animation: none; }
