@@ -211,10 +211,6 @@ export interface Prefs {
   sidebar?: 'full' | 'icons'
   clock?: '24h' | '12h'
   weekStart?: 'mon' | 'sun'
-  /** Liftoff: the shipped fixes you lit in the observatory, as repoId/taskId */
-  constellation?: string[]
-  /** Liftoff: how many times you've high-fived the crew */
-  highFives?: number
 }
 export interface Profile { displayName?: string; email?: string; avatar?: string | null; githubLogin?: string | null; createdAt?: Stamp
   onboarding?: Onboarding; onboardedAt?: Stamp | null; prefs?: Prefs }
