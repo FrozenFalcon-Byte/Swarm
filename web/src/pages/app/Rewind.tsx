@@ -402,7 +402,8 @@ function Runs({ s }: { s: Stats }) {
 
 function Fixes({ s }: { s: Stats }) {
   const share = s.fixed ? s.firstTry / s.fixed : 0
-  const turns = s.median === null ? 0 : Math.min(8, 1 + Math.log2(1 + s.median / 600_000))
+  // whole spins for how long fixes took, then the hand comes to rest where the green arc ends
+  const spins = s.median === null ? 0 : Math.min(8, Math.floor(1 + Math.log2(1 + s.median / 600_000)))
   return (
     <>
       <Copy kicker="The fixes" big={<CountUp value={s.fixed} />} label={`fix${s.fixed === 1 ? '' : 'es'} approved${s.merged ? `, ${s.merged} merged` : ''}`}
@@ -415,7 +416,9 @@ function Fixes({ s }: { s: Stats }) {
           {Array.from({ length: 12 }, (_, k) => <path key={k} d="M0 -84V-74" stroke="var(--ink)" strokeWidth={k % 3 ? 2 : 4} strokeLinecap="round" transform={`rotate(${k * 30})`} />)}
           <motion.circle r="62" fill="none" stroke="var(--reviewer)" strokeWidth="14" strokeLinecap="round" transform="rotate(-90)"
             initial={{ pathLength: 0 }} animate={{ pathLength: share }} transition={{ duration: 1.6, ease: easeOut, delay: 1.2 }} />
-          <motion.g initial={{ rotate: 0 }} animate={{ rotate: turns * 360 }} transition={{ duration: 2.4, ease: [0.2, 0.7, 0.2, 1], delay: 0.5 }}>
+          <motion.g initial={{ rotate: 0 }} animate={{ rotate: spins * 360 + share * 360 }} transition={{ duration: 2.4, ease: [0.2, 0.7, 0.2, 1], delay: 0.5 }}>
+            {/* a clear disc centred on the dial so the hand turns about the middle, not its own midpoint */}
+            <circle r="72" fill="none" />
             <path d="M0 8V-70" stroke="var(--ink)" strokeWidth="5" strokeLinecap="round" />
           </motion.g>
           <circle r="8" fill="var(--tester)" stroke="var(--ink)" strokeWidth="3" />
