@@ -18,7 +18,7 @@
 .fun-open { margin-top: 8px; }
 .fun-back { white-space: nowrap; }
 .main:has(.fun-page) { padding-bottom: 16px; }
-.fun-page { height: calc(var(--win-h, 100svh) - 96px); min-height: 0; gap: clamp(10px, 2svh, 20px); }
+.fun-page { height: calc(var(--win-h, 100svh) / var(--main-zoom, 1) - 96px); min-height: 0; gap: clamp(10px, 2svh, 20px); }
 .fun-page .page-head { margin-bottom: 0; }
 .fun-page .page-head h1 { font-size: clamp(36px, min(4.6vw, 7svh), 72px); }
 .fun-page .page-head p { margin-top: 8px; }

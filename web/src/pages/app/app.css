@@ -140,6 +140,8 @@
 .shell ::selection { background: var(--accent); }
 
 /* text size: the pages scale, the sidebar stays put */
+.shell.text-small { --main-zoom: 0.92; }
+.shell.text-large { --main-zoom: 1.08; }
 .shell.text-small .main > * { zoom: 0.92; }
 .shell.text-large .main > * { zoom: 1.08; }
 .status-dot { width: 10px; height: 10px; border-radius: 50%; background: var(--ink-3); flex: none; }
