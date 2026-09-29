@@ -144,6 +144,7 @@ export function routeLabel(path: string, repoName?: (id: string) => string | und
   if (path.startsWith('/app/help')) return 'Help'
   if (path.startsWith('/app/agents')) return 'Agents'
   if (path.startsWith('/app/lab')) return 'Test lab'
+  if (path.startsWith('/app/a2a')) return 'A2A guide'
   if (path.startsWith('/onboarding')) return 'Welcome'
   if (path.startsWith('/docs')) return 'MCP docs'
   if (path.startsWith('/jam')) return 'The Jam'
@@ -151,7 +152,9 @@ export function routeLabel(path: string, repoName?: (id: string) => string | und
   if (path.startsWith('/island')) return 'The Island'
   if (path.startsWith('/app/rules')) return 'House rules'
   if (path.startsWith('/app/quiet-hours')) return 'Quiet hours'
-  if (path.startsWith('/app/hive')) return 'The Hive'
+  if (path.startsWith('/app/fun/hive') || path.startsWith('/app/hive')) return 'The Hive'
+  if (path.startsWith('/app/fun/rewind')) return 'Rewind'
+  if (path.startsWith('/app/fun')) return 'Just for fun'
   if (path.startsWith('/app')) return 'Overview'
   return 'Swarm'
 }

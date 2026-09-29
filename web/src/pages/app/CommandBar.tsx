@@ -72,6 +72,8 @@ function Bar({ onClose, repos, pages, onSignOut }: { onClose: () => void; repos:
       onClose(); if (!user) return
       queueRun(user.uid, r.id, 'command').then(() => toast.ok('Run queued', `${name(r)} · a worker picks it up next`), (e) => toast.error('Couldn’t queue it', e.message))
     }, words: `run start sync ${r.fullName}` })),
+    { id: 'a:rewind', group: 'Actions', label: 'Watch your Rewind', hint: 'just for fun', icon: 'fun', run: go('/app/fun/rewind'), words: 'rewind recap wrapped week month summary stats film story fun' },
+    { id: 'a:hive', group: 'Actions', label: 'Play The Hive', hint: 'just for fun', icon: 'hive', run: go('/app/fun/hive'), words: 'hive game swarm bugs play fun' },
     { id: 'a:merge', group: 'Actions', label: 'Play Merge', hint: 'public page', icon: 'flask', run: go('/merge'), words: 'merge game jar drop play fun score' },
     { id: 'a:jam', group: 'Actions', label: 'Jam with the agents', hint: 'public page', icon: 'flask', run: go('/jam'), words: 'jam music beat band play playground fun' },
     { id: 'a:home', group: 'Actions', label: 'Swarm home', icon: 'home', run: go('/'), words: 'home landing website' },

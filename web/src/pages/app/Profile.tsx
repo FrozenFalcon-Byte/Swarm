@@ -45,8 +45,6 @@ export default function Profile() {
 
   const pick = (f?: File | null) => { if (f && f.type.startsWith('image/')) setFile(f) }
 
-  const fixed = tasks.filter((t) => t.state === 'Merged' || t.state === 'Approved').length
-  const waiting = tasks.filter((t) => t.state === 'Approved' || t.state === 'Needs Human').length
   const drop = {
     onDragOver: (e: React.DragEvent) => { e.preventDefault(); setDragging(true) },
     onDragLeave: () => setDragging(false),
@@ -60,8 +58,7 @@ export default function Profile() {
         chips={providers.map((p) => <span key={p} className="chip">{PROVIDER[p]?.label || p}</span>)}
         photo={<PhotoSwap src={profile?.avatar ?? null} initial={(user.displayName || user.email || '?').slice(0, 1).toUpperCase()} size={116} />}
         onPhoto={() => input.current?.click()} dragging={dragging} dropProps={drop}
-        onRemove={profile?.avatar ? async () => { await setAvatar(user.uid, null); toast.info('Photo removed') } : undefined}
-        stats={[['repositories', repos.length], ['tests fixed', fixed], ['waiting for you', waiting]]} />
+        onRemove={profile?.avatar ? async () => { await setAvatar(user.uid, null); toast.info('Photo removed') } : undefined} />
       <input ref={input} type="file" accept="image/*" hidden onChange={(e) => { pick(e.target.files?.[0]); e.target.value = '' }} />
 
       <AvatarCropper file={file} onCancel={() => setFile(null)} onSave={async (data) => { setFile(null); await setAvatar(user.uid, data); toast.ok('Photo updated', 'Looking sharp.') }} />

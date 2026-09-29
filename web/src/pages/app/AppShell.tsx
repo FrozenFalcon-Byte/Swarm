@@ -2,7 +2,7 @@ import { AnimatePresence, motion } from 'motion/react'
 import { lazy, Suspense, useEffect, useRef, useState } from 'react'
 import { PageTransition, routeLabel } from '../../components/PageTransition'
 import { setToastLook } from '../../components/Island'
-import { Link, NavLink, Route, Routes, useLocation, useNavigate } from 'react-router-dom'
+import { Link, NavLink, Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom'
 import { LiveLogo, Logo } from '../../components/Logo'
 import { ModeToggle } from '../../components/ModeToggle'
 import { LookFx } from '../../components/LookFx'
@@ -25,6 +25,7 @@ const pages = {
   tools: () => import('./ToolsPage'), settings: () => import('./Settings'), profile: () => import('./Profile'),
   help: () => import('./Help'), agents: () => import('./Agents'), lab: () => import('./Lab'),
   rules: () => import('./Rules'), quiet: () => import('./QuietHours'), hive: () => import('./Hive'),
+  fun: () => import('./Fun'), rewind: () => import('./Rewind'), a2a: () => import('./A2aGuide'),
 }
 const Overview = lazy(pages.overview)
 const Repos = lazy(pages.repos)
@@ -38,6 +39,9 @@ const Lab = lazy(pages.lab)
 const Rules = lazy(pages.rules)
 const QuietHours = lazy(pages.quiet)
 const Hive = lazy(pages.hive)
+const Fun = lazy(pages.fun)
+const Rewind = lazy(pages.rewind)
+const A2aGuide = lazy(pages.a2a)
 
 const NAV_KEY = 'swarm.sideNavH'
 const clamp = (v: number, a: number, b: number) => Math.max(a, Math.min(b, v))
@@ -264,7 +268,7 @@ export default function AppShell() {
               {nav.filter((n) => n.group === 'main').map((n) => <SideLink key={n.to} to={n.to} end={n.to === '/app'} icon={n.icon} count={n.to === '/app' ? needsYou : 0}>{n.label}</SideLink>)}
               <p className="side-label">Guardrails</p>
               {nav.filter((n) => n.group === 'guard').map((n) => <SideLink key={n.to} to={n.to} icon={n.icon}>{n.label}</SideLink>)}
-              <p className="side-label">Just for fun</p>
+              <p className="side-label">Play</p>
               {nav.filter((n) => n.group === 'play').map((n) => <SideLink key={n.to} to={n.to} icon={n.icon}>{n.label}</SideLink>)}
             </nav>
           </div>
@@ -325,9 +329,13 @@ export default function AppShell() {
                 <Route path="help" element={<Help />} />
                 <Route path="agents" element={<Agents />} />
                 <Route path="lab" element={admin ? <Lab /> : <Overview />} />
+                <Route path="a2a" element={admin ? <A2aGuide /> : <Overview />} />
                 <Route path="rules" element={<Rules />} />
                 <Route path="quiet-hours" element={<QuietHours />} />
-                <Route path="hive" element={<Hive />} />
+                <Route path="fun" element={<Fun />} />
+                <Route path="fun/hive" element={<Hive />} />
+                <Route path="fun/rewind" element={<Rewind />} />
+                <Route path="hive" element={<Navigate to="/app/fun/hive" replace />} />
               </Routes>
             </Suspense>
           </PageTransition>

@@ -37,7 +37,7 @@ const NEW = [
   { tag: 'Guardrails', c: 'var(--triager)', title: 'House rules', text: 'Write the rules the agents live by in one line: never touch, always ask, or keep fixes small. Try any path against them.', to: '/app/rules', cta: 'Write a rule' },
   { tag: 'Guardrails', c: 'var(--reviewer)', title: 'Quiet hours', text: 'Pick a preset or paint your own week. The agents only work inside the windows you leave open.', to: '/app/quiet-hours', cta: 'Set quiet hours' },
   { tag: 'Speed', c: 'var(--tester)', title: 'Work starts in seconds', text: 'The hub now wakes the worker the moment you press Run now or approve a fix, instead of waiting for its schedule.', to: '/app/repos', cta: 'Run a repository' },
-  { tag: 'Fun', c: 'var(--mint-strong)', title: 'Play in The Hive', text: 'Drop bugs and watch the swarm fix them in order: read, patch, test, sign off. Chain fixes for combos; the bugs are named after your own tests.', to: '/app/hive', cta: 'Open The Hive' },
+  { tag: 'Fun', c: 'var(--mint-strong)', title: 'Play in The Hive', text: 'Drop bugs and watch the swarm fix them in order: read, patch, test, sign off. Chain fixes for combos; the bugs are named after your own tests.', to: '/app/fun/hive', cta: 'Open The Hive' },
 ] as const
 
 const GUARDS = [

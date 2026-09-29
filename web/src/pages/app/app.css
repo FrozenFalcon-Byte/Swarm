@@ -1084,7 +1084,7 @@
 }
 
 /* ---------- profile identity banner */
-.idc { position: relative; isolation: isolate; overflow: hidden; display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: clamp(18px, 3vw, 36px); align-items: center;
+.idc { position: relative; isolation: isolate; overflow: hidden; display: grid; grid-template-columns: auto minmax(0, 1fr); gap: clamp(18px, 3vw, 36px); align-items: center;
   padding: clamp(22px, 3vw, 36px); border-radius: var(--radius-xl); border: 3px solid var(--ink); box-shadow: 6px 6px 0 var(--ink); background: var(--hue); }
 /* soft shapes in lighter and deeper shades of the one colour, drifting past each other */
 .idc-bg { position: absolute; inset: -20%; z-index: -1; filter: blur(38px); transform: rotate(var(--spin)); }
@@ -1108,12 +1108,7 @@
 .idc-chips { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
 .idc-chips .chip { background: rgba(255, 255, 255, 0.7); border: 1.5px solid rgba(15, 15, 15, 0.2); }
 .idc-link { border: 0; background: none; font-size: 13px; font-weight: 600; text-decoration: underline; text-underline-offset: 3px; cursor: pointer; color: var(--ink); padding: 0 6px; }
-.idc-stats { display: flex; gap: 10px; }
-.idc-stat { display: flex; flex-direction: column; justify-content: space-between; gap: 10px; min-width: 104px; padding: 14px 16px; border-radius: 20px; background: rgba(255, 255, 255, 0.78); border: 2px solid var(--ink); }
-.idc-stat .idc-num { display: block; font-size: 34px; font-weight: 600; letter-spacing: -0.04em; line-height: 1; }
-.idc-stat > span { font-size: 12px; font-weight: 600; color: var(--ink-2); }
-@media (max-width: 1100px) { .idc { grid-template-columns: auto minmax(0, 1fr); } .idc-stats { grid-column: 1 / -1; } .idc-stat { flex: 1; } }
-@media (max-width: 600px) { .idc { grid-template-columns: minmax(0, 1fr); justify-items: start; } .idc-photo { width: 108px; height: 108px; } .idc-stat { min-width: 0; } .idc-stat .idc-num { font-size: 26px; } }
+@media (max-width: 600px) { .idc { grid-template-columns: minmax(0, 1fr); justify-items: start; } .idc-photo { width: 108px; height: 108px; } }
 
 .swap { position: relative; display: block; border-radius: 50%; }
 .swap-layer { position: absolute; inset: 0; border-radius: 50%; overflow: hidden; display: grid; place-items: center; background: color-mix(in srgb, var(--hue, var(--triager)) 60%, white); }

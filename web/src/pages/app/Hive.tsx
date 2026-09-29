@@ -3,6 +3,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { useAuth } from '../../lib/auth'
 import { useBootHold } from '../../lib/boot'
 import { useAllTasks, useRepos } from '../../lib/data'
+import { Link } from 'react-router-dom'
 import { PageHead } from './Overview'
 import { rise } from './repoDraft'
 
@@ -44,7 +45,9 @@ export default function Hive() {
   }, [tasks])
   return (
     <div className="page hv-page">
-      <PageHead title="The Hive" sub="Your agents, off the clock. Drop bugs and watch them fix each one in order: read, patch, test, sign off." />
+      <PageHead title="The Hive" sub="Your agents, off the clock. Drop bugs and watch them fix each one in order: read, patch, test, sign off.">
+        <Link to="/app/fun" className="btn btn-line btn-sm fun-back">← Just for fun</Link>
+      </PageHead>
       <HiveGame names={names} />
     </div>
   )

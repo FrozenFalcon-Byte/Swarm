@@ -1,7 +1,6 @@
 import { AnimatePresence, motion } from 'motion/react'
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { easeOut } from '../../lib/motion'
-import { CountUp } from './ui'
 
 /* The banner at the top of your profile. Its background is one colour, picked from your account id (so
    everyone's differs but yours stays the same), drifting through lighter and deeper shades of itself. A new photo doesn't just swap:
@@ -24,9 +23,9 @@ export function useUserPalette(seed: string) {
   }, [seed])
 }
 
-export function IdentityCard({ uid, name, sub, chips, photo, onPhoto, onRemove, dragging, dropProps, stats }: {
+export function IdentityCard({ uid, name, sub, chips, photo, onPhoto, onRemove, dragging, dropProps }: {
   uid: string; name: string; sub: ReactNode; chips: ReactNode; photo: ReactNode; onPhoto: () => void; onRemove?: () => void
-  dragging: boolean; dropProps: Record<string, unknown>; stats: [string, number, string?][]
+  dragging: boolean; dropProps: Record<string, unknown>
 }) {
   const p = useUserPalette(uid)
   return (
@@ -45,13 +44,6 @@ export function IdentityCard({ uid, name, sub, chips, photo, onPhoto, onRemove, 
           {chips}
           {onRemove && <button type="button" className="idc-link" onClick={onRemove}>Remove photo</button>}
         </motion.div>
-      </div>
-      <div className="idc-stats">
-        {stats.map(([label, v, suffix], k) => (
-          <motion.div key={label} className="idc-stat" initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.6, ease: easeOut, delay: 0.3 + k * 0.08 }}>
-            <b className="idc-num"><CountUp value={v} suffix={suffix} /></b><span>{label}</span>
-          </motion.div>
-        ))}
       </div>
     </motion.header>
   )
