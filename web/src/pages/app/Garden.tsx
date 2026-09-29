@@ -6,6 +6,7 @@ import { useBootHold } from '../../lib/boot'
 import { useAllTasks, useRepos } from '../../lib/data'
 import { easeOut } from '../../lib/motion'
 import type { TaskState } from '../../lib/types'
+import { useWinHeight } from '../../lib/winHeight'
 import './garden.css'
 
 /*
@@ -67,6 +68,7 @@ const box = (v: View) => `${v.x.toFixed(1)} ${v.y.toFixed(1)} ${v.w.toFixed(1)} 
 /* ------------------------------------------------------------------ the page */
 
 export default function Garden() {
+  const winH = useWinHeight()
   const { user } = useAuth()
   const { data: repos, loading } = useRepos(user?.uid)
   useBootHold(loading)
@@ -86,7 +88,7 @@ export default function Garden() {
   const demo = !repos.length && !loading
 
   return (
-    <div className="page gd-page">
+    <div className="page gd-page" style={winH}>
       <Film beds={beds} demo={demo} now={now} />
       <Patrol beds={beds} demo={demo} />
     </div>

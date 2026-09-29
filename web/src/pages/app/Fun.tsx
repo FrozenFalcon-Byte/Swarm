@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import { Roll } from '../../components/Roll'
 import { easeOut } from '../../lib/motion'
 import { PageHead } from './Overview'
+import { useWinHeight } from '../../lib/winHeight'
 import './fun.css'
 
 /* Just for fun: the dashboard's toys, one big card each. Each card plays a little loop of what's inside. */
@@ -15,8 +16,9 @@ const CARDS = [
 ]
 
 export default function Fun() {
+  const winH = useWinHeight()
   return (
-    <div className="page fun-page">
+    <div className="page fun-page" style={winH}>
       <PageHead title="Just for fun" sub="For when the agents have it handled. Pick one." />
       <div className="fun-grid">
         {CARDS.map((c, i) => (
