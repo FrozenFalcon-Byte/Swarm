@@ -1,4 +1,4 @@
-import { AnimatePresence, LayoutGroup, motion, useMotionValueEvent, useScroll, useSpring, useTransform, type MotionValue } from 'motion/react'
+import { AnimatePresence, motion, useMotionValueEvent, useScroll, useSpring, useTransform, type MotionValue } from 'motion/react'
 import { useEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent, type RefObject } from 'react'
 import { Link } from 'react-router-dom'
 import { useAuth } from '../../lib/auth'
@@ -14,8 +14,8 @@ import './garden.css'
  * First a film you scroll through: your swarm's real history as a time-lapse. Every repository is a plant; the
  * camera starts down in the soil and pulls back as the days fly past (the sun and moon racing over), issues crawl
  * in as bugs, the agents' work opens as buds and every fix blooms, in the order it really happened.
- * Then the garden is yours to guard: Bug patrol. Bugs climb the stems for your flowers; click one and the
- * nearest agent-bee zips over and carries it off. Chain catches for a combo. Lose three flowers and it's over.
+ * Then the harvest, another film: your crew of agent-bees fly in with what each of them did, every fix drops into
+ * a basket, each repository flips up as a seed packet, and the sun rises on whatever still needs you.
  */
 
 type Item = { id: string; title: string; state: TaskState; born: number; bloom: number; repoId: string; demo: boolean }
@@ -31,7 +31,6 @@ const ROLES = ['triager', 'coder', 'tester', 'reviewer'] as const
 const STEPS = 200
 const MAX_SLOTS = 14
 const DAYS = 3 // days the film's sky races through
-const KEY = 'swarm.garden'
 const calm = () => window.matchMedia('(prefers-reduced-motion: reduce)').matches || document.documentElement.classList.contains('less-motion')
 
 function hash(s: string) {
@@ -90,7 +89,7 @@ export default function Garden() {
   return (
     <div className="page gd-page" style={winH}>
       <Film beds={beds} demo={demo} now={now} />
-      <Patrol beds={beds} demo={demo} />
+      <Harvest beds={beds} demo={demo} name={(user?.displayName || '').split(' ')[0]} />
     </div>
   )
 }
@@ -115,8 +114,8 @@ const CAPTIONS = [
   { k: 'Bugs', t: 'Issues crawl in at the roots.', b: 'A new issue is a bug in the soil. The triager reads it and decides who takes it.' },
   { k: 'Buds', t: 'The agents get to work.', b: 'While a fix is written, tested and reviewed it waits on the stem as a bud, in the colour of one of the crew.' },
   { k: 'Bloom', t: 'Every fix blooms.', b: 'Approved, merged or closed: the bud opens. Rejected tries droop. The flower at the top is the newest.' },
-  { k: 'Flags', t: 'Some things wait for you.', b: 'A red flag in the soil means the agents stopped and need a person. Click one below to see which.' },
-  { k: 'Today', t: 'Your garden, today.', b: 'Every day so far, grown in a few seconds. Keep scrolling: the bugs are coming back, and the bees need you.' },
+  { k: 'Flags', t: 'Some things wait for you.', b: 'A red flag in the soil means the agents stopped and need a person to decide.' },
+  { k: 'Today', t: 'Your garden, today.', b: 'Every day so far, grown in a few seconds. Keep scrolling for the harvest: what the crew brought in.' },
 ]
 
 function Film({ beds, demo, now }: { beds: Bed[]; demo: boolean; now: number }) {
@@ -196,210 +195,216 @@ function Film({ beds, demo, now }: { beds: Bed[]; demo: boolean; now: number }) 
   )
 }
 
-/* ------------------------------------------------------------------ part two: bug patrol */
+/* ------------------------------------------------------------------ part two: the harvest */
 
-type GBug = { on: boolean; x: number; y: number; tx: number; ty: number; target: string; speed: number; wob: number }
-type Phase = 'idle' | 'play' | 'over'
-type Pop = { item: Item; bed: string; x: number; y: number }
-const POOL = 16
+const HARVEST = [
+  { k: 'Crew', t: (n: string) => (n ? `${n}, meet your crew.` : 'Meet your crew.'), b: 'Four agents looked after this garden. Here is how much each one carried.' },
+  { k: 'Harvest', t: () => 'The harvest is in.', b: 'Every fix that was approved, merged or closed drops into the basket.' },
+  { k: 'Beds', t: () => 'Seed packets, one per repo.', b: 'What each repository grew: blooms that shipped, buds still on the stem.' },
+  { k: 'Today', t: () => 'And the sun comes up again.', b: '' },
+]
+const CREW: Record<(typeof ROLES)[number], { name: string; did: string; of: TaskState[] }> = {
+  triager: { name: 'Triager', did: 'issues read', of: ['Triaged', 'In Progress', 'Awaiting Tests', 'In Review', 'Approved', 'Merged', 'Closed', 'Rejected', 'Needs Human'] },
+  coder: { name: 'Coder', did: 'fixes written', of: ['In Progress', 'Awaiting Tests', 'In Review', 'Approved', 'Merged', 'Closed', 'Rejected'] },
+  tester: { name: 'Tester', did: 'fixes tested', of: ['Awaiting Tests', 'In Review', 'Approved', 'Merged', 'Closed', 'Rejected'] },
+  reviewer: { name: 'Reviewer', did: 'reviews done', of: ['Approved', 'Merged', 'Closed', 'Rejected'] },
+}
+const BASKET = { x: W / 2, y: GROUND - 6 }
 
-function loadBest() { try { return Number(JSON.parse(localStorage.getItem(KEY) || '{}').best) || 0 } catch { return 0 } }
-function skyNow(): Sky { const h = new Date().getHours(); return h >= 7 && h < 17 ? 'day' : (h >= 17 && h < 20) || (h >= 5 && h < 7) ? 'dusk' : 'night' }
+function Harvest({ beds, name, demo }: { beds: Bed[]; name: string; demo: boolean }) {
+  const ref = useRef<HTMLDivElement>(null)
+  const stageEl = useRef<HTMLDivElement>(null)
+  const view = useView(stageEl)
+  const { scrollYProgress } = useScroll({ target: ref, offset: ['start start', 'end end'] })
+  const p = useSpring(scrollYProgress, { stiffness: 120, damping: 28, mass: 0.4 })
+  const [cap, setCap] = useState(0)
+  useMotionValueEvent(p, 'change', (v) => setCap(Math.min(HARVEST.length - 1, Math.floor(v * HARVEST.length * 0.999))))
 
-function Patrol({ beds, demo }: { beds: Bed[]; demo: boolean }) {
-  const [sky, setSky] = useState<Sky>(skyNow)
-  const [rain, setRain] = useState(false)
-  const [phase, setPhase] = useState<Phase>('idle')
-  const [score, setScore] = useState(0)
-  const [best, setBest] = useState(loadBest)
-  const [combo, setCombo] = useState(0)
-  const [eaten, setEaten] = useState<Set<string>>(() => new Set())
-  const [pop, setPop] = useState<Pop | null>(null)
-  const [pings, setPings] = useState<{ id: number; x: number; y: number; n: number }[]>([])
-  const stage = useRef<HTMLDivElement>(null)
-  const view = useView(stage)
-  const layer = useRef<SVGGElement>(null)
-  const flowers = useRef<Spot[]>([])
-  const bugEls = useRef<(SVGGElement | null)[]>([])
-  const bees = useRef<BeeApi | null>(null)
-  const xs = plantXs(beds.length)
-  const lives = 3 - Math.min(3, eaten.size)
-  const g = useRef({ bugs: Array.from({ length: POOL }, (): GBug => ({ on: false, x: 0, y: 0, tx: 0, ty: 0, target: '', speed: 0, wob: 0 })), t: 0, spawn: 0, last: 0, chain: 0, eaten: new Set<string>() })
-  const xsRef = useRef(xs)
-  useEffect(() => { xsRef.current = xs })
-
-  // the game loop: bugs come up out of the soil and climb straight for a flower that's still standing
-  useEffect(() => {
-    if (phase !== 'play') return
-    const s = g.current
-    s.bugs.forEach((b) => (b.on = false)); s.t = 0; s.spawn = 1; s.eaten = new Set(); s.chain = 0; s.last = 0
-    let raf = 0, prev = performance.now()
-    const tick = (now: number) => {
-      const dt = Math.min(0.05, (now - prev) / 1000); prev = now
-      s.t += dt; s.spawn -= dt
-      const level = Math.min(10, s.t / 12)
-      const alive = flowers.current.filter((f) => !s.eaten.has(f.id))
-      if (s.spawn <= 0 && alive.length) {
-        s.spawn = Math.max(0.55, 2.1 - level * 0.16)
-        const b = s.bugs.find((x) => !x.on)
-        if (b) {
-          const f = alive[Math.floor(Math.random() * alive.length)], cols = xsRef.current
-          const from = cols[Math.floor(Math.random() * cols.length)] + (Math.random() - 0.5) * 160
-          Object.assign(b, { on: true, x: from, y: GROUND + 14, tx: f.x, ty: f.y, target: f.id, speed: 24 + level * 7 + Math.random() * 10, wob: Math.random() * 6 })
-        }
-      }
-      s.bugs.forEach((b, i) => {
-        const el = bugEls.current[i]
-        if (b.on && s.eaten.has(b.target)) { // another bug got there first: pick a new flower
-          const f = alive[Math.floor(Math.random() * alive.length)]
-          if (f) { b.target = f.id; b.tx = f.x; b.ty = f.y } else b.on = false
-        }
-        if (!b.on) { if (el) el.style.display = 'none'; return }
-        const dx = b.tx - b.x, dy = b.ty - b.y, d = Math.hypot(dx, dy)
-        if (d < 6) {
-          b.on = false; s.eaten.add(b.target)
-          setEaten(new Set(s.eaten))
-          if (s.eaten.size >= 3 || alive.length <= 1) setPhase('over')
-          return
-        }
-        b.x += (dx / d) * b.speed * dt; b.y += (dy / d) * b.speed * dt
-        if (el) {
-          el.style.display = ''
-          const ang = (Math.atan2(dy, Math.abs(dx)) * 180) / Math.PI
-          el.setAttribute('transform', `translate(${b.x.toFixed(1)} ${b.y.toFixed(1)}) scale(${dx < 0 ? -1 : 1} 1) rotate(${(ang + Math.sin(now / 90 + b.wob) * 6).toFixed(1)})`)
-        }
-      })
-      raf = requestAnimationFrame(tick)
-    }
-    raf = requestAnimationFrame(tick)
-    return () => { cancelAnimationFrame(raf); s.bugs.forEach((b, i) => { b.on = false; const el = bugEls.current[i]; if (el) el.style.display = 'none' }) }
-  }, [phase])
-
-  const finish = (final: number) => {
-    if (final > best) { setBest(final); try { localStorage.setItem(KEY, JSON.stringify({ best: final })) } catch { /* private mode */ } }
-  }
-  useEffect(() => { if (phase === 'over') finish(score) }, [phase]) // eslint-disable-line react-hooks/exhaustive-deps
-
-  const start = () => { setScore(0); setCombo(0); setEaten(new Set()); setPop(null); setPhase('play') }
-  const swat = (i: number) => {
-    if (phase !== 'play' || !g.current.bugs[i].on) return
-    bees.current?.fetch(i, () => (g.current.bugs[i].on ? { x: g.current.bugs[i].x, y: g.current.bugs[i].y } : null))
-  }
-  const caught = (i: number) => {
-    const s = g.current, b = s.bugs[i]
-    if (!b.on) return
-    b.on = false
-    const now = performance.now()
-    s.chain = now - s.last < 1600 ? s.chain + 1 : 1; s.last = now
-    const n = s.chain
-    setScore((v) => v + n); setCombo(n)
-    const m = layer.current?.getScreenCTM(), r = stage.current?.getBoundingClientRect()
-    if (m && r) {
-      const q = new DOMPoint(b.x, b.y).matrixTransform(m)
-      setPings((ps) => [...ps.slice(-5), { id: now, x: q.x - r.left, y: q.y - r.top, n }])
-      window.setTimeout(() => setPings((ps) => ps.filter((x) => x.id !== now)), 900)
-    }
-  }
-  const openPop = (e: ReactMouseEvent, item: Item, bed: string) => {
-    if (phase === 'play') return
-    e.stopPropagation()
-    const r = stage.current!.getBoundingClientRect()
-    setPop({ item, bed, x: ((e.clientX - r.left) / r.width) * 100, y: ((e.clientY - r.top) / r.height) * 100 })
-  }
+  const all = useMemo(() => beds.flatMap((b) => b.items), [beds])
+  const blooms = all.filter((i) => BLOOM.includes(i.state))
+  const waiting = all.filter((i) => i.state === 'Needs Human')
+  const dusk = useTransform(p, [0.3, 0.6, 0.75], [0, 1, 0])
+  const night = useTransform(p, [0.45, 0.62, 0.72, 0.8], [0, 1, 1, 0])
+  const sunY = useTransform(p, [0.74, 0.95], [620, 150])
+  const hint = useTransform(p, [0, 0.04], [1, 0])
+  const c = HARVEST[cap]
+  const today = waiting.length
+    ? `${waiting.length} ${waiting.length === 1 ? 'thing waits' : 'things wait'} for you, flagged in the soil. The rest of the garden is looking after itself.`
+    : 'Nothing is waiting for you. The crew has it; go enjoy the sun.'
 
   return (
-    <section className="gd-play">
-      <div className="gd-play-head">
-        <div>
-          <span className="gd-caption-k">Your turn</span>
-          <h2>Bug patrol</h2>
-          <p>Bugs are climbing for your flowers. Click one and the nearest bee carries it off. Catch them close together for a combo. Lose three flowers and it’s over.</p>
-        </div>
-        <div className="gd-bar">
-          <LayoutGroup id="gd-sky">
-            <div className="gd-seg" role="radiogroup" aria-label="Sky">
-              {(['day', 'dusk', 'night'] as Sky[]).map((s) => (
-                <button key={s} type="button" role="radio" aria-checked={sky === s} className={sky === s ? 'on' : ''} onClick={() => setSky(s)}>
-                  {sky === s && <motion.span layoutId="gd-sky-pill" className="gd-seg-pill" transition={{ type: 'spring', stiffness: 420, damping: 32 }} />}
-                  <span>{s[0].toUpperCase() + s.slice(1)}</span>
-                </button>
-              ))}
-            </div>
-          </LayoutGroup>
-          <button type="button" className={`btn btn-sm ${rain ? 'btn-dark' : 'btn-line'}`} onClick={() => setRain((r) => !r)} aria-pressed={rain}>{rain ? 'Stop the rain' : 'Make it rain'}</button>
-        </div>
-      </div>
-
-      <div ref={stage} className={`gd-stage gd-stage--play is-${sky} ${rain ? 'is-rain' : ''} ${phase === 'play' ? 'is-playing' : ''}`} onClick={() => setPop(null)}>
-        <svg viewBox={box(view)} className="gd-svg" preserveAspectRatio="xMidYMax slice">
-          <FixedSky sky={sky} rain={rain} />
-          <g ref={layer}>
+    <section ref={ref} className="gd-harvest">
+      <div className="gd-film-pin">
+        <div ref={stageEl} className="gd-stage">
+          <svg viewBox={box(view)} className="gd-svg" preserveAspectRatio="xMidYMax slice">
+            <Gradients />
+            <rect {...SKYBOX} fill="url(#gd-day)" />
+            <motion.rect {...SKYBOX} fill="url(#gd-dusk)" style={{ opacity: dusk }} />
+            <motion.rect {...SKYBOX} fill="url(#gd-night)" style={{ opacity: night }} />
+            <motion.g style={{ opacity: night }}>{STARS.map(([x, y, r], k) => <circle key={k} cx={x} cy={y} r={r} fill="#fff" className="gd-star" style={{ animationDelay: `${(k % 7) * 0.4}s` }} />)}</motion.g>
+            <motion.g style={{ x: 780, y: sunY }}><Sun /></motion.g>
+            <Clouds tone="#fff" />
             <Hills />
             <Soil />
-            {beds.map((b, k) => <Plant key={b.id} bed={b} x={xs[k]} T={Infinity} index={k} total={beds.length} flowers={flowers} eaten={eaten} onItem={openPop} bugs={phase !== 'play'} />)}
-            {Array.from({ length: POOL }, (_, i) => (
-              <g key={i} ref={(el) => { bugEls.current[i] = el }} style={{ display: 'none' }} className="gd-hit gd-gbug" onPointerDown={(e) => { e.stopPropagation(); swat(i) }}>
-                <circle r="24" fill="transparent" />
-                <BugBody />
-              </g>
-            ))}
-            <Bees api={bees} flowers={flowers} onCaught={caught} />
-            {sky === 'night' && <Fireflies />}
-          </g>
-        </svg>
-        {rain && <Rain />}
-
-        <div className="gd-hud" aria-live="polite">
-          <span className="gd-hud-score"><small>Score</small>
-            <AnimatePresence mode="popLayout" initial={false}><motion.b key={score} initial={{ y: 14, opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: -14, opacity: 0 }}>{score}</motion.b></AnimatePresence>
-          </span>
-          <span className="gd-hud-lives" aria-label={`${lives} flowers left`}>
-            {[0, 1, 2].map((k) => <motion.i key={k} initial={false} animate={{ scale: k < lives ? 1 : 0.7, opacity: k < lives ? 1 : 0.25, rotate: k < lives ? 0 : -30 }} transition={{ type: 'spring', stiffness: 400, damping: 14 }} />)}
-          </span>
-          <span className="gd-hud-best"><small>Best</small><b>{best}</b></span>
+            {ROLES.map((r, k) => <CrewBee key={r} p={p} k={k} role={r} count={all.filter((i) => CREW[r].of.includes(i.state)).length} />)}
+            <Basket p={p} total={blooms.length} />
+            {blooms.slice(-24).map((f, k, list) => <Falling key={f.id} p={p} k={k} n={list.length} id={f.id} />)}
+            {beds.slice(0, 6).map((b, k, list) => <Packet key={b.id} p={p} k={k} n={list.length} bed={b} />)}
+            {waiting.slice(0, 6).map((w, k, list) => <HarvestFlag key={w.id} p={p} k={k} n={list.length} />)}
+          </svg>
+          <div className="gd-title">
+            <h1>The harvest</h1>
+          </div>
+          {demo && <div className="gd-demo">A sample garden. <Link to="/app/repos">Add a repo</Link> and yours grows here.</div>}
+          <AnimatePresence mode="wait">
+            <motion.div key={cap} className="gd-caption" initial={{ opacity: 0, y: 24, rotate: -1 }} animate={{ opacity: 1, y: 0, rotate: 0 }} exit={{ opacity: 0, y: -16 }} transition={{ duration: 0.45, ease: easeOut }}>
+              <span className="gd-caption-k">{String(cap + 1).padStart(2, '0')} · {c.k}</span>
+              <b>{c.t(name)}</b>
+              <p>{c.b || today}</p>
+              {cap === HARVEST.length - 1 && (
+                <div className="gd-caption-go">
+                  <Link to="/app" className="btn btn-dark btn-sm">{waiting.length ? 'See what needs you' : 'Back to the overview'}</Link>
+                  <Link to="/app/fun" className="btn btn-line btn-sm">Just for fun</Link>
+                </div>
+              )}
+            </motion.div>
+          </AnimatePresence>
+          <motion.div className="gd-scrollhint" style={{ opacity: hint }} aria-hidden="true"><span>Keep scrolling</span><i /></motion.div>
+          <div className="gd-dots" aria-hidden="true">{HARVEST.map((_, k) => <i key={k} className={k === cap ? 'on' : ''} />)}</div>
         </div>
-        <AnimatePresence>
-          {combo > 1 && phase === 'play' && (
-            <motion.div key={combo} className="gd-combo" initial={{ scale: 0.4, opacity: 0, rotate: -12 }} animate={{ scale: 1, opacity: 1, rotate: 0 }} exit={{ opacity: 0, scale: 1.4 }} transition={{ type: 'spring', stiffness: 500, damping: 14 }}>
-              ×{combo} combo
-            </motion.div>
-          )}
-        </AnimatePresence>
-        {pings.map((q) => <motion.span key={q.id} className="gd-ping" style={{ left: q.x, top: q.y }} initial={{ y: 0, opacity: 1, scale: 0.6 }} animate={{ y: -46, opacity: 0, scale: 1.2 }} transition={{ duration: 0.85, ease: easeOut }}>+{q.n}</motion.span>)}
-
-        <AnimatePresence>
-          {phase !== 'play' && (
-            <motion.div className="gd-start" initial={{ opacity: 0, scale: 0.8, y: 20 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.9, y: -10 }} transition={{ type: 'spring', stiffness: 260, damping: 20 }}
-              onClick={(e) => e.stopPropagation()}>
-              {phase === 'over' ? <>
-                <span className="gd-caption-k">Game over</span>
-                <b>{score} point{score === 1 ? '' : 's'}{score > 0 && score >= best ? ' · new best!' : ''}</b>
-                <p>The bugs got three flowers. Your real ones are fine.</p>
-              </> : <>
-                <span className="gd-caption-k">Bug patrol</span>
-                <b>Guard the garden</b>
-                <p>Click a bug to send a bee.{demo ? '' : ' Before you start, click a flower to see its fix.'}</p>
-              </>}
-              <button type="button" className="btn btn-dark" onClick={start}>{phase === 'over' ? 'Play again' : 'Start'}</button>
-            </motion.div>
-          )}
-        </AnimatePresence>
-
-        <AnimatePresence>
-          {pop && (
-            <motion.div key={pop.item.id} className={`gd-pop ${pop.x > 60 ? 'is-left' : ''} ${pop.y < 40 ? 'is-low' : ''}`} style={{ left: `${pop.x}%`, top: `${pop.y}%` }}
-              initial={{ opacity: 0, scale: 0.6 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.7, transition: { duration: 0.15 } }}
-              transition={{ type: 'spring', stiffness: 420, damping: 26 }} onClick={(e) => e.stopPropagation()}>
-              <span className={`gd-pop-state is-${kindOf(pop.item.state) || 'other'}`}>{pop.item.state}</span>
-              <b>{pop.item.title}</b>
-              <span className="gd-pop-meta mono">{pop.item.id} · {pop.bed}</span>
-              {!pop.item.demo && <Link className="btn btn-dark btn-sm" to={`/app/repos/${pop.item.repoId}/tasks/${pop.item.id}`}>Open the task</Link>}
-            </motion.div>
-          )}
-        </AnimatePresence>
       </div>
     </section>
   )
+}
+
+/** One of the crew: flies in from a corner, lands on its spot and counts up what it did, then buzzes off. */
+function CrewBee({ p, k, role, count }: { p: MotionValue<number>; k: number; role: (typeof ROLES)[number]; count: number }) {
+  const from = [{ x: -120, y: -80 }, { x: W + 120, y: -60 }, { x: -120, y: 300 }, { x: W + 120, y: 320 }][k]
+  const to = { x: 200 + k * 200, y: 250 + (k % 2) * 40 }
+  const s = 0.01 + k * 0.02
+  const x = useTransform(p, [s, s + 0.06, 0.22, 0.27], [from.x, to.x, to.x, to.x + (k < 2 ? -1 : 1) * 700])
+  const y = useTransform(p, [s, s + 0.06, 0.22, 0.27], [from.y, to.y, to.y, to.y - 260])
+  const n = useTransform(p, [s + 0.05, s + 0.11], [0, count], { clamp: true })
+  const shown = useTransform(n, (v) => String(Math.round(v)))
+  const tag = useTransform(p, [s + 0.04, s + 0.06, 0.21, 0.23], [0, 1, 1, 0])
+  const c = CREW[role]
+  return (
+    <motion.g style={{ x, y }}>
+      <g className="gd-hover" style={{ animationDelay: `${-k * 0.4}s` }}>
+        <g transform="scale(2.2)">
+          <ellipse className="gd-wing" cx="-3" cy="-10" rx="6" ry="9" fill="#fff" fillOpacity=".85" stroke="#0f0f0f" strokeWidth="1.4" />
+          <ellipse className="gd-wing gd-wing--b" cx="5" cy="-10" rx="5" ry="8" fill="#fff" fillOpacity=".85" stroke="#0f0f0f" strokeWidth="1.4" />
+          <ellipse cx="0" cy="0" rx="13" ry="10" fill={`var(--${role})`} stroke="#0f0f0f" strokeWidth="1.8" />
+          <path d="M-4 -9.5v19M3 -9.5v19" stroke="#0f0f0f" strokeWidth="2.2" />
+          <circle cx="8" cy="-2" r="1.6" fill="#0f0f0f" />
+          <path d="M-13 0l-5 0" stroke="#0f0f0f" strokeWidth="1.8" strokeLinecap="round" />
+        </g>
+      </g>
+      <motion.g style={{ opacity: tag }}>
+        <rect x="-62" y="38" width="124" height="66" rx="14" fill="#0f0f0f" transform="translate(4 4)" />
+        <rect x="-62" y="38" width="124" height="66" rx="14" fill="#fff" stroke="#0f0f0f" strokeWidth="2.5" />
+        <motion.text x="0" y="78" textAnchor="middle" className="gd-count">{shown}</motion.text>
+        <text x="0" y="96" textAnchor="middle" className="gd-count-l">{c.did}</text>
+        <text x="0" y="56" textAnchor="middle" className="gd-count-l gd-count-n">{c.name}</text>
+      </motion.g>
+    </motion.g>
+  )
+}
+
+function Basket({ p, total }: { p: MotionValue<number>; total: number }) {
+  const y = useTransform(p, [0.24, 0.3, 0.48, 0.53], [260, 0, 0, 260])
+  const n = useTransform(p, [0.28, 0.46], [0, total], { clamp: true })
+  const shown = useTransform(n, (v) => `${Math.round(v)} ${Math.round(v) === 1 ? 'bloom' : 'blooms'}`)
+  return (
+    <motion.g style={{ y }}>
+      <g transform={`translate(${BASKET.x} ${BASKET.y})`}>
+        <path d="M-120 -70 Q 0 -190 120 -70" fill="none" stroke="#0f0f0f" strokeWidth="14" strokeLinecap="round" />
+        <path d="M-120 -70 Q 0 -190 120 -70" fill="none" stroke="#d9a35f" strokeWidth="8" strokeLinecap="round" />
+        <path d="M-135 -72 L 135 -72 L 105 20 L -105 20 Z" fill="#0f0f0f" transform="translate(5 5)" />
+        <path d="M-135 -72 L 135 -72 L 105 20 L -105 20 Z" fill="#e6b574" stroke="#0f0f0f" strokeWidth="3" strokeLinejoin="round" />
+        {[-40, -10, 20].map((yy) => <path key={yy} d={`M${-128 + (yy + 72) * 0.3} ${yy} L ${128 - (yy + 72) * 0.3} ${yy}`} stroke="#b9854a" strokeWidth="3" />)}
+        {[-90, -45, 0, 45, 90].map((xx) => <path key={xx} d={`M${xx * 1.05} -72 L ${xx * 0.8} 20`} stroke="#b9854a" strokeWidth="3" />)}
+        <rect x="-150" y="-80" width="300" height="16" rx="8" fill="#d9a35f" stroke="#0f0f0f" strokeWidth="3" />
+        <rect x="-78" y="-28" width="156" height="36" rx="18" fill="#fff" stroke="#0f0f0f" strokeWidth="2.5" />
+        <motion.text x="0" y="-4" textAnchor="middle" className="gd-count gd-count--sm">{shown}</motion.text>
+      </g>
+    </motion.g>
+  )
+}
+
+/** A bloom dropping into the basket, spinning as it falls, at its own moment in the scroll. */
+function Falling({ p, k, n, id }: { p: MotionValue<number>; k: number; n: number; id: string }) {
+  const s = 0.28 + (k / Math.max(1, n)) * 0.16
+  const dx = (hash(id) - 0.5) * 180
+  const x = useTransform(p, [s, s + 0.04], [BASKET.x + dx * 1.8, BASKET.x + dx], { clamp: true })
+  const y = useTransform(p, [s, s + 0.04, 0.48, 0.53], [-80, BASKET.y - 92 - (k % 3) * 10, BASKET.y - 92 - (k % 3) * 10, BASKET.y + 170])
+  const rotate = useTransform(p, [s, s + 0.04], [-200, 0], { clamp: true })
+  const opacity = useTransform(p, [s - 0.005, s], [0, 1])
+  return (
+    <motion.g style={{ x, y, rotate, opacity }}>
+      <Petals id={id} />
+    </motion.g>
+  )
+}
+
+function Petals({ id, r = 13 }: { id: string; r?: number }) {
+  const role = ROLES[Math.floor(hash(id + 'c') * 4)]
+  const petals = 5 + Math.floor(hash(id + 'p') * 3)
+  return (
+    <g>
+      {Array.from({ length: petals }, (_, k) => {
+        const a = (k / petals) * Math.PI * 2, px = Math.cos(a) * r, py = Math.sin(a) * r
+        return <ellipse key={k} cx={px} cy={py} rx={r * 0.75} ry={r * 0.55} transform={`rotate(${(a * 180) / Math.PI} ${px} ${py})`} fill={`var(--${role})`} stroke="#0f0f0f" strokeWidth="2.2" />
+      })}
+      <circle r={r * 0.62} fill="#ffd85a" stroke="#0f0f0f" strokeWidth="2.2" />
+    </g>
+  )
+}
+
+/** A seed packet for one repository, flipping up out of the soil into a fan. */
+function Packet({ p, k, n, bed }: { p: MotionValue<number>; k: number; n: number; bed: Bed }) {
+  const mid = (n - 1) / 2
+  const gap = Math.min(150, 760 / Math.max(1, n))
+  const tx = W / 2 + (k - mid) * gap
+  const s = 0.52 + (k / Math.max(1, n)) * 0.08
+  const y = useTransform(p, [s, s + 0.05, 0.72, 0.77], [700, 250 + Math.abs(k - mid) * 14, 250 + Math.abs(k - mid) * 14, 720])
+  const rotate = useTransform(p, [s, s + 0.05], [(k - mid) * 30 + 40, (k - mid) * 5], { clamp: true })
+  const flip = useTransform(p, [s + 0.02, s + 0.06], [0, 1], { clamp: true })
+  const scaleX = useTransform(flip, (v) => Math.abs(Math.cos(v * Math.PI)) * 0.98 + 0.02)
+  const front = useTransform(flip, (v) => (v > 0.5 ? 1 : 0))
+  const back = useTransform(flip, (v) => (v > 0.5 ? 0 : 1))
+  const bl = bed.items.filter((i) => BLOOM.includes(i.state)).length
+  const bu = bed.items.filter((i) => BUD.includes(i.state)).length
+  const role = ROLES[k % 4]
+  const label = bed.name.length > 13 ? bed.name.slice(0, 12) + '…' : bed.name
+  return (
+    <motion.g style={{ x: tx, y, rotate }}>
+      <motion.g style={{ scaleX }}>
+        <rect x="-62" y="-90" width="124" height="180" rx="12" fill="#0f0f0f" transform="translate(5 5)" />
+        <motion.g style={{ opacity: back }}>
+          <rect x="-62" y="-90" width="124" height="180" rx="12" fill="#f4e3c1" stroke="#0f0f0f" strokeWidth="2.5" />
+          <path d="M-62 -60 h124" stroke="#0f0f0f" strokeWidth="2" strokeDasharray="6 5" />
+          <circle cx="0" cy="10" r="26" fill={`var(--${role})`} stroke="#0f0f0f" strokeWidth="2.5" />
+        </motion.g>
+        <motion.g style={{ opacity: front }}>
+          <rect x="-62" y="-90" width="124" height="180" rx="12" fill="#fff" stroke="#0f0f0f" strokeWidth="2.5" />
+          <rect x="-62" y="-90" width="124" height="70" rx="12" fill={`var(--${role})`} stroke="#0f0f0f" strokeWidth="2.5" />
+          <g transform="translate(0 -55)"><Petals id={bed.id} r={11} /></g>
+          <text x="0" y="-2" textAnchor="middle" className="gd-count-l gd-count-n">{label}</text>
+          <text x="0" y="38" textAnchor="middle" className="gd-count">{bl}</text>
+          <text x="0" y="54" textAnchor="middle" className="gd-count-l">{bl === 1 ? 'bloom' : 'blooms'}</text>
+          <text x="0" y="76" textAnchor="middle" className="gd-count-l">{bu} {bu === 1 ? 'bud' : 'buds'} growing</text>
+        </motion.g>
+      </motion.g>
+    </motion.g>
+  )
+}
+
+function HarvestFlag({ p, k, n }: { p: MotionValue<number>; k: number; n: number }) {
+  const s = 0.8 + (k / Math.max(1, n)) * 0.06
+  const y = useTransform(p, [s, s + 0.03], [60, 0], { clamp: true })
+  const opacity = useTransform(p, [s, s + 0.02], [0, 1], { clamp: true })
+  return <motion.g style={{ y, opacity }}><Flag x={W / 2 - ((n - 1) / 2) * 60 + k * 60} y={GROUND + 4} /></motion.g>
 }
 
 /* ------------------------------------------------------------------ one plant per repo */
@@ -692,30 +697,6 @@ function MovingSky({ phase }: { phase: MotionValue<number> }) {
   )
 }
 
-function FixedSky({ sky, rain }: { sky: Sky; rain: boolean }) {
-  const pos = sky === 'day' ? { x: 800, y: 130 } : sky === 'dusk' ? { x: 870, y: 290 } : { x: 190, y: 140 }
-  return (
-    <>
-      <Gradients />
-      <rect {...SKYBOX} fill="url(#gd-day)" />
-      <motion.rect {...SKYBOX} fill="url(#gd-dusk)" initial={false} animate={{ opacity: sky === 'dusk' ? 1 : 0 }} transition={{ duration: 1.2 }} />
-      <motion.rect {...SKYBOX} fill="url(#gd-night)" initial={false} animate={{ opacity: sky === 'night' ? 1 : 0 }} transition={{ duration: 1.2 }} />
-      <motion.rect {...SKYBOX} fill="#3a4658" initial={false} animate={{ opacity: rain ? (sky === 'night' ? 0.25 : 0.4) : 0 }} transition={{ duration: 1 }} />
-      <motion.g initial={false} animate={{ opacity: sky === 'night' ? 1 : 0 }} transition={{ duration: 1.2 }}>
-        {STARS.map(([x, y, r], k) => <circle key={k} cx={x} cy={y} r={r} fill="#fff" className="gd-star" style={{ animationDelay: `${(k % 7) * 0.4}s` }} />)}
-      </motion.g>
-      <motion.g initial={false} animate={{ x: pos.x, y: pos.y }} transition={{ type: 'spring', stiffness: 40, damping: 14 }}>
-        <AnimatePresence mode="wait" initial={false}>
-          <motion.g key={sky === 'night' ? 'moon' : 'sun'} initial={{ scale: 0, rotate: -60 }} animate={{ scale: 1, rotate: 0 }} exit={{ scale: 0 }} transition={{ type: 'spring', stiffness: 200, damping: 14 }}>
-            {sky === 'night' ? <Moon /> : <Sun dusk={sky === 'dusk'} />}
-          </motion.g>
-        </AnimatePresence>
-      </motion.g>
-      <Clouds tone={rain ? '#9aa6b5' : sky === 'night' ? '#39406e' : '#fff'} />
-    </>
-  )
-}
-
 function Sun({ dusk }: { dusk?: boolean }) {
   return (
     <g>
@@ -784,10 +765,6 @@ function Fireflies() {
       })}
     </g>
   )
-}
-
-function Rain() {
-  return <div className="gd-rain" aria-hidden="true">{Array.from({ length: 70 }, (_, k) => <i key={k} style={{ left: `${(k * 37) % 100}%`, animationDelay: `${-(k % 10) * 0.09}s`, animationDuration: `${0.5 + (k % 5) * 0.08}s` }} />)}</div>
 }
 
 const SKYBOX = { x: -1200, y: -1600, width: 3400, height: H + 1800 }

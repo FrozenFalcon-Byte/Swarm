@@ -1,12 +1,5 @@
 /* The Garden (Garden.tsx) */
 
-.gd-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
-.gd-bar .btn { display: inline-flex; align-items: center; gap: 7px; }
-.gd-seg { display: inline-flex; padding: 3px; border: 2px solid var(--ink); border-radius: var(--pill); background: var(--white); box-shadow: 3px 3px 0 var(--ink); }
-.gd-seg button { position: relative; border: 0; background: none; padding: 6px 13px; border-radius: var(--pill); font: 600 13px/1 inherit; color: var(--ink-2); cursor: pointer; }
-.gd-seg button > span:last-child { position: relative; }
-.gd-seg button.on { color: #0f0f0f; }
-.gd-seg-pill { position: absolute; inset: 0; border-radius: var(--pill); background: var(--triager); border: 2px solid var(--ink); }
 
 .gd-stage {
   position: relative; overflow: hidden; border: 2.5px solid var(--ink); border-radius: var(--radius-xl);
@@ -72,21 +65,6 @@
 }
 .gd-demo a { color: inherit; font-weight: 700; }
 
-.gd-pop {
-  position: absolute; z-index: 3; width: min(280px, 70%); translate: 14px -50%; transform-origin: left center;
-  display: flex; flex-direction: column; align-items: flex-start; gap: 6px; padding: 12px 14px;
-  background: var(--white); color: var(--ink); border: 2px solid var(--ink); border-radius: var(--radius-lg); box-shadow: 4px 4px 0 var(--ink);
-}
-.gd-pop.is-left { translate: calc(-100% - 14px) -50%; transform-origin: right center; }
-.gd-pop.is-low { translate: 14px 0; }
-.gd-pop.is-left.is-low { translate: calc(-100% - 14px) 0; }
-.gd-pop b { font-size: 15px; line-height: 1.3; }
-.gd-pop-meta { font-size: 11.5px; color: var(--ink-3); }
-.gd-pop-state { font: 700 11px/1 var(--font-mono); padding: 4px 8px; border: 1.5px solid var(--ink); border-radius: var(--pill); background: var(--grey-8); color: #0f0f0f; }
-.gd-pop-state.is-flower { background: var(--reviewer); }
-.gd-pop-state.is-bud { background: var(--coder); }
-.gd-pop-state.is-wilt { background: #e2c79a; }
-.gd-pop-state.is-other { background: var(--tester); }
 
 
 @media (prefers-reduced-motion: reduce) {
@@ -119,29 +97,17 @@ html.less-motion .gd-plant, html.less-motion .gd-cloud, html.less-motion .gd-rai
 .gd-dots i { width: 10px; height: 10px; border-radius: 50%; border: 2px solid var(--ink); background: var(--white); transition: background .3s, scale .3s var(--ease-out); }
 .gd-dots i.on { background: var(--triager); scale: 1.35; }
 
-/* part two: bug patrol */
-.gd-play { display: flex; flex-direction: column; gap: 12px; margin: 40px 0 8px; container-type: inline-size; height: calc(var(--win-h, 100svh) / var(--main-zoom, 1) - 64px); min-height: 420px; scroll-margin-top: 32px; }
-.gd-play-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
-.gd-play-head h2 { font-size: clamp(30px, 3.4vw, 44px); letter-spacing: -0.03em; line-height: 1; margin: 6px 0 8px; }
-.gd-play-head p { margin: 0; max-width: 60ch; color: var(--ink-2); }
-.gd-stage--play { flex: 1 1 0; min-height: 300px; max-height: 66cqi; }
-.gd-stage--play.is-playing { cursor: crosshair; }
-.gd-gbug:hover { filter: drop-shadow(0 0 6px #ff8a7a); }
-.gd-hud { position: absolute; left: 14px; right: 14px; top: 14px; display: flex; align-items: center; gap: 10px; pointer-events: none; }
-.gd-hud > span { display: inline-flex; align-items: center; gap: 8px; padding: 7px 12px; background: var(--white); color: var(--ink); border: 2px solid var(--ink); border-radius: var(--pill); box-shadow: 3px 3px 0 var(--ink); }
-.gd-hud small { font: 700 10px/1 var(--font-mono); letter-spacing: .1em; text-transform: uppercase; color: var(--ink-3); }
-.gd-hud b { display: inline-block; font: 800 18px/1 var(--font-mono); min-width: 1.2ch; }
-.gd-hud-best { margin-left: auto; }
-.gd-hud-lives i { width: 16px; height: 16px; border-radius: 50%; background: var(--triager); border: 2px solid var(--ink); box-shadow: inset 0 0 0 3px #ffd85a; }
-.gd-combo { position: absolute; left: 50%; top: 70px; translate: -50% 0; padding: 8px 16px; font: 900 20px/1 var(--font-mono); background: var(--tester); color: #0f0f0f; border: 2.5px solid var(--ink); border-radius: var(--pill); box-shadow: 4px 4px 0 var(--ink); pointer-events: none; }
-.gd-ping { position: absolute; translate: -50% -50%; font: 900 18px/1 var(--font-mono); color: #0f0f0f; -webkit-text-stroke: 0; text-shadow: 2px 2px 0 #fff; pointer-events: none; }
-.gd-start {
-  position: absolute; left: 50%; top: 50%; translate: -50% -60%; width: min(360px, calc(100% - 32px)); z-index: 4;
-  display: flex; flex-direction: column; align-items: center; text-align: center; gap: 8px; padding: 22px 22px 20px;
-  background: var(--white); color: var(--ink); border: 2.5px solid var(--ink); border-radius: var(--radius-xl); box-shadow: 6px 7px 0 var(--ink);
-}
-.gd-start b { font-size: 24px; letter-spacing: -0.02em; }
-.gd-start p { margin: 0 0 6px; color: var(--ink-2); font-size: 14px; }
+/* part two: the harvest */
+.gd-harvest { position: relative; height: 520svh; margin-top: 24px; }
+.gd-count { font: 800 30px/1 var(--font-mono); fill: #0f0f0f; }
+.gd-count--sm { font-size: 17px; }
+.gd-count-l { font: 700 11px/1 var(--font-mono); letter-spacing: .06em; fill: #555; }
+.gd-count-n { fill: #0f0f0f; font-size: 12.5px; letter-spacing: .04em; }
+.gd-hover { animation: gd-hover 1.4s ease-in-out infinite alternate; }
+@keyframes gd-hover { to { translate: 0 -10px; } }
+.gd-caption-go { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 6px; }
+@media (prefers-reduced-motion: reduce) { .gd-hover { animation: none; } }
+html.less-motion .gd-hover { animation: none; }
 
 @media (max-width: 760px) {
   .gd-film-pin { top: 68px; height: calc(var(--win-h, 100svh) / var(--main-zoom, 1) - 92px); }
@@ -150,13 +116,9 @@ html.less-motion .gd-plant, html.less-motion .gd-cloud, html.less-motion .gd-rai
   .gd-film .gd-clock { top: 60px; }
   .gd-caption { min-width: 0; }
   .gd-film-pin .gd-stage { height: min(calc(var(--win-h, 100svh) / var(--main-zoom, 1) - 92px), 150cqi); }
-  .gd-play { height: auto; min-height: 0; }
-  .gd-stage--play { flex: none; height: min(78svh, 620px, 130cqi); max-height: none; }
   .gd-caption { left: 10px; right: 10px; top: auto; bottom: 10px; width: auto; min-width: 0; padding: 12px 14px; }
   .gd-caption p { font-size: 13px; }
   .gd-dots { display: none; }
-  .gd-play-head { flex-direction: column; align-items: flex-start; }
-  .gd-seg button { padding: 6px 9px; font-size: 12px; }
   .gd-clock { left: 10px; top: 10px; min-width: 0; }
   .gd-demo { top: 10px; bottom: auto; right: 10px; font-size: 11px; padding: 6px 10px; }
 }
