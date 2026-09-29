@@ -79,29 +79,27 @@ export function takeOverBoot(): BootDot[] | null {
 const sleep = (ms: number) => new Promise<void>((r) => window.setTimeout(r, ms))
 const EASE = 'cubic-bezier(0.65, 0, 0.35, 1)'
 
-/** The exit: the four dots gather in the middle, each floods the screen in its colour in turn, then a
- *  hole opens in the middle of the colours and widens until the app underneath is all there is. */
+/** The exit: the four dots gather in the middle, pop, and the screen fades onto the app, which rises in behind it.
+ *  Only transform and opacity move, so it runs on the compositor and stays smooth while the app is still busy mounting. */
 async function exit(boot: HTMLElement) {
   const html = document.documentElement
   const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches || html.classList.contains('less-motion')
-  const canHole = typeof CSS !== 'undefined' && CSS.supports?.('mask-image', 'radial-gradient(circle, transparent 1px, #000 2px)') && !!boot.animate
-  if (reduce || !canHole) {
+  if (reduce || !boot.animate) {
     html.classList.add('booting-in')
-    boot.style.transition = 'opacity 0.45s ease'
+    boot.style.transition = 'opacity 0.35s ease'
     boot.style.opacity = '0'
-    await sleep(500)
+    await sleep(380)
     boot.remove()
     window.setTimeout(() => html.classList.remove('booting-in'), 1200)
     return
   }
   const cx = window.innerWidth / 2, cy = window.innerHeight / 2
-  const cover = Math.hypot(window.innerWidth, window.innerHeight) / 2 * 1.12 + 60 // well past the corners, so none peek out
-  // swap the orbiting dots for fixed "washes" in exactly the same places, so nothing jumps
+  // swap the orbiting dots for fixed copies in exactly the same places, so nothing jumps
   const washes = [...boot.querySelectorAll<HTMLElement>('.boot-dot')].map((dot) => {
     const r = dot.getBoundingClientRect()
     const w = document.createElement('i')
     w.className = 'boot-wash'
-    Object.assign(w.style, { left: `${cx - r.width / 2}px`, top: `${cy - r.height / 2}px`, width: `${r.width}px`, height: `${r.height}px`, background: getComputedStyle(dot).backgroundColor })
+    Object.assign(w.style, { left: `${cx - r.width / 2}px`, top: `${cy - r.height / 2}px`, width: `${r.width}px`, height: `${r.height}px`, background: getComputedStyle(dot).backgroundColor, willChange: 'transform' })
     w.dataset.dx = String(r.left + r.width / 2 - cx)
     w.dataset.dy = String(r.top + r.height / 2 - cy)
     return w
@@ -109,27 +107,19 @@ async function exit(boot: HTMLElement) {
   const inner = boot.querySelector<HTMLElement>('.boot-in')
   washes.forEach((w) => boot.appendChild(w))
   if (inner) inner.style.visibility = 'hidden'
-  const radius = parseFloat(washes[0]?.style.width || '34') / 2
-  // 1. gather
+  // 1. gather, fanned out a little so they land as a tidy cluster
+  const fan = [[-11, -11], [11, -11], [11, 11], [-11, 11]]
   await Promise.all(washes.map((w, k) => w.animate(
-    [{ transform: `translate(${w.dataset.dx}px, ${w.dataset.dy}px) scale(1)` }, { transform: 'translate(0, 0) scale(1.15)', offset: 0.8 }, { transform: 'translate(0, 0) scale(1)' }],
-    { duration: 420, delay: k * 40, easing: EASE, fill: 'forwards' }).finished))
-  // 2. flood, one colour after another. The circle grows by its real size, not a transform: scaling a 34px dot
-  //    thirty times over stretches its bitmap, which shows as a blurry, jagged edge on phones.
-  const box = (r: number) => ({ left: `${cx - r}px`, top: `${cy - r}px`, width: `${r * 2}px`, height: `${r * 2}px` })
-  const floods = washes.map((w, k) => w.animate([{ ...box(radius), transform: 'none' }, { ...box(cover), transform: 'none' }],
-    { duration: 640, delay: k * 110, easing: 'cubic-bezier(0.7, 0, 0.2, 1)', fill: 'forwards' }).finished)
-  // wait for the last colour to cover every corner, then make it the whole screen: the colours beneath are
-  // gone, so none of them can show at an edge while the hole opens
-  await Promise.all(floods)
-  const last = washes[washes.length - 1]
-  if (last) boot.style.background = last.style.background
-  washes.forEach((w) => w.remove())
-  // 3. open a hole onto the app, which rises into place behind it
+    [{ transform: `translate(${w.dataset.dx}px, ${w.dataset.dy}px)` }, { transform: `translate(${fan[k][0]}px, ${fan[k][1]}px)` }],
+    { duration: 380, delay: k * 35, easing: EASE, fill: 'forwards' }).finished))
+  // 2. pop outwards and away while the screen fades onto the app
   html.classList.add('booting-in')
-  boot.classList.add('boot--hole')
-  const hole = boot.animate([{ '--hole': '0px' } as Keyframe, { '--hole': `${cover}px` } as Keyframe], { duration: 760, easing: 'cubic-bezier(0.6, 0, 0.2, 1)', fill: 'forwards' })
-  await hole.finished
+  washes.forEach((w, k) => w.animate(
+    [{ transform: `translate(${fan[k][0]}px, ${fan[k][1]}px) scale(1)`, opacity: 1 },
+      { transform: `translate(${fan[k][0] * 5}px, ${fan[k][1] * 5}px) scale(1.5)`, opacity: 1, offset: 0.45 },
+      { transform: `translate(${fan[k][0] * 9}px, ${fan[k][1] * 9}px) scale(0)`, opacity: 0 }],
+    { duration: 520, easing: 'cubic-bezier(0.3, 0, 0.2, 1)', fill: 'forwards' }))
+  await boot.animate([{ opacity: 1 }, { opacity: 1, offset: 0.35 }, { opacity: 0 }], { duration: 560, easing: 'ease-out', fill: 'forwards' }).finished
   boot.remove()
   window.setTimeout(() => html.classList.remove('booting-in'), 1100)
 }

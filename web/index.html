@@ -24,8 +24,7 @@
     <title>Swarm</title>
     <style>
       /* boot screen: on screen before any JS. Four agent dots chase each other round a square;
-         lib/boot.ts plays the exit (they gather, flood the screen in turn, and a hole opens onto the app). */
-      @property --hole { syntax: '<length>'; inherits: false; initial-value: 0px; }
+         lib/boot.ts plays the exit (they gather, pop, and the screen fades onto the app). */
       #boot { position: fixed; inset: 0; z-index: 400; display: grid; place-items: center; background: #fff; overflow: hidden; }
       #boot .boot-in { display: flex; flex-direction: column; align-items: center; gap: 30px; }
       #boot .boot-dots { position: relative; width: 108px; height: 108px; }
@@ -46,7 +45,6 @@
       #boot .boot-word { font: 600 15px/1 "Schibsted Grotesk", system-ui, sans-serif; letter-spacing: 0.01em; color: #8a8f8a; animation: boot-breathe 1.8s ease-in-out infinite; }
       @keyframes boot-breathe { 0%, 100% { opacity: 0.45; } 50% { opacity: 1; } }
       #boot .boot-wash { position: fixed; border-radius: 50%; border: 3px solid #0f0f0f; box-sizing: border-box; }
-      #boot.boot--hole { -webkit-mask-image: radial-gradient(circle at 50% 50%, transparent var(--hole), #000 calc(var(--hole) + 1px)); mask-image: radial-gradient(circle at 50% 50%, transparent var(--hole), #000 calc(var(--hole) + 1px)); }
       html[data-theme="dark"] body { background: #121212; }
       html[data-theme="dark"] #boot { background: #121212; }
       html[data-theme="dark"] #boot .boot-dot, html[data-theme="dark"] #boot .boot-wash { border-color: #121212; }
