@@ -1,4 +1,4 @@
-import { AnimatePresence, LayoutGroup, motion, useMotionValueEvent, useScroll, useSpring, useTransform, type MotionValue } from 'motion/react'
+import { AnimatePresence, LayoutGroup, motion, useMotionValueEvent, useScroll, useTransform, type MotionValue } from 'motion/react'
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { Link } from 'react-router-dom'
 import { CodeWindow } from '../../components/CodeWindow'
@@ -24,11 +24,8 @@ const inView = { initial: { opacity: 0, y: 26 }, whileInView: { opacity: 1, y: 0
 
 export default function A2aGuide() {
   const active = useSpy(IDS)
-  const { scrollYProgress } = useScroll()
-  const bar = useSpring(scrollYProgress, { stiffness: 200, damping: 30, mass: 0.3 })
   return (
     <div className="page a2a">
-      <motion.div className="a2a-progress" style={{ scaleX: bar }} aria-hidden="true" />
       <Hero />
       <div className="a2a-body">
         <nav className="a2a-toc" aria-label="Chapters">

@@ -1,7 +1,6 @@
 /* A2A, explained (pages/app/A2aGuide.tsx). Chapters on the left rail, films pinned while you scroll. */
 .a2a { gap: 0; }
 .a2a code { font: 600 0.88em var(--font-mono); background: var(--grey-8); border: 1.5px solid var(--line-soft); border-radius: 6px; padding: 1px 5px; }
-.a2a-progress { position: sticky; top: 0; z-index: 5; height: 5px; margin: 0 0 -5px; border-radius: 0 0 4px 4px; background: linear-gradient(90deg, var(--triager), var(--coder), var(--tester), var(--reviewer)); transform-origin: 0 50%; border-bottom: 1.5px solid var(--ink); }
 .a2a-kicker { font-size: 12px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink-3); display: inline-flex; align-items: center; gap: 8px; }
 .a2a-dot { width: 10px; height: 10px; border-radius: 50%; background: var(--accent); border: 2px solid var(--ink); animation: a2a-pulse 1.6s ease-in-out infinite; }
 @keyframes a2a-pulse { 50% { transform: scale(1.35); } }
