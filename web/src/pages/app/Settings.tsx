@@ -5,7 +5,7 @@ import { Roll } from '../../components/Roll'
 import { useToast } from '../../components/Island'
 import { API_URL, MCP_URL } from '../../lib/api'
 import { friendlyAuthError, useAuth } from '../../lib/auth'
-import { createMcpToken, onlineWorker, queueRun, removeRepo, revokeMcpToken, setAutoSync, useGithubLink, useMcpTokens, useRepos, useWorkers } from '../../lib/data'
+import { createMcpToken, onCallWorker, onlineWorker, queueRun, removeRepo, revokeMcpToken, setAutoSync, useGithubLink, useMcpTokens, useRepos, useWorkers } from '../../lib/data'
 import type { Repo } from '../../lib/types'
 import { PanelLayout, usePanel, type PanelItem } from '../../components/PanelLayout'
 import { firebaseInfo } from '../../lib/firebase'
@@ -32,12 +32,15 @@ export default function Settings() {
   const { data: repos } = useRepos(user?.uid)
   const link = useGithubLink(user?.uid)
   const { data: tokens } = useMcpTokens(user?.uid)
-  const worker = onlineWorker(workers)
+  const live = onlineWorker(workers)
+  const onCall = live ? undefined : onCallWorker(workers)
+  const worker = live || onCall
+  const wState = live ? (live.mode === 'scheduled' ? 'scheduled' : 'online') : onCall ? 'on call' : 'offline'
   const [tab, setTab] = usePanel(SECTIONS, 'connections')
   const status: { label: string; value: string; tone: 'ok' | 'warn' | 'bad'; to: string }[] = [
     { label: 'Firebase', value: firebaseInfo.usingEmulators ? 'emulators' : 'live', tone: firebaseInfo.usingEmulators ? 'warn' : 'ok', to: 'connections' },
     { label: 'GitHub', value: link ? `@${link.login}` : link === undefined ? '…' : 'not connected', tone: link ? 'ok' : 'warn', to: 'connections' },
-    { label: 'Worker', value: worker ? (worker.mode === 'scheduled' ? 'scheduled' : 'online') : 'offline', tone: worker ? 'ok' : 'bad', to: 'connections' },
+    { label: 'Worker', value: wState, tone: worker ? 'ok' : 'bad', to: 'connections' },
     { label: 'Models', value: worker?.llm?.active || (worker ? 'heuristics' : 'unknown'), tone: worker?.llm?.active ? 'ok' : 'warn', to: 'connections' },
   ]
   const items = SECTIONS.map((s) => ({ ...s, badge: s.id === 'repos' ? <span className="pl-badge">{repos.length}</span> : s.id === 'ai' && tokens.length ? <span className="pl-badge">{tokens.length}</span> : undefined }))
@@ -62,8 +65,10 @@ export default function Settings() {
             <div className="conn-list">
               <FirebaseRow />
               <GithubRow />
-              <Conn name="Worker" tone={worker ? 'ok' : 'bad'} state={worker ? (worker.mode === 'scheduled' ? 'scheduled' : 'online') : 'offline'}
-                detail={worker
+              <Conn name="Worker" tone={worker ? 'ok' : 'bad'} state={wState}
+                detail={onCall
+                  ? `Starts when there's work: queue a run or merge a fix and a pass begins within a minute or two. Last pass ${timeAgo(onCall.lastSeen)} (${onCall.id} · ${onCall.sandbox} sandbox).`
+                  : worker
                   ? `${worker.id} · ${worker.sandbox} sandbox · ${worker.mode === 'scheduled' ? `last pass ${timeAgo(worker.lastSeen)}, runs on a schedule` : `checked in ${timeAgo(worker.lastSeen)}`}${worker.syncMinutes && worker.mode !== 'scheduled' ? ` · looks for new issues every ${worker.syncMinutes} min` : ''}`
                   : <>Runs wait in the queue until a worker picks them up. Start one with <code>swarm worker</code>, or see <Link className="link" to="/app/help">Help</Link> for Render and GitHub Actions.</>} />
               <Conn name="Models" tone={worker?.llm?.active ? 'ok' : 'warn'} state={worker?.llm?.active ? 'ready' : worker ? 'heuristics' : 'unknown'}

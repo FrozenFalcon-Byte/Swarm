@@ -92,6 +92,14 @@ export function onlineWorker(workers: WorkerInfo[]): WorkerInfo | undefined {
   return workers.find((w) => age(w) < 60_000) || workers.find((w) => w.mode === 'scheduled' && age(w) < 30 * 60_000)
 }
 
+/** A scheduled worker (GitHub Actions) between passes: nothing's running, but queued work starts a pass through
+ *  the hub within a minute or two. Counts while its last pass was within the last day. */
+export function onCallWorker(workers: WorkerInfo[]): WorkerInfo | undefined {
+  const now = Date.now()
+  return workers.filter((w) => w.mode === 'scheduled' && w.lastSeen && now - w.lastSeen.toDate().getTime() < 24 * 3600_000)
+    .sort((a, b) => b.lastSeen!.toDate().getTime() - a.lastSeen!.toDate().getTime())[0]
+}
+
 export function useActionStatus(repoId: string | undefined) {
   return useLiveQuery<{ id: string; status: string; type: string; taskId: string; error?: string; result?: string }>(
     () => repoId ? query(collection(db, 'repos', repoId, 'actions'), orderBy('createdAt', 'desc'), limit(10)) : null,

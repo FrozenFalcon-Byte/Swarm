@@ -26,7 +26,7 @@ export const HEADLINE: Record<AlertKind, string> = {
 export type Toaster = { ok(t: string, b?: string): number; info(t: string, b?: string): number; error(t: string, b?: string): number }
 
 /** Deliver one alert the way the settings ask: a browser notification while Swarm is in the background,
- *  a note in the app while it's in front, and a pop with either if sounds are on. */
+ *  a note in the app while it's in front, and a sound with either if sounds are on. */
 export function deliver(prefs: Prefs | undefined, toast: Toaster, kind: AlertKind, body: string, href?: string) {
   const meta = ALERT_KINDS.find((k) => k.id === kind)!
   let shown = false
@@ -40,6 +40,7 @@ export function deliver(prefs: Prefs | undefined, toast: Toaster, kind: AlertKin
     toast[meta.tone](HEADLINE[kind], body)
     shown = true
   }
-  if (shown && prefs?.alertSound) pop(kind === 'rejected' ? 0.8 : 1.2)
+  // a note in Swarm chimes by itself when sounds are on (Island); a browser notification gets a pop
+  if (shown && document.hidden && (prefs?.alertSound || prefs?.toastLook?.sound)) pop(kind === 'rejected' ? 0.8 : 1.2)
   return shown
 }

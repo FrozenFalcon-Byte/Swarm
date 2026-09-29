@@ -144,31 +144,14 @@ export function Seg<T extends string>({ id, value, onPick, options }: { id: stri
 export function Preferences({ prefs }: { prefs: Prefs }) {
   const { user } = useAuth()
   const toast = useToast()
-  const [perm, setPerm] = useState(() => (typeof Notification === 'undefined' ? 'unsupported' : Notification.permission))
   const save = async (patch: Prefs, msg = 'Saved') => {
     if (!user) return
     try { await savePrefs(user.uid, patch); toast.ok(msg) } catch { toast.error('Couldn’t save that', 'Check your connection and try again.') }
   }
-  const toggleNotify = async (on: boolean) => {
-    if (on && perm !== 'granted') {
-      if (perm === 'unsupported') return toast.error('Not available here', 'This browser can’t show notifications.')
-      const p = await Notification.requestPermission()
-      setPerm(p)
-      if (p !== 'granted') return toast.error('Notifications are blocked', 'Allow them for this site in your browser settings.')
-    }
-    await save({ notify: on }, on ? 'Notifications on' : 'Notifications off')
-    if (on) new Notification('Swarm', { body: 'You’ll hear from us when a fix is waiting for you.', icon: '/favicon.svg' })
-  }
   const start = prefs.startPage ?? 'overview'
   return (
-    <Section title="Preferences" action={<Link to="/app/settings?tab=appearance" className="link">Looks and motion are in Settings → Appearance</Link>}>
+    <Section title="Preferences" action={<span className="muted">Looks are in <Link to="/app/settings?tab=appearance" className="link">Appearance</Link>, alerts in <Link to="/app/settings?tab=alerts" className="link">Notifications</Link></span>}>
       <div className="prefs">
-        <PrefRow title="Notify me when something needs me" text="A browser notification when a fix is approved or a task asks for you, while Swarm is open in a background tab.">
-          <label className="toggle">
-            <input type="checkbox" checked={!!prefs.notify && perm === 'granted'} onChange={(e) => void toggleNotify(e.target.checked)} />
-            <span className="toggle-track"><span className="toggle-thumb" /></span>
-          </label>
-        </PrefRow>
         <PrefRow title="Open on" text="Where the dashboard takes you when you sign in.">
           <div className="seg">
             {([['overview', 'Overview'], ['repos', 'Repositories'], ['last', 'Last repo I opened']] as const).map(([id, label]) => (
