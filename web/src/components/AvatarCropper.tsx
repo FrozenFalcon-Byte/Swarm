@@ -122,8 +122,8 @@ function CropDialog({ file, onCancel, onSave }: { file: File; onCancel: () => vo
   return (
     <motion.div className="modal" role="dialog" aria-label="Crop your picture" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
       <motion.div className="scrim" onClick={busy ? undefined : onCancel} />
-      <motion.div className="crop" initial={{ y: 40, scale: 0.94, opacity: 0 }} animate={{ y: 0, scale: 1, opacity: 1 }} exit={{ y: 24, scale: 0.97, opacity: 0 }}
-        transition={{ type: 'spring', stiffness: 260, damping: 26 }}>
+      <motion.div className="crop" initial={{ y: 40, scale: 0.94, opacity: 0, filter: 'blur(10px)' }} animate={{ y: 0, scale: 1, opacity: 1, filter: 'blur(0px)', transitionEnd: { filter: 'none' } }} exit={{ y: 24, scale: 0.97, opacity: 0, filter: 'blur(6px)' }}
+        transition={{ type: 'spring', stiffness: 260, damping: 26, filter: { duration: 0.35, ease: 'easeOut' } }}>
         <header className="crop-head"><h3>Position your picture</h3><p>Drag to move. Pinch, scroll or use the slider to zoom.</p></header>
         <div className="crop-stage" style={{ width: STAGE, height: STAGE }}
           onPointerDown={down} onPointerMove={move} onPointerUp={up} onPointerCancel={up}

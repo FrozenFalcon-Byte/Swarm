@@ -131,8 +131,8 @@ export default function RewindPopup({ onClose }: { onClose: () => void }) {
       initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0, transition: { duration: 0.35, delay: 0.1 } }} transition={{ duration: 0.3 }}>
       <div className="rw-pop-back" onClick={onClose} />
       <motion.div className="rw-pop-card"
-        initial={calm() ? { opacity: 0 } : { opacity: 0, scale: 0.7, y: 60, rotate: -3 }} animate={{ opacity: 1, scale: 1, y: 0, rotate: 0 }}
-        exit={calm() ? { opacity: 0 } : { opacity: 0, scale: 0.85, y: 40, rotate: 2 }} transition={{ type: 'spring', stiffness: 150, damping: 18 }}>
+        initial={calm() ? { opacity: 0 } : { opacity: 0, scale: 0.7, y: 60, rotate: -3, filter: 'blur(12px)' }} animate={{ opacity: 1, scale: 1, y: 0, rotate: 0, filter: 'blur(0px)', transitionEnd: { filter: 'none' } }}
+        exit={calm() ? { opacity: 0 } : { opacity: 0, scale: 0.85, y: 40, rotate: 2, filter: 'blur(8px)' }} transition={{ type: 'spring', stiffness: 150, damping: 18, filter: { duration: 0.45, ease: 'easeOut' } }}>
         <div className="rw-pop-head">
           <motion.span className="rw-pop-tag" initial={{ scale: 0, rotate: -20 }} animate={{ scale: 1, rotate: -4 }} transition={{ type: 'spring', stiffness: 400, damping: 14, delay: 0.35 }}>Weekly Rewind</motion.span>
           <span className="rw-pop-title">Your week with the swarm</span>
@@ -304,7 +304,8 @@ function Intro({ s, first, period }: { s: Stats; first: string; period: Period }
       </div>
       <div className="rw-art rw-intro-art">
         {AGENTS.map((a, i) => (
-          <motion.div key={a} className="rw-hop" initial={{ y: -420, rotate: -40 }} animate={{ y: 0, rotate: 0 }} transition={{ type: 'spring', stiffness: 110, damping: 11, delay: 0.5 + i * 0.16 }}>
+          <motion.div key={a} className="rw-hop" initial={{ y: -420, rotate: -40, filter: 'blur(8px)' }} animate={{ y: 0, rotate: 0, filter: 'blur(0px)', transitionEnd: { filter: 'none' } }}
+            transition={{ type: 'spring', stiffness: 110, damping: 11, delay: 0.5 + i * 0.16, filter: { duration: 0.5, ease: 'easeIn', delay: 0.5 + i * 0.16 } }}>
             <motion.div animate={{ y: [0, -22, 0], scaleY: [1, 1.06, 1] }} transition={{ repeat: Infinity, duration: 1.1, delay: 1.8 + i * 0.16, ease: 'easeInOut' }}>
               <Bot agent={a} size={92} />
             </motion.div>
@@ -476,8 +477,8 @@ function Tough({ s }: { s: Stats }) {
           transition={{ duration: end, ease: 'easeInOut', delay: 0.7 }}>
           <i /><b /><b />
         </motion.div>
-        <motion.span className="rw-stamp" style={{ background: stamp[1] }} initial={{ scale: 3, opacity: 0, rotate: -30 }} animate={{ scale: 1, opacity: 1, rotate: -8 }}
-          transition={{ type: 'spring', stiffness: 300, damping: 14, delay: 0.8 + end }}>{stamp[0]}</motion.span>
+        <motion.span className="rw-stamp" style={{ background: stamp[1] }} initial={{ scale: 3, opacity: 0, rotate: -30, filter: 'blur(10px)' }} animate={{ scale: 1, opacity: 1, rotate: -8, filter: 'blur(0px)', transitionEnd: { filter: 'none' } }}
+          transition={{ type: 'spring', stiffness: 300, damping: 14, delay: 0.8 + end, filter: { duration: 0.25, ease: 'easeIn', delay: 0.8 + end } }}>{stamp[0]}</motion.span>
       </div>
     </>
   )
@@ -517,8 +518,8 @@ function Waiting({ s }: { s: Stats }) {
           <>
             <div className="rw-stack">
               {s.waiting.slice(0, 3).map((w, i) => (
-                <motion.div key={w.to} className="rw-ticket" initial={{ y: 200, opacity: 0, rotate: 0 }} animate={{ y: i * 18, opacity: 1, rotate: (i - 1) * 4 }}
-                  transition={{ type: 'spring', stiffness: 140, damping: 16, delay: 0.5 + i * 0.15 }} style={{ zIndex: 3 - i }}>
+                <motion.div key={w.to} className="rw-ticket" initial={{ y: 200, opacity: 0, rotate: 0, filter: 'blur(8px)' }} animate={{ y: i * 18, opacity: 1, rotate: (i - 1) * 4, filter: 'blur(0px)', transitionEnd: { filter: 'none' } }}
+                  transition={{ type: 'spring', stiffness: 140, damping: 16, delay: 0.5 + i * 0.15, filter: { duration: 0.45, ease: 'easeOut', delay: 0.5 + i * 0.15 } }} style={{ zIndex: 3 - i }}>
                   <span className={`rw-pill ${w.state === 'Approved' ? 'ok' : 'ask'}`}>{w.state === 'Approved' ? 'Ready to merge' : 'Needs you'}</span>
                   <b>{w.title}</b>
                 </motion.div>

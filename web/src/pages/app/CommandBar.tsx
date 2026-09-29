@@ -137,8 +137,8 @@ function Bar({ onClose, repos, pages, onSignOut, onShortcuts }: BarProps) {
     <>
       <motion.div className="scrim kbar-scrim" onClick={onClose} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.2 }} />
       <motion.div className="kbar" role="dialog" aria-modal="true" aria-label="Command bar" onKeyDown={key}
-        initial={{ opacity: 0, y: -18, scale: 0.97 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: -10, scale: 0.98, transition: { duration: 0.15 } }}
-        transition={{ type: 'spring', stiffness: 460, damping: 34 }}>
+        initial={{ opacity: 0, y: -18, scale: 0.97, filter: 'blur(8px)' }} animate={{ opacity: 1, y: 0, scale: 1, filter: 'blur(0px)', transitionEnd: { filter: 'none' } }} exit={{ opacity: 0, y: -10, scale: 0.98, filter: 'blur(4px)', transition: { duration: 0.15 } }}
+        transition={{ type: 'spring', stiffness: 460, damping: 34, filter: { duration: 0.24, ease: 'easeOut' } }}>
         <div className="kbar-input">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><circle cx="11" cy="11" r="7" /><path d="M20 20l-3.5-3.5" /></svg>
           <input autoFocus value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search pages, repositories, tasks…" aria-label="Search" />

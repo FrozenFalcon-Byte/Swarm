@@ -31,15 +31,16 @@ function setOrigin() {
 function contentVariants(scope: Scope): Variants {
   const t = timing[scope]
   return {
-    initial: { scale: 1.035, opacity: 0.4 },
+    // a light motion blur that clears as the page settles (and gathers again as it leaves)
+    initial: { scale: 1.035, opacity: 0.4, filter: 'blur(6px)' },
     enter: () => {
       setOrigin()
-      return { scale: 1, opacity: 1, transition: { delay: t.hold + t.open * 0.3, duration: t.open, ease: easeOut } }
+      return { scale: 1, opacity: 1, filter: 'blur(0px)', transitionEnd: { filter: 'none' }, transition: { delay: t.hold + t.open * 0.3, duration: t.open, ease: easeOut } }
     },
     exit: () => {
       setOrigin()
       const leave = { duration: t.close + t.stagger * PER_SIDE, ease: easeInOut }
-      if (scope === 'pane') return { scale: 0.96, opacity: 0.5, transition: leave }
+      if (scope === 'pane') return { scale: 0.96, opacity: 0.5, filter: 'blur(4px)', transition: leave }
       // fold what's on screen into a rounded card (the rest of the document is clipped away)
       const sy = window.scrollY, vh = window.innerHeight
       const bottom = Math.max(0, document.documentElement.scrollHeight - sy - vh)
@@ -110,7 +111,7 @@ export function PageTransition({ scope = 'viewport', label, children, style = 'b
   if (style === 'fade' && !reduced) {
     // the old page sinks and fades, the new one rises out of a soft blur
     return (
-      <motion.div initial={{ opacity: 0, y: 18, filter: 'blur(6px)' }} animate={{ opacity: 1, y: 0, filter: 'blur(0px)', transition: { duration: 0.5, ease: easeOut } }}
+      <motion.div initial={{ opacity: 0, y: 18, filter: 'blur(6px)' }} animate={{ opacity: 1, y: 0, filter: 'blur(0px)', transitionEnd: { filter: 'none' }, transition: { duration: 0.5, ease: easeOut } }}
         exit={{ opacity: 0, y: -10, filter: 'blur(4px)', transition: { duration: 0.22, ease: easeInOut } }}>{children}</motion.div>
     )
   }

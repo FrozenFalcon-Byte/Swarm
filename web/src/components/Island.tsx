@@ -157,7 +157,7 @@ function Sticker({ t, cfg, depth, onClose }: { t: Toast; cfg: ToastLook; depth: 
         exit={{ x: 0, y: 0, opacity: 0, transition: { duration: 0.15 } }} transition={{ delay: 0.72 * k, type: 'spring', stiffness: 500, damping: 20 }} />
       <motion.div className="toast-card" variants={roll ? card : open} onClick={onClose}>
         <AnimatePresence mode="popLayout" initial={false}>
-          <motion.div key={t.id} className="toast-in" initial={{ opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -14 }} transition={{ duration: 0.35, ease: EASE }}>
+          <motion.div key={t.id} className="toast-in" initial={{ opacity: 0, y: 14, filter: 'blur(5px)' }} animate={{ opacity: 1, y: 0, filter: 'blur(0px)', transitionEnd: { filter: 'none' } }} exit={{ opacity: 0, y: -14, filter: 'blur(5px)' }} transition={{ duration: 0.35, ease: EASE }}>
             <Glyph tone={t.tone} k={k} />
             <div className="toast-text">
               <b aria-label={t.title}>

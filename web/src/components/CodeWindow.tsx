@@ -182,7 +182,7 @@ export function CodeDialog({ open, title, code, lang, loading, onClose }: {
       {open && (
         <motion.div className="cw-overlay" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.3 }} onClick={onClose}>
           <motion.div className="cw-dialog" role="dialog" aria-modal="true" aria-label={title} onClick={(e) => e.stopPropagation()}
-            initial={{ opacity: 0, y: 40, scale: 0.94 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 24, scale: 0.97 }}
+            initial={{ opacity: 0, y: 40, scale: 0.94, filter: 'blur(10px)' }} animate={{ opacity: 1, y: 0, scale: 1, filter: 'blur(0px)', transitionEnd: { filter: 'none' } }} exit={{ opacity: 0, y: 24, scale: 0.97, filter: 'blur(6px)' }}
             transition={{ duration: 0.5, ease: easeOut }}>
             <CodeWindow title={title} code={code} lang={lang} loading={loading} onClose={onClose} maxHeight="min(72svh, 760px)" />
           </motion.div>
