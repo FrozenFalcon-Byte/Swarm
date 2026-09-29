@@ -296,7 +296,7 @@ function Hero({ ready, tileShown, fromIntro }: { ready: boolean; tileShown: bool
             : <span className="word-mask"><motion.span className="word" {...rise(0.32)}>builds.</motion.span></span>}
         </h1>
         <motion.div initial="hidden" animate={show} variants={{ hidden: { opacity: 0, y: 20 }, show: { opacity: 1, y: 0, transition: { duration: 0.9, ease: easeOut, delay: 0.7 } } }}>
-          <Link to="/signup" className="btn btn-green btn-xl"><AgentDots size={22} /> <Roll>Connect a repo</Roll><Go /></Link>
+          <Link to="/signup" className="btn btn-green btn-xl" data-focus><AgentDots size={22} /> <Roll>Connect a repo</Roll><Go /></Link>
         </motion.div>
       </motion.div>
       <IssueRoute ready={ready} />
@@ -1084,7 +1084,7 @@ export function Footer() {
           <span className="footer-tile"><Mark size={140} /></span>
           <SplitWords as="p" text="builds." className="inline-split" delay={0.15} />
         </h2>
-        <Link to="/signup" className="btn btn-green btn-xl"><AgentDots size={22} /> <Roll>Get started free</Roll><Go /></Link>
+        <Link to="/signup" className="btn btn-green btn-xl" data-focus><AgentDots size={22} /> <Roll>Get started free</Roll><Go /></Link>
       </div>
       <div className="footer-cols">
         <div><b>Product</b><Link to="/#how">How it works</Link><Link to="/#patterns">Patterns</Link><Link to="/island">The Island</Link><Link to="/jam">The Jam</Link><Link to="/merge">Merge</Link></div>

@@ -10,6 +10,14 @@ export interface Release { id: string; date: string; items: Change[] }
 
 export const RELEASES: Release[] = [
   {
+    id: '2026-09-29f',
+    date: '29 September',
+    items: [
+      { agent: 'coder', text: 'The clock hands, hourglass and Hive crew on the Just for fun cards now turn on their own centres' },
+      { agent: 'reviewer', text: 'Hover the few buttons that matter most, like Merge, and everything around them softens into focus' },
+    ],
+  },
+  {
     id: '2026-09-29e',
     date: '29 September',
     items: [
